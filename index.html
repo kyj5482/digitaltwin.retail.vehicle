@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>디지털 트윈 프로토타입 — 버전 목록</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--accent:#58a6ff;--star:#e3b341}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Pretendard,system-ui,sans-serif;padding:48px 24px;display:flex;justify-content:center}
+  main{width:100%;max-width:860px}
+  h1{font-size:22px;font-weight:600;margin-bottom:6px}
+  p.sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  section h2{font-size:12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin:26px 0 10px}
+  a.card{display:flex;align-items:baseline;gap:14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin-bottom:8px;text-decoration:none;color:var(--text);transition:border-color .15s}
+  a.card:hover{border-color:var(--accent)}
+  .ver{font-family:ui-monospace,monospace;font-size:13px;color:var(--accent);min-width:34px;font-weight:600}
+  .name{font-size:14px;font-weight:600}
+  .desc{font-size:12.5px;color:var(--dim);margin-left:auto;text-align:right}
+  .star{color:var(--star)}
+  footer{margin-top:32px;font-size:12px;color:var(--dim);line-height:1.7}
+  code{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:11.5px}
+</style>
+</head>
+<body>
+<main>
+  <h1>디지털 트윈 &amp; 시뮬레이션 프로토타입</h1>
+  <p class="sub">미국 자동차 판매법인 업무 프로세스 — UI/UX 표현 방식 검증용 (가상 데이터, 단일 HTML)</p>
+
+  <section>
+    <h2>전략 시뮬레이션</h2>
+    <a class="card" href="prototypes/v8-strategy-sim-twin.html">
+      <span class="ver">V8</span><span class="name"><span class="star">★</span> 전략 시뮬레이션 트윈 — 생산/판매 2층</span>
+      <span class="desc">아래=생산 · 위=판매 레이어 스택 + 온톨로지 관계 뷰 연동(HQ 선택) + 텔레매틱스 H3 Trip 지도</span>
+    </a>
+    <a class="card" href="prototypes/v7-strategy-sim-twin.html">
+      <span class="ver">V7</span><span class="name"><span class="star">★</span> 전략 시뮬레이션 트윈</span>
+      <span class="desc">CEO 뷰 — 2.5D 씬 + 전략 레버 + BP 대비 미래 생성</span>
+    </a>
+    <a class="card" href="prototypes/v7-ontology-explorer.html">
+      <span class="ver">V7</span><span class="name">온톨로지 탐색기</span>
+      <span class="desc">비즈니스 온톨로지 — 타입 그래프 + 객체 탐색 + 액션·수명주기 + 데이터 파이프라인</span>
+    </a>
+  </section>
+
+  <section>
+    <h2>트윈 표현 강화 (V4–V6)</h2>
+    <a class="card" href="prototypes/v6-isometric-world-twin.html">
+      <span class="ver">V6</span><span class="name">아이소메트릭 월드 트윈</span>
+      <span class="desc">북미권역 월드 + Input-Model-Output 워크플로우</span>
+    </a>
+    <a class="card" href="prototypes/v5-model-pipeline-twin.html">
+      <span class="ver">V5</span><span class="name">모델 파이프라인 트윈</span>
+      <span class="desc">데이터→모델→결과 처리 파이프라인</span>
+    </a>
+    <a class="card" href="prototypes/v4-hierarchy-twin.html">
+      <span class="ver">V4</span><span class="name">계층형 시스템 트윈</span>
+      <span class="desc">중첩 드릴 + 피드백 폐루프</span>
+    </a>
+  </section>
+
+  <section>
+    <h2>지표/분석 관점 (V1–V3)</h2>
+    <a class="card" href="prototypes/v3-simulation-cockpit.html">
+      <span class="ver">V3</span><span class="name">시뮬레이션 콕핏</span>
+      <span class="desc">시나리오 시뮬레이션 관점</span>
+    </a>
+    <a class="card" href="prototypes/v2-geo-network-twin.html">
+      <span class="ver">V2</span><span class="name">지오 네트워크 트윈</span>
+      <span class="desc">미 전역 지도 관점</span>
+    </a>
+    <a class="card" href="prototypes/v1-value-chain-twin.html">
+      <span class="ver">V1</span><span class="name">밸류체인 트윈</span>
+      <span class="desc">밸류체인 파이프라인 관점</span>
+    </a>
+  </section>
+
+  <section>
+    <h2>아카이브</h2>
+    <a class="card" href="prototypes/archive/v6.3-flow-filters.html"><span class="ver">6.3</span><span class="name">플로우 필터</span></a>
+    <a class="card" href="prototypes/archive/v6.2-lod-hierarchy.html"><span class="ver">6.2</span><span class="name">LOD 계층</span></a>
+    <a class="card" href="prototypes/archive/v6.1-kia-na-map.html"><span class="ver">6.1</span><span class="name">NA 지도</span></a>
+    <a class="card" href="prototypes/archive/v6.0-isometric-abstract.html"><span class="ver">6.0</span><span class="name">아이소메트릭 초안</span></a>
+  </section>
+
+  <footer>
+    로컬 실행: <code>node server.js</code> · CloudFront 프리픽스 재현: <code>node server.js --prefix /경로</code><br>
+    모든 링크·리소스는 상대 경로 — 어떤 URI 프리픽스 하위에 배포되어도 동작한다.
+  </footer>
+</main>
+</body>
+</html>

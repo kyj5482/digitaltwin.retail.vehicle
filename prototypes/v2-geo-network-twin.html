@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>지오 네트워크 트윈 — V2 · 미국 판매법인 디지털 트윈</title>
+<style>
+:root{
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb;
+  --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4;
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --delta-up:#006300; --delta-down:#d03b3b;
+  --hover-wash:rgba(11,11,11,.05);
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19;
+  --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,.10);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+  --delta-up:#0ca30c; --delta-down:#d03b3b;
+  --hover-wash:rgba(255,255,255,.06);
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html,body{background:var(--page); color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:14px}
+body{padding-bottom:84px}
+.wrap{max-width:1440px; margin:0 auto; padding:16px 20px}
+
+/* ── header ── */
+header{display:flex; align-items:center; gap:12px; margin-bottom:14px}
+header h1{font-size:18px; font-weight:650; letter-spacing:-.2px}
+header .sub{color:var(--muted); font-size:12.5px}
+.mode-badge{font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:99px;
+  border:1px solid var(--border); color:var(--ink2)}
+.mode-badge.sim{color:var(--s1); border-color:var(--s1)}
+.spacer{flex:1}
+button, select{font:inherit; color:var(--ink); background:var(--surface);
+  border:1px solid var(--border); border-radius:8px; padding:6px 12px; cursor:pointer}
+button:hover, select:hover{background:var(--hover-wash)}
+
+/* ── KPI tiles ── */
+.kpis{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:12px}
+.kpi{background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px 10px; display:flex; flex-direction:column; gap:2px}
+.kpi .lbl{font-size:12px; color:var(--ink2)}
+.kpi .val{font-size:24px; font-weight:600; letter-spacing:-.3px}
+.kpi .row2{display:flex; align-items:flex-end; justify-content:space-between; gap:8px}
+.kpi .delta{font-size:12px; font-weight:600}
+.kpi .delta .vs{color:var(--muted); font-weight:400}
+.kpi .delta.up{color:var(--delta-up)} .kpi .delta.down{color:var(--delta-down)}
+.kpi .delta.flat{color:var(--muted)}
+.kpi svg{display:block}
+
+/* ── filter row ── */
+.filters{display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap}
+.filters label{font-size:12px; color:var(--muted)}
+.seg{display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden}
+.seg button{border:0; border-radius:0; padding:6px 12px; font-size:12.5px; color:var(--ink2);
+  background:transparent}
+.seg button+button{border-left:1px solid var(--border)}
+.seg button.on{background:var(--s1); color:#fff; font-weight:600}
+
+/* ── alert strip ── */
+.alerts{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; min-height:30px}
+.chip{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink2);
+  background:var(--surface); border:1px solid var(--border); border-radius:99px; padding:4px 12px 4px 8px}
+.chip svg{flex:0 0 auto}
+.chip b{color:var(--ink); font-weight:600}
+.chip.quiet{color:var(--muted)}
+
+/* ── main grid ── */
+.main{display:grid; grid-template-columns:1fr 470px; gap:12px; align-items:start}
+.card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px}
+.card h2{font-size:13.5px; font-weight:650; margin-bottom:2px}
+.card .h-sub{font-size:12px; color:var(--muted); margin-bottom:10px}
+.card h3{font-size:12.5px; font-weight:650; margin:14px 0 6px; color:var(--ink2)}
+
+/* map */
+#mapSvg{width:100%; height:auto; display:block}
+.tile{cursor:pointer}
+.tile rect{transition:filter .1s}
+.tile:hover rect{filter:brightness(1.15)}
+.tile.sel rect{stroke:var(--ink); stroke-width:2}
+.map-legend{display:flex; align-items:center; gap:8px; margin-top:10px; font-size:11.5px; color:var(--muted)}
+.map-legend .bar{display:flex; height:10px; border-radius:3px; overflow:hidden; flex:0 0 auto}
+.map-legend .bar i{width:26px; height:10px; display:block}
+.route{fill:none; stroke:var(--muted); opacity:.75}
+.route:hover{opacity:1}
+.badge-box{fill:var(--surface); stroke:var(--border)}
+.factory-chip{fill:var(--surface); stroke:var(--baseline)}
+
+/* right panel */
+.panel-head{display:flex; align-items:baseline; gap:8px}
+.panel-head .back{font-size:12px; color:var(--s1); cursor:pointer; display:none}
+.bar-row{display:flex; align-items:center; gap:8px; margin:3px 0}
+.bar-row .nm{width:64px; font-size:12px; color:var(--ink2); flex:0 0 auto}
+.bar-row .track{flex:1; position:relative; height:20px}
+.bar-row .v{width:52px; text-align:right; font-size:12px; font-variant-numeric:tabular-nums; flex:0 0 auto}
+table.mini{width:100%; border-collapse:collapse; font-size:12px}
+table.mini th{color:var(--muted); font-weight:500; text-align:right; padding:3px 6px;
+  border-bottom:1px solid var(--grid)}
+table.mini th:first-child{text-align:left}
+table.mini td{padding:3px 6px; text-align:right; font-variant-numeric:tabular-nums;
+  border-bottom:1px solid var(--grid)}
+table.mini td:first-child{text-align:left; color:var(--ink2)}
+table.mini tr.click{cursor:pointer}
+table.mini tr.click:hover td{background:var(--hover-wash)}
+.vin-btn{margin-top:10px; width:100%; font-size:12.5px}
+
+/* tooltip */
+#tip{position:fixed; z-index:50; pointer-events:none; display:none; max-width:280px;
+  background:var(--surface); border:1px solid var(--border); border-radius:8px;
+  box-shadow:0 4px 14px rgba(0,0,0,.25); padding:8px 10px; font-size:12px}
+#tip .t-title{font-weight:650; margin-bottom:4px}
+#tip .t-row{display:flex; align-items:center; gap:6px; margin:2px 0; color:var(--ink2)}
+#tip .t-key{width:14px; height:0; border-top:3px solid; border-radius:2px; flex:0 0 auto}
+#tip .t-val{font-weight:650; color:var(--ink); margin-left:auto; font-variant-numeric:tabular-nums}
+
+/* timeline bar */
+#timeline{position:fixed; left:0; right:0; bottom:0; z-index:40;
+  background:var(--surface); border-top:1px solid var(--border); padding:10px 0}
+#timeline .tl-in{max-width:1440px; margin:0 auto; padding:0 20px; display:flex; align-items:center; gap:14px}
+#btnPlay{width:38px; height:38px; border-radius:99px; font-size:15px; display:flex;
+  align-items:center; justify-content:center; background:var(--s1); color:#fff; border:0}
+#btnSpeed{min-width:46px; font-size:12px; padding:5px 8px}
+.tl-track{flex:1; position:relative; padding-top:14px}
+.tl-track input{width:100%; accent-color:var(--s1); display:block}
+.tl-mark{position:absolute; top:0; font-size:10.5px; color:var(--muted); transform:translateX(-50%);
+  white-space:nowrap}
+.tl-mark::after{content:""; position:absolute; left:50%; top:13px; width:1px; height:26px;
+  background:var(--baseline)}
+#monthLabel{font-size:14px; font-weight:650; min-width:132px; text-align:right;
+  font-variant-numeric:tabular-nums}
+#monthLabel small{display:block; font-size:11px; font-weight:500; color:var(--muted)}
+
+/* VIN modal */
+#vinModal{position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.45)}
+#vinModal .box{width:640px; max-height:82vh; overflow:auto; background:var(--surface);
+  border:1px solid var(--border); border-radius:12px; padding:18px 20px}
+#vinModal h2{font-size:14px; margin-bottom:2px}
+#vinModal .sub{font-size:12px; color:var(--muted); margin-bottom:12px}
+#vinModal .close{float:right}
+.chain{list-style:none; margin-top:8px}
+.chain li{display:grid; grid-template-columns:16px 112px 1fr 76px; gap:10px; align-items:baseline;
+  padding:7px 0; border-bottom:1px solid var(--grid); position:relative}
+.chain li::before{content:""; position:absolute; left:5px; top:0; bottom:0; width:1px; background:var(--grid)}
+.chain .dot{width:9px; height:9px; border-radius:99px; background:var(--s1);
+  border:2px solid var(--surface); position:relative; z-index:1; top:1px; justify-self:start; margin-left:1px}
+.chain .dt{font-size:12px; color:var(--ink2); font-variant-numeric:tabular-nums}
+.chain .st b{font-size:12.5px}
+.chain .st span{display:block; font-size:11.5px; color:var(--muted)}
+.chain .el{font-size:11.5px; color:var(--muted); text-align:right; font-variant-numeric:tabular-nums}
+.axis text{fill:var(--muted); font-size:10.5px}
+.axis line{stroke:var(--grid)}
+@media (max-width:1180px){ .main{grid-template-columns:1fr} .kpis{grid-template-columns:repeat(2,1fr)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>지오 네트워크 트윈 — V2</h1>
+    <span class="sub">미 전역 재고 · 운송 네트워크 · 품질 관점</span>
+    <span class="mode-badge" id="modeBadge">실적</span>
+    <span class="spacer"></span>
+    <button id="btnTheme" type="button">라이트 모드</button>
+  </header>
+
+  <div class="kpis" id="kpiRow"></div>
+
+  <div class="filters">
+    <label>모델</label>
+    <select id="fModel"></select>
+    <label>채널</label>
+    <select id="fChannel"></select>
+    <label style="margin-left:8px">지도 메트릭</label>
+    <div class="seg" id="metricSeg"></div>
+  </div>
+
+  <div class="alerts" id="alertStrip"></div>
+
+  <div class="main">
+    <div class="card" id="mapCard">
+      <h2>미 전역 네트워크</h2>
+      <div class="h-sub" id="mapSub"></div>
+      <svg id="mapSvg" viewBox="0 0 980 620" role="img" aria-label="미국 주별 타일 지도"></svg>
+      <div class="map-legend" id="mapLegend"></div>
+    </div>
+    <div class="card" id="panel">
+      <div class="panel-head">
+        <span class="back" id="panelBack">← 전국</span>
+        <h2 id="panelTitle">전국 요약</h2>
+      </div>
+      <div class="h-sub" id="panelSub"></div>
+      <div id="panelBody"></div>
+    </div>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<div id="timeline">
+  <div class="tl-in">
+    <button id="btnPlay" type="button" aria-label="재생">▶</button>
+    <button id="btnSpeed" type="button">1×</button>
+    <div class="tl-track" id="tlTrack">
+      <input type="range" id="slider" min="0" max="47" value="31" step="1" aria-label="월 선택">
+    </div>
+    <div id="monthLabel"></div>
+  </div>
+</div>
+
+<div id="vinModal">
+  <div class="box">
+    <button class="close" id="vinClose" type="button">닫기</button>
+    <h2 id="vinTitle"></h2>
+    <div class="sub" id="vinSub"></div>
+    <div id="vinBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ══════════════ 시드 고정 난수 ══════════════ */
+function xmur3(str){ let h=1779033703^str.length;
+  for(let i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; }
+  return function(){ h=Math.imul(h^(h>>>16),2246822507); h=Math.imul(h^(h>>>13),3266489909);
+    return (h^=h>>>16)>>>0; }; }
+function mulberry32(a){ return function(){ let t=a+=0x6D2B79F5;
+  t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; }; }
+function rngOf(key){ return mulberry32(xmur3("dtwin-v2:"+key)()); }
+
+/* ══════════════ 시간 축 ══════════════ */
+const N_MONTHS = 48, NOW = 31; // 2024-01 ~ 2027-12, NOW = 2026-08
+const MONTHS = Array.from({length:N_MONTHS}, (_,i)=>{
+  const y = 2024 + Math.floor(i/12), m = i%12+1;
+  return { i, y, m, ym: y+"-"+String(m).padStart(2,"0") };
+});
+const SEASON = [0.92,0.94,1.10,1.00,1.02,1.04,0.98,1.08,0.99,0.97,0.96,1.12];
+
+/* ══════════════ 비즈니스 상수 ══════════════ */
+const MODELS = [
+  { id:"Aurora",   seg:"EV 크로스오버", trims:["SE","XLE","GT"],          plant:"KR-UL", share:0.20, margin:4200 },
+  { id:"Meridian", seg:"중형 SUV",     trims:["LE","XLE","Trail"],        plant:"US-AL", share:0.34, margin:3800 },
+  { id:"Vista",    seg:"중형 세단",    trims:["SE","XSE","Hybrid"],       plant:"MX-MT", share:0.22, margin:2600 },
+  { id:"Terron",   seg:"픽업",        trims:["Work","Sport","Pro"],       plant:"US-AL", share:0.24, margin:4600 },
+];
+const PLANTS = {
+  "US-AL":{ id:"US-AL", loc:"Montgomery, Alabama", mode:"트럭·철도",             leadWeeks:2,   local:true },
+  "KR-UL":{ id:"KR-UL", loc:"울산, 한국",          mode:"선박→서부항만→철도",     leadWeeks:5.5, local:false },
+  "MX-MT":{ id:"MX-MT", loc:"Monterrey, Mexico",   mode:"철도·트럭",             leadWeeks:3,   local:false },
+};
+const CHANNELS = [
+  { id:"Retail",     nm:"Retail",     share:0.78 },
+  { id:"Fleet",      nm:"Fleet",      share:0.12 },
+  { id:"Government", nm:"Government", share:0.04 },
+  { id:"Rental",     nm:"Rental",     share:0.06 },
+];
+const CAR_COLORS = [
+  ["White",.24],["Black",.18],["Gray",.15],["Silver",.12],
+  ["Blue",.11],["Red",.08],["Green",.06],["Beige",.06],
+];
+const VOC_CATS = ["인포테인먼트","전장/배터리","브레이크 소음","바람소리/누수","도장/외관","공조","주행보조(ADAS)"];
+const DS_TARGET = 60; // Days Supply 목표
+
+/* 타일 그리드 맵 좌표 (col,row) + 리전 + 물량 가중치 */
+const STATES = [
+  ["AK","Alaska",0,0,"West",0.25],["ME","Maine",11,0,"Northeast",0.45],
+  ["WI","Wisconsin",5,1,"Great Lakes",1.9],["VT","Vermont",10,1,"Northeast",0.22],["NH","New Hampshire",11,1,"Northeast",0.45],
+  ["WA","Washington",1,2,"West",2.5],["ID","Idaho",2,2,"Mountain",0.6],["MT","Montana",3,2,"Mountain",0.37],
+  ["ND","North Dakota",4,2,"Central",0.26],["MN","Minnesota",5,2,"Central",1.9],["IL","Illinois",6,2,"Great Lakes",4],
+  ["MI","Michigan",7,2,"Great Lakes",3],["NY","New York",9,2,"Northeast",6],["MA","Massachusetts",10,2,"Northeast",2.2],
+  ["RI","Rhode Island",11,2,"Northeast",0.36],
+  ["OR","Oregon",1,3,"West",1.4],["NV","Nevada",2,3,"West",1.05],["WY","Wyoming",3,3,"Mountain",0.2],
+  ["SD","South Dakota",4,3,"Central",0.3],["IA","Iowa",5,3,"Central",1.05],["IN","Indiana",6,3,"Great Lakes",2.2],
+  ["OH","Ohio",7,3,"Great Lakes",4],["PA","Pennsylvania",8,3,"Mid-Atlantic",4],["NJ","New Jersey",9,3,"Mid-Atlantic",3],
+  ["CT","Connecticut",10,3,"Northeast",1.2],
+  ["CA","California",1,4,"West",12],["UT","Utah",2,4,"Mountain",1.1],["CO","Colorado",3,4,"Mountain",1.9],
+  ["NE","Nebraska",4,4,"Central",0.65],["MO","Missouri",5,4,"Central",2],["KY","Kentucky",6,4,"South",1.5],
+  ["WV","West Virginia",7,4,"Southeast",0.6],["VA","Virginia",8,4,"Southeast",3],["MD","Maryland",9,4,"Mid-Atlantic",2],
+  ["DE","Delaware",10,4,"Mid-Atlantic",0.33],
+  ["AZ","Arizona",2,5,"Southwest",2.5],["NM","New Mexico",3,5,"Southwest",0.7],["KS","Kansas",4,5,"Central",1],
+  ["AR","Arkansas",5,5,"South",1],["TN","Tennessee",6,5,"South",2.3],["NC","North Carolina",7,5,"Southeast",3.5],
+  ["SC","South Carolina",8,5,"Southeast",1.8],
+  ["OK","Oklahoma",4,6,"Southwest",1.4],["LA","Louisiana",5,6,"South",1.5],["MS","Mississippi",6,6,"South",1],
+  ["AL","Alabama",7,6,"South",1.7],["GA","Georgia",8,6,"Southeast",3.5],
+  ["HI","Hawaii",0,7,"West",0.5],["TX","Texas",4,7,"Southwest",9],["FL","Florida",9,7,"Florida",7],
+].map(a=>({ ab:a[0], name:a[1], col:a[2], row:a[3], region:a[4], w:a[5] }));
+const REGIONS = ["West","Southwest","Mountain","Central","South","Southeast","Great Lakes","Northeast","Mid-Atlantic","Florida"];
+const W_SUM = STATES.reduce((s,x)=>s+x.w,0);
+
+/* 시퀀셜 램프 (라이트: 밝음=낮음 / 다크: 어두움=낮음, 최소 600 스텝) */
+const SEQ = { 100:"#cde2fb",150:"#b7d3f6",200:"#9ec5f4",250:"#86b6ef",300:"#6da7ec",350:"#5598e7",
+  400:"#3987e5",450:"#2a78d6",500:"#256abf",550:"#1c5cab",600:"#184f95",650:"#104281",700:"#0d366b" };
+const RAMP_LIGHT = [100,200,300,400,500,600,700].map(k=>SEQ[k]);
+const RAMP_DARK  = [600,500,450,400,300,200,100].map(k=>SEQ[k]);
+
+const METRICS = [
+  { id:"ds",    nm:"Days Supply",  unit:"일",   fmt:v=>Math.round(v)+"일" },
+  { id:"retail",nm:"Retail 판매",  unit:"대",   fmt:v=>fmtNum(Math.round(v))+"대" },
+  { id:"stock", nm:"딜러 재고",    unit:"대",   fmt:v=>fmtNum(Math.round(v))+"대" },
+  { id:"voc",   nm:"VoC 발생률",   unit:"건/천대", fmt:v=>v.toFixed(1)+"건/천대" },
+];
+
+/* ══════════════ 포맷/DOM 헬퍼 ══════════════ */
+function fmtNum(n){ return n.toLocaleString("en-US"); }
+function fmtK(n){ return n>=1e6 ? (n/1e6).toFixed(1)+"M" : n>=1e4 ? Math.round(n/1e3)+"K"
+  : n>=1e3 ? (n/1e3).toFixed(1)+"K" : String(Math.round(n)); }
+function el(tag, cls, txt){ const e=document.createElement(tag);
+  if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
+function svgEl(tag, attrs){ const e=document.createElementNS("http://www.w3.org/2000/svg",tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]); return e; }
+function hexLum(hex){ const n=parseInt(hex.slice(1),16);
+  const f=c=>{ c/=255; return c<=0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4); };
+  return 0.2126*f(n>>16&255)+0.7152*f(n>>8&255)+0.0722*f(n&255); }
+function inkOn(hex){ return hexLum(hex)>0.45 ? "#0b0b0b" : "#ffffff"; }
+function addDays(ymd, d){ const t=new Date(ymd+"T00:00:00Z"); t.setUTCDate(t.getUTCDate()+d);
+  return t.toISOString().slice(0,10); }
+/* ══════════════ 데이터 생성 (시드 고정 — 실데이터 전환 시 API로 대체) ══════════════ */
+/* 리전별 모델 선호 계수 */
+const AFF = {
+  Aurora:   {West:1.6,Southwest:0.9,Mountain:0.85,Central:0.6,South:0.55,Southeast:0.9,"Great Lakes":0.9,Northeast:1.35,"Mid-Atlantic":1.2,Florida:1.1},
+  Meridian: {West:1.0,Southwest:1.0,Mountain:1.15,Central:1.0,South:1.0,Southeast:1.0,"Great Lakes":1.1,Northeast:0.95,"Mid-Atlantic":1.0,Florida:1.0},
+  Vista:    {West:1.05,Southwest:0.9,Mountain:0.8,Central:0.9,South:0.95,Southeast:1.0,"Great Lakes":1.0,Northeast:1.15,"Mid-Atlantic":1.15,Florida:1.15},
+  Terron:   {West:0.65,Southwest:1.5,Mountain:1.4,Central:1.6,South:1.45,Southeast:1.05,"Great Lakes":0.95,Northeast:0.45,"Mid-Atlantic":0.55,Florida:0.9},
+};
+/* 이벤트 인덱스: 2025-07=18 (KR-UL 설비), 2025-12=23 (항만 적체), 2026-03=26 (Aurora 캠페인) */
+const EV_KR = 18, EV_PORT = 23, EV_CAMP = 26;
+
+function modelShare(mi, i){ // Aurora 성장 드리프트
+  const drift = [ 0.16 + 0.0022*i, 0.35 - 0.0007*i, 0.23 - 0.0006*i, 0.25 - 0.0008*i ][mi];
+  return Math.max(0.05, drift);
+}
+function modelDsBase(mi, i){
+  let ds = [52, 58, 70, 63][mi];
+  if(mi===0){ // Aurora
+    if(i>=EV_KR+1 && i<=EV_KR+3) ds *= 0.62;          // 설비 이상 → 재고 부족
+    if(i>=EV_CAMP && i<=EV_CAMP+3) ds *= 1.12;         // 캠페인 → 판매 주춤, 재고 적체
+  }
+  if(mi===2 && i>NOW) ds += (i-NOW)*0.9;               // 미래: Vista 재고 적체 리스크
+  return ds;
+}
+
+const DATA = buildData();
+function buildData(){
+  const rr = rngOf("gen");
+  const stFactor = STATES.map((s,si)=>{ const r=rngOf("stf:"+s.ab); return 0.85+0.3*r(); });
+  const st = [], nat = [], plants = [];
+  for(let i=0;i<N_MONTHS;i++){
+    const sea = SEASON[i%12], growth = Math.pow(1.003, i-24);
+    const natTarget = 35000 * sea * growth * (0.97 + 0.06*rr());
+    const rowSt = [];
+    let totR=0, totS=0, vocSum=0;
+    const rByModel=[0,0,0,0], sByModel=[0,0,0,0];
+    for(let si=0; si<STATES.length; si++){
+      const s = STATES[si];
+      const base = natTarget * s.w / W_SUM;
+      const r=[0,0,0,0], stk=[0,0,0,0];
+      for(let mi=0; mi<4; mi++){
+        let v = base * modelShare(mi,i) * AFF[MODELS[mi].id][s.region] * (0.94+0.12*rr());
+        if(mi===0 && i>=EV_KR+1 && i<=EV_KR+3) v *= 0.92;      // Aurora 공급 부족 → 판매 손실
+        if(mi===0 && i>=EV_CAMP && i<=EV_CAMP+1) v *= 0.95;    // 캠페인 초기 구매 망설임
+        r[mi] = v;
+        const ds = modelDsBase(mi,i) * stFactor[si] * (0.92+0.16*rr());
+        stk[mi] = v/30.4 * ds;
+        rByModel[mi]+=v; sByModel[mi]+=stk[mi]; totR+=v; totS+=stk[mi];
+      }
+      const auroraShare = r[0]/(r[0]+r[1]+r[2]+r[3]);
+      const campSpike = (i>=EV_CAMP && i<=EV_CAMP+3) ? [3.5,2.6,1.6,0.8][i-EV_CAMP] : 0;
+      const voc = 2.2 + 0.5*rr() + campSpike*(auroraShare/0.2);
+      vocSum += voc * s.w;
+      rowSt.push({ r, s:stk, voc });
+    }
+    st.push(rowSt);
+
+    /* 도매(채널 전체) — 모델별 */
+    const wsByModel = rByModel.map((v,mi)=>{
+      let f = 1.087 * (0.98+0.04*rr());
+      if(mi===0 && (i===EV_KR||i===EV_KR+1)) f *= 0.80;         // KR-UL 생산 −20%
+      return v*f;
+    });
+    const wholesale = wsByModel.reduce((a,b)=>a+b,0);
+
+    /* KPI: 영업이익($M), CSI */
+    const grossM = wsByModel.reduce((a,v,mi)=>a+v*MODELS[mi].margin,0)/1e6;
+    let incentive = 1300 + 250*(1-sea) + (i>=EV_CAMP&&i<=EV_CAMP+2?200:0); // $/대
+    const transUnit = wsByModel.reduce((a,v,mi)=>{
+      const p=PLANTS[MODELS[mi].plant]; return a+v*(p.id==="KR-UL"?950:p.id==="MX-MT"?550:380); },0)/1e6;
+    let quality = 18 + 4*rr();
+    if(i>=EV_CAMP && i<=EV_CAMP+3) quality += [38,30,22,12][i-EV_CAMP];
+    const marketing = 22 + 3*sea;
+    const profit = grossM - wholesale*incentive/1e6 - transUnit - quality - marketing;
+
+    let csi = 88 + 1.2*(rr()-0.5);
+    if(i>=EV_CAMP) csi = Math.min(csi, 81.5 + 1.2*(i-EV_CAMP));  // 캠페인 급락 후 회복
+    const ds = totS/(totR/30.4);
+    const vocRate = vocSum/W_SUM;
+
+    /* BP 기준선 (매끈한 계획 곡선) */
+    const bpRetail = 34500 * sea * Math.pow(1.004, i-24);
+    const bpWholesale = bpRetail*1.087;
+    const bpProfit = (bpWholesale*3650 - bpWholesale*1300)/1e6 - 22 - 20 - bpWholesale*590/1e6;
+
+    nat.push({ retail:totR, wholesale, wsByModel, rByModel, sByModel, stock:totS,
+      profit, csi, ds, vocRate, bpRetail, bpWholesale, bpProfit, bpCsi:88, bpDs:DS_TARGET });
+
+    /* 공장별 생산/운송 중 */
+    const pRow = {};
+    for(const pid in PLANTS){
+      const p = PLANTS[pid];
+      let prod = wsByModel.reduce((a,v,mi)=>a+(MODELS[mi].plant===pid?v:0),0)*1.02;
+      let lead = p.leadWeeks;
+      if(pid==="KR-UL" && (i===EV_PORT||i===EV_PORT+1)) lead += 1;  // 항만 적체 +1주
+      pRow[pid] = { prod, intransit: prod*lead/4.33, yard: prod*(0.25+0.15*rr()) };
+    }
+    plants.push(pRow);
+  }
+  return { st, nat, plants };
+}
+
+/* ── 필터 적용 집계 헬퍼 ── */
+const state = { month: NOW, model: "ALL", channel: "ALL", metric: "ds", selState: null, playing:false, speed:1 };
+function chanMul(){ const c = CHANNELS.find(c=>c.id===state.channel); return c? c.share : 1; }
+function stateAgg(si, i){ // 필터 반영 주별 값
+  const d = DATA.st[i][si], cm = chanMul();
+  let r=0, s=0;
+  if(state.model==="ALL"){ r=d.r.reduce((a,b)=>a+b,0); s=d.s.reduce((a,b)=>a+b,0); }
+  else{ const mi=MODELS.findIndex(m=>m.id===state.model); r=d.r[mi]; s=d.s[mi]; }
+  r*=cm; s*=cm;
+  return { retail:r, stock:s, ds: r>0? s/(r/30.4) : 0, voc:d.voc };
+}
+function natAgg(i){
+  const n = DATA.nat[i], cm = chanMul();
+  if(state.model==="ALL")
+    return { retail:n.retail*cm, wholesale:n.wholesale*cm, stock:n.stock*cm,
+      profit:n.profit*(state.channel==="ALL"?1:cm), csi:n.csi, ds:n.ds, vocRate:n.vocRate,
+      bpRetail:n.bpRetail*cm, bpWholesale:n.bpWholesale*cm, bpProfit:n.bpProfit*(state.channel==="ALL"?1:cm),
+      bpCsi:n.bpCsi, bpDs:n.bpDs };
+  const mi = MODELS.findIndex(m=>m.id===state.model);
+  const shr = n.rByModel[mi]/n.retail, bshr = modelShare(mi,i);
+  return { retail:n.rByModel[mi]*cm, wholesale:n.wsByModel[mi]*cm, stock:n.sByModel[mi]*cm,
+    profit:n.profit*shr*(state.channel==="ALL"?1:cm), csi:n.csi,
+    ds: n.sByModel[mi]/(n.rByModel[mi]/30.4), vocRate:n.vocRate,
+    bpRetail:n.bpRetail*bshr*cm, bpWholesale:n.bpWholesale*bshr*cm, bpProfit:n.bpProfit*bshr*(state.channel==="ALL"?1:cm),
+    bpCsi:n.bpCsi, bpDs:n.bpDs };
+}
+
+/* ── 외장색 × 모델 재고 (주 단위, 시드 고정 lazy) ── */
+function colorHeat(si, i){
+  const key = si<0? "nat" : STATES[si].ab;
+  const r = rngOf("heat:"+key+":"+i);
+  const base = si<0
+    ? MODELS.map((_,mi)=>DATA.nat[i].sByModel[mi])
+    : MODELS.map((_,mi)=>DATA.st[i][si].s[mi]);
+  const regionBias = si<0? null : STATES[si].region;
+  return MODELS.map((m,mi)=>CAR_COLORS.map(([c,shr])=>{
+    let b = shr;
+    if(regionBias==="Southwest"||regionBias==="Florida"){ if(c==="White") b*=1.3; if(c==="Black") b*=0.8; }
+    if(regionBias==="Northeast"||regionBias==="Great Lakes"){ if(c==="Black") b*=1.25; if(c==="White") b*=0.9; }
+    return Math.max(0, base[mi]*b*(0.75+0.5*r()));
+  }));
+}
+
+/* ── VoC 카테고리 (선택 범위, lazy) ── */
+function vocCats(si, i){
+  const key = si<0? "nat" : STATES[si].ab;
+  const r = rngOf("voc:"+key+":"+i);
+  const scale = si<0? 1 : STATES[si].w/W_SUM*40;
+  const camp = (i>=EV_CAMP && i<=EV_CAMP+3) ? [3.2,2.4,1.6,1.1][i-EV_CAMP] : 1;
+  return VOC_CATS.map((c,ci)=>{
+    let v = [140,95,80,70,60,55,75][ci] * scale * (0.8+0.4*r());
+    if(ci===1) v *= camp;                       // 전장/배터리 — 캠페인 급증
+    if(ci===6) v *= (i>=EV_CAMP&&i<=EV_CAMP+2)? 1.4 : 1;
+    return { cat:c, v };
+  }).sort((a,b)=>b.v-a.v).slice(0,5);
+}
+
+/* ── 월별 알림 ── */
+function monthAlerts(i){
+  const out = [];
+  if(i===EV_KR||i===EV_KR+1) out.push({sev:"critical", txt:"KR-UL 설비 이상 — 생산 −20%"});
+  if(i>EV_KR+1&&i<=EV_KR+3) out.push({sev:"warning", txt:"Aurora 공급 부족 — 서부 재고 회복 중"});
+  if(i===EV_PORT||i===EV_PORT+1) out.push({sev:"warning", txt:"서부 항만 적체 — KR-UL 리드타임 +1주"});
+  if(i>=EV_CAMP&&i<=EV_CAMP+3) out.push({sev:"serious", txt:"Aurora 품질 캠페인 진행 — 서비스 부하 ↑ · CSI ↓"});
+  const hi=[], lo=[];
+  for(let si=0;si<STATES.length;si++){ const a=stateAgg(si,i);
+    if(a.ds>85) hi.push(STATES[si].ab); else if(a.ds<40) lo.push(STATES[si].ab); }
+  if(hi.length) out.push({sev:"warning", txt:"재고 과다("+hi.length+"개 주): "+hi.slice(0,5).join(", ")+(hi.length>5?" 외":"")});
+  if(lo.length) out.push({sev:"warning", txt:"재고 부족("+lo.length+"개 주): "+lo.slice(0,5).join(", ")+(lo.length>5?" 외":"")});
+  if(i>NOW) out.push({sev:"info", txt:"시뮬레이션 구간 — 최근 3개월 윈도우 기반 생성 데이터"});
+  if(!out.length) out.push({sev:"good", txt:"이상 없음 — 계획 범위 내 운영"});
+  return out;
+}
+
+/* ── VIN 샘플 lazy 합성 ── */
+const VIN_CHARS = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
+const WMI = { "KR-UL":"KMT", "US-AL":"1MD", "MX-MT":"3MV" };
+function genVins(si, i){
+  const s = STATES[si], r = rngOf("vin:"+s.ab+":"+i+":"+state.model);
+  const agg = DATA.st[i][si];
+  const out = [];
+  for(let k=0;k<12;k++){
+    let mi;
+    if(state.model!=="ALL") mi = MODELS.findIndex(m=>m.id===state.model);
+    else{ const tot=agg.r.reduce((a,b)=>a+b,0); let x=r()*tot; mi=0;
+      while(mi<3 && x>agg.r[mi]){ x-=agg.r[mi]; mi++; } }
+    const m = MODELS[mi], plant = PLANTS[m.plant];
+    let vin = WMI[m.plant];
+    for(let c=0;c<14;c++) vin += VIN_CHARS[Math.floor(r()*VIN_CHARS.length)];
+    const trim = m.trims[Math.floor(r()*m.trims.length)];
+    let cx=r(); let color=CAR_COLORS[0][0];
+    for(const [c,shr] of CAR_COLORS){ if(cx<shr){ color=c; break; } cx-=shr; }
+    const stages = ["DEALER_STOCK","RETAIL_SALE","IN_TRANSIT","IN_SERVICE"];
+    const stage = stages[Math.floor(r()*4)];
+    out.push({ vin, model:m.id, trim, color, plant:plant.id, stage, si, mi, seed:k });
+  }
+  return out;
+}
+const STAGE_KO = { ORDERED:"주문 접수", IN_PRODUCTION:"생산 착공", PLANT_STOCK:"공장 재고(생산 완료)",
+  IN_TRANSIT:"운송 중", PORT_YARD:"항만 야드 도착", DEALER_ARRIVAL:"딜러 도착 = Wholesale",
+  DEALER_STOCK:"딜러 재고", RETAIL_SALE:"Retail Sale(고객 인도)", IN_SERVICE:"커넥티드 개통 · 운행 중",
+  SERVICE_EVENT:"서비스 입고" };
+function vinChain(v, i){
+  const r = rngOf("chain:"+v.vin);
+  const m = MONTHS[i];
+  const p = PLANTS[v.plant];
+  /* 딜러 도착일을 해당 월 내로 고정하고, 사전 구간 갭 합계로 시작일을 역산 */
+  const arrive = m.ym + "-" + String(3+Math.floor(r()*22)).padStart(2,"0");
+  const pre = [["ORDERED","판매법인 HQ (Irvine, CA)"], ["IN_PRODUCTION", p.loc], ["PLANT_STOCK", p.loc+" 야드"]];
+  const gaps = [Math.round(18+14*r()), Math.round(2+2*r()), Math.round(3+7*r())];
+  if(v.plant==="KR-UL"){
+    pre.push(["IN_TRANSIT","선박 (울산항 → LA/Long Beach)"]); gaps.push(Math.round(14+4*r()));
+    pre.push(["PORT_YARD","LA/Long Beach 항만 야드"]);        gaps.push(Math.round(7+3*r()));
+  } else if(v.plant==="MX-MT"){
+    pre.push(["IN_TRANSIT","철도 (Monterrey → Laredo 경유)"]); gaps.push(Math.round(10+5*r()));
+  } else {
+    pre.push(["IN_TRANSIT","트럭·철도 (Montgomery 출발)"]);    gaps.push(Math.round(4+4*r()));
+  }
+  const steps = [];
+  let cur = addDays(arrive, -gaps.reduce((a,b)=>a+b,0));
+  pre.forEach((e,k)=>{ steps.push({st:e[0], loc:e[1], date:cur}); cur = addDays(cur, gaps[k]); });
+  steps.push({st:"DEALER_ARRIVAL", loc:STATES[v.si].name+" 딜러", date:arrive});
+  cur = arrive;
+  const after = ["DEALER_STOCK","RETAIL_SALE","IN_SERVICE"];
+  const postGaps = [0, Math.round(20+50*r()), Math.round(0+2*r())];
+  const locs = [STATES[v.si].name+" 딜러 전시장", STATES[v.si].name+" 딜러", "고객 차량 — 텔레매틱스 수집 시작"];
+  for(let k=0;k<3;k++){ cur = addDays(cur, postGaps[k]); steps.push({st:after[k], loc:locs[k], date:cur}); }
+  if(r()<0.55){
+    cur = addDays(cur, Math.round(30+170*r()));
+    const ty = r()<0.34? "Warranty" : r()<0.55? "Campaign" : "CustomerPay";
+    const part = ["인포테인먼트 모듈","BMS 제어기","브레이크 패드","도어 웨더스트립","에어컨 컴프레서"][Math.floor(r()*5)];
+    steps.push({st:"SERVICE_EVENT", loc:STATES[v.si].name+" 딜러 서비스 ("+ty+" · "+part+")", date:cur});
+  }
+  return steps;
+}
+/* ══════════════ 툴팁 ══════════════ */
+const tip = document.getElementById("tip");
+function tipShow(x, y, title, rows){
+  tip.textContent = "";
+  const t = el("div","t-title",title); tip.appendChild(t);
+  for(const rw of rows){
+    const r = el("div","t-row");
+    if(rw.color){ const k=el("span","t-key"); k.style.borderTopColor=rw.color; r.appendChild(k); }
+    r.appendChild(el("span",null,rw.label));
+    r.appendChild(el("span","t-val",rw.value));
+    tip.appendChild(r);
+  }
+  tip.style.display = "block";
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(x+14, window.innerWidth-w-10)+"px";
+  tip.style.top  = Math.max(8, Math.min(y+14, window.innerHeight-h-10))+"px";
+}
+function tipHide(){ tip.style.display = "none"; }
+
+/* ══════════════ 팔레트 접근 ══════════════ */
+function isDark(){ return document.documentElement.getAttribute("data-theme")==="dark"; }
+function ramp(){ return isDark()? RAMP_DARK : RAMP_LIGHT; }
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+const MODEL_VAR = ["--s1","--s2","--s3","--s4"];
+
+/* ══════════════ KPI 타일 ══════════════ */
+function sparkSvg(vals, w, h){
+  if(vals.length<2) vals = [vals[0]||0, vals[0]||0];
+  const svg = svgEl("svg",{width:w,height:h,viewBox:"0 0 "+w+" "+h});
+  const mn = Math.min(...vals), mx = Math.max(...vals), sp = mx-mn||1;
+  const pts = vals.map((v,k)=>[(k/(vals.length-1))*(w-8)+4, h-4-((v-mn)/sp)*(h-8)]);
+  svg.appendChild(svgEl("polyline",{points:pts.map(p=>p.join(",")).join(" "),
+    fill:"none", stroke:"var(--muted)", "stroke-width":1.5, "stroke-linejoin":"round"}));
+  const last = pts[pts.length-1];
+  svg.appendChild(svgEl("circle",{cx:last[0],cy:last[1],r:3.5,fill:"var(--s1)",
+    stroke:"var(--surface)","stroke-width":2}));
+  return svg;
+}
+function kpiTile(label, value, deltaTxt, deltaDir, series){
+  const box = el("div","kpi");
+  box.appendChild(el("div","lbl",label));
+  const row = el("div","row2");
+  const left = el("div");
+  left.appendChild(el("div","val",value));
+  const d = el("div","delta "+(deltaDir>0?"up":deltaDir<0?"down":"flat"));
+  d.appendChild(el("span",null,deltaTxt+" "));
+  const vs = el("span","vs","vs BP"); d.appendChild(vs);
+  left.appendChild(d);
+  row.appendChild(left);
+  row.appendChild(sparkSvg(series, 108, 34));
+  box.appendChild(row);
+  return box;
+}
+function renderKpis(){
+  const i = state.month, a = natAgg(i);
+  const hist = k => { const out=[]; for(let j=Math.max(0,i-11); j<=i; j++) out.push(natAgg(j)[k]); return out; };
+  const kr = document.getElementById("kpiRow"); kr.textContent = "";
+  const pct = (v,b)=> (v-b)/b*100;
+  const pr = pct(a.retail, a.bpRetail);
+  kr.appendChild(kpiTile("Retail 판매량", fmtK(a.retail)+"대",
+    (pr>=0?"+":"")+pr.toFixed(1)+"%", pr>1?1:pr<-1?-1:0, hist("retail")));
+  const pw = pct(a.wholesale, a.bpWholesale);
+  kr.appendChild(kpiTile("Wholesale", fmtK(a.wholesale)+"대",
+    (pw>=0?"+":"")+pw.toFixed(1)+"%", pw>1?1:pw<-1?-1:0, hist("wholesale")));
+  const dp = a.profit - a.bpProfit;
+  kr.appendChild(kpiTile("영업이익", "$"+Math.round(a.profit)+"M",
+    (dp>=0?"+$":"−$")+Math.abs(Math.round(dp))+"M", dp>3?1:dp<-3?-1:0, hist("profit")));
+  const dc = a.csi - a.bpCsi;
+  kr.appendChild(kpiTile("고객만족도", a.csi.toFixed(1),
+    (dc>=0?"+":"")+dc.toFixed(1)+"p", dc>0.5?1:dc<-0.5?-1:0, hist("csi")));
+  const dd = a.ds - a.bpDs;
+  kr.appendChild(kpiTile("Days Supply", Math.round(a.ds)+"일",
+    (dd>=0?"+":"")+Math.round(dd)+"일", Math.abs(dd)<=8?0:-1, hist("ds")));
+}
+
+/* ══════════════ 알림 스트립 ══════════════ */
+const SEV_META = {
+  critical:{ c:"var(--critical)", nm:"심각", d:"M8 1 L15 13 H1 Z" },
+  serious: { c:"var(--serious)",  nm:"주의", d:"M8 1 L15 13 H1 Z" },
+  warning: { c:"var(--warn)",     nm:"경고", d:"M8 1 L15 13 H1 Z" },
+  good:    { c:"var(--good)",     nm:"정상", d:"" },
+  info:    { c:"var(--muted)",    nm:"정보", d:"" },
+};
+function sevIcon(sev){
+  const m = SEV_META[sev];
+  const s = svgEl("svg",{width:16,height:14,viewBox:"0 0 16 14"});
+  if(sev==="good"){
+    s.appendChild(svgEl("circle",{cx:8,cy:7,r:6,fill:"none",stroke:m.c,"stroke-width":2}));
+    s.appendChild(svgEl("path",{d:"M5 7 L7 9.4 L11 4.6",fill:"none",stroke:m.c,"stroke-width":2,"stroke-linecap":"round"}));
+  } else if(sev==="info"){
+    s.appendChild(svgEl("circle",{cx:8,cy:7,r:6,fill:"none",stroke:m.c,"stroke-width":2}));
+    s.appendChild(svgEl("rect",{x:7.2,y:6,width:1.6,height:5,rx:.8,fill:m.c}));
+    s.appendChild(svgEl("circle",{cx:8,cy:3.6,r:1,fill:m.c}));
+  } else {
+    s.appendChild(svgEl("path",{d:m.d,fill:m.c}));
+    s.appendChild(svgEl("rect",{x:7.3,y:5,width:1.4,height:4.4,rx:.7,fill:"var(--surface)"}));
+    s.appendChild(svgEl("circle",{cx:8,cy:11,r:.9,fill:"var(--surface)"}));
+  }
+  return s;
+}
+function renderAlerts(){
+  const box = document.getElementById("alertStrip"); box.textContent = "";
+  for(const a of monthAlerts(state.month)){
+    const chip = el("span","chip"+(a.sev==="info"?" quiet":""));
+    chip.appendChild(sevIcon(a.sev));
+    const b = el("b",null,SEV_META[a.sev].nm); chip.appendChild(b);
+    chip.appendChild(el("span",null,a.txt));
+    box.appendChild(chip);
+  }
+}
+
+/* ══════════════ 지도 ══════════════ */
+const T = 62, GAP = 5, OX = 170, OY = 40;
+function tileXY(s){ return [OX + s.col*(T+GAP), OY + s.row*(T+GAP)]; }
+function metricOf(si){
+  const a = stateAgg(si, state.month);
+  return state.metric==="ds"? a.ds : state.metric==="retail"? a.retail
+       : state.metric==="stock"? a.stock : a.voc;
+}
+function renderMap(){
+  const svg = document.getElementById("mapSvg"); svg.textContent = "";
+  const M = METRICS.find(m=>m.id===state.metric);
+  document.getElementById("mapSub").textContent =
+    M.nm+" · "+MONTHS[state.month].ym+" · 주(state) 클릭 시 우측 상세, 밖의 노드는 해외 공장";
+  const vals = STATES.map((_,si)=>metricOf(si));
+  const mn = Math.min(...vals), mx = Math.max(...vals), sp = mx-mn||1;
+  const rp = ramp();
+  const binOf = v => Math.min(rp.length-1, Math.floor((v-mn)/sp*rp.length));
+
+  /* 운송 라우트 (타일 아래 레이어) */
+  const gRoutes = svgEl("g",{}), gTiles = svgEl("g",{}), gFac = svgEl("g",{});
+  svg.appendChild(gRoutes); svg.appendChild(gTiles); svg.appendChild(gFac);
+  const pl = DATA.plants[state.month];
+  const caC = tileXY(STATES.find(s=>s.ab==="CA")); const ca=[caC[0]+T/2, caC[1]+T/2];
+  const coC = tileXY(STATES.find(s=>s.ab==="CO")); const co=[coC[0]+T/2, coC[1]+T/2];
+  const txC = tileXY(STATES.find(s=>s.ab==="TX")); const tx=[txC[0]+T/2, txC[1]+T/2];
+  const alC = tileXY(STATES.find(s=>s.ab==="AL")); const alx=[alC[0]+T/2, alC[1]+T/2];
+  const moC = tileXY(STATES.find(s=>s.ab==="MO")); const mo=[moC[0]+T/2, moC[1]+T/2];
+  const krNode=[52,300], mxNode=[80,565];
+  const wByVol = v => Math.max(1.5, Math.min(5.5, v/2200));
+  function route(d, vol, dash, title, rows){
+    const p = svgEl("path",{d, class:"route","stroke-width":wByVol(vol)});
+    if(dash) p.setAttribute("stroke-dasharray","7 5");
+    gRoutes.appendChild(p);
+    /* 가는 선 대신 넓은 투명 히트 영역이 호버를 받는다 */
+    const hit = svgEl("path",{d, fill:"none", stroke:"transparent", "stroke-width":16});
+    hit.addEventListener("pointermove", e=>tipShow(e.clientX,e.clientY,title,rows));
+    hit.addEventListener("pointerleave", tipHide);
+    gRoutes.appendChild(hit);
+  }
+  const pKR = pl["KR-UL"], pMX = pl["MX-MT"], pUS = pl["US-AL"];
+  route("M"+krNode[0]+" "+krNode[1]+" C 120 "+(krNode[1]+30)+", 180 "+(ca[1]-10)+", "+(ca[0]-8)+" "+ca[1],
+    pKR.intransit, true, "KR-UL → 서부항만 (선박)",
+    [{label:"운송 중",value:fmtK(pKR.intransit)+"대"},{label:"리드타임",value:"~5–6주"},{label:"항만",value:"LA/Long Beach"}]);
+  route("M"+ca[0]+" "+ca[1]+" L "+co[0]+" "+co[1], pKR.intransit*0.5, false, "서부항만 → 내륙 (철도)",
+    [{label:"하역 후 철도 배정",value:fmtK(pKR.intransit*0.5)+"대"}]);
+  route("M"+mxNode[0]+" "+mxNode[1]+" L "+(tx[0]-10)+" "+(tx[1]+6), pMX.intransit, false, "MX-MT → 내륙 (철도·트럭)",
+    [{label:"운송 중",value:fmtK(pMX.intransit)+"대"},{label:"리드타임",value:"~3주"},{label:"경유",value:"Laredo"}]);
+  route("M"+alx[0]+" "+alx[1]+" L "+mo[0]+" "+mo[1], pUS.intransit, false, "US-AL → 전국 (트럭·철도)",
+    [{label:"운송 중",value:fmtK(pUS.intransit)+"대"},{label:"리드타임",value:"~2주"}]);
+
+  /* 운송량 배지 */
+  function volBadge(x, y, txt){
+    const g = svgEl("g",{});
+    const w = txt.length*6.4+14;
+    g.appendChild(svgEl("rect",{x:x-w/2,y:y-10,width:w,height:19,rx:9.5,class:"badge-box"}));
+    const t = svgEl("text",{x:x,y:y+3.5,"text-anchor":"middle","font-size":10.5,fill:"var(--ink2)"});
+    t.textContent = txt; g.appendChild(t);
+    gFac.appendChild(g);
+  }
+  volBadge(150, 268, "선박 "+fmtK(pKR.intransit)+"대");
+  volBadge((mxNode[0]+tx[0])/2-10, (mxNode[1]+tx[1])/2+16, "철도 "+fmtK(pMX.intransit)+"대");
+  volBadge((alx[0]+mo[0])/2, (alx[1]+mo[1])/2-14, "트럭·철도 "+fmtK(pUS.intransit)+"대");
+
+  /* 주 타일 */
+  for(let si=0; si<STATES.length; si++){
+    const s = STATES[si], [x,y] = tileXY(s);
+    const fill = rp[binOf(vals[si])];
+    const g = svgEl("g",{class:"tile"+(state.selState===si?" sel":""), tabindex:0, role:"button"});
+    g.setAttribute("aria-label", s.name+" "+M.fmt(vals[si]));
+    g.appendChild(svgEl("rect",{x,y,width:T,height:T,rx:7,fill}));
+    const ink = inkOn(fill);
+    const t1 = svgEl("text",{x:x+T/2,y:y+T/2-4,"text-anchor":"middle","font-size":13,
+      "font-weight":700, fill:ink});
+    t1.textContent = s.ab; g.appendChild(t1);
+    const t2 = svgEl("text",{x:x+T/2,y:y+T/2+13,"text-anchor":"middle","font-size":9.5,fill:ink,opacity:.85});
+    t2.textContent = M.fmt(vals[si]); g.appendChild(t2);
+    const a = stateAgg(si, state.month);
+    const hover = e => tipShow(e.clientX, e.clientY, s.name+" · "+s.region, [
+      {label:M.nm, value:M.fmt(vals[si])},
+      {label:"Retail", value:fmtNum(Math.round(a.retail))+"대"},
+      {label:"딜러 재고", value:fmtNum(Math.round(a.stock))+"대"},
+      {label:"Days Supply", value:Math.round(a.ds)+"일"},
+    ]);
+    g.addEventListener("pointermove", hover);
+    g.addEventListener("pointerleave", tipHide);
+    const pick = ()=>{ state.selState = state.selState===si? null : si; renderMap(); renderPanel(); };
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); pick(); }});
+    gTiles.appendChild(g);
+  }
+
+  /* 공장 노드 */
+  function facChip(x, y, pid, sub){
+    const p = pl[pid];
+    const g = svgEl("g",{});
+    g.appendChild(svgEl("rect",{x, y, width:128, height:46, rx:9, class:"factory-chip","stroke-width":1.2}));
+    g.appendChild(svgEl("rect",{x:x+10,y:y+10,width:10,height:10,fill:"var(--s2)",rx:2}));
+    const t1 = svgEl("text",{x:x+26,y:y+19,"font-size":11.5,"font-weight":700,fill:"var(--ink)"});
+    t1.textContent = pid+" · "+sub; g.appendChild(t1);
+    const t2 = svgEl("text",{x:x+10,y:y+37,"font-size":10,fill:"var(--ink2)"});
+    t2.textContent = "생산 "+fmtK(p.prod)+" · 공장재고 "+fmtK(p.yard); g.appendChild(t2);
+    g.addEventListener("pointermove", e=>tipShow(e.clientX,e.clientY, pid+" ("+PLANTS[pid].loc+")",[
+      {label:"당월 생산", value:fmtK(p.prod)+"대"},
+      {label:"공장 재고", value:fmtK(p.yard)+"대"},
+      {label:"운송 중", value:fmtK(p.intransit)+"대"},
+      {label:"운송 방식", value:PLANTS[pid].mode},
+    ]));
+    g.addEventListener("pointerleave", tipHide);
+    gFac.appendChild(g);
+  }
+  facChip(8, 288, "KR-UL", "울산");
+  facChip(8, 545, "MX-MT", "Monterrey");
+  facChip(818, 470, "US-AL", "Montgomery");
+  gRoutes.appendChild(svgEl("path",{d:"M846 470 L "+(alx[0]+14)+" "+(alx[1]+14), class:"route",
+    "stroke-width":1, "stroke-dasharray":"2 3"}));
+
+  /* 범례 */
+  const lg = document.getElementById("mapLegend"); lg.textContent = "";
+  lg.appendChild(el("span",null,M.nm+" — 낮음"));
+  const bar = el("span","bar");
+  for(const c of rp){ const i2=el("i"); i2.style.background=c; bar.appendChild(i2); }
+  lg.appendChild(bar);
+  lg.appendChild(el("span",null,"높음 · 범위 "+M.fmt(mn)+" ~ "+M.fmt(mx)));
+}
+
+/* ══════════════ 우측 패널 ══════════════ */
+function dealerCount(si){ return Math.max(3, Math.round(STATES[si].w/W_SUM*1240)); }
+function renderPanel(){
+  const i = state.month, si = state.selState;
+  const body = document.getElementById("panelBody"); body.textContent = "";
+  const back = document.getElementById("panelBack");
+  back.style.display = si==null? "none" : "inline";
+  if(si==null){
+    document.getElementById("panelTitle").textContent = "전국 요약";
+    document.getElementById("panelSub").textContent = "리전 10 · 주 50 · 딜러 약 1,240개 · "+MONTHS[i].ym;
+  } else {
+    const s = STATES[si], a = stateAgg(si,i);
+    document.getElementById("panelTitle").textContent = s.name+" ("+s.ab+")";
+    document.getElementById("panelSub").textContent = s.region+" 리전 · 딜러 "+dealerCount(si)+"개 · Retail "
+      +fmtNum(Math.round(a.retail))+"대/월 · "+MONTHS[i].ym;
+  }
+
+  /* ① 모델별 Days Supply 바 */
+  body.appendChild(el("h3",null,"모델별 Days Supply — 목표 "+DS_TARGET+"일"));
+  const dsWrap = el("div");
+  const dsOf = mi => {
+    const r0 = si==null? DATA.nat[i].rByModel[mi] : DATA.st[i][si].r[mi];
+    const s0 = si==null? DATA.nat[i].sByModel[mi] : DATA.st[i][si].s[mi];
+    return { ds: r0>0? s0/(r0/30.4):0, stock:s0 };
+  };
+  const models = state.model==="ALL"? MODELS.map((_,k)=>k) : [MODELS.findIndex(m=>m.id===state.model)];
+  const dsMax = Math.max(100, ...models.map(mi=>dsOf(mi).ds))*1.08;
+  for(const mi of models){
+    const d = dsOf(mi);
+    const row = el("div","bar-row");
+    row.appendChild(el("span","nm",MODELS[mi].id));
+    const track = el("div","track");
+    const svg = svgEl("svg",{width:"100%",height:20,viewBox:"0 0 300 20",preserveAspectRatio:"none"});
+    const bw = Math.max(2, d.ds/dsMax*300);
+    svg.appendChild(svgEl("path",{d:"M0 1 H"+Math.max(0,bw-4)+" a4 4 0 0 1 4 4 v10 a4 4 0 0 1 -4 4 H0 Z",
+      fill:"var("+MODEL_VAR[mi]+")"}));
+    const tx0 = DS_TARGET/dsMax*300;
+    svg.appendChild(svgEl("line",{x1:tx0,x2:tx0,y1:-2,y2:22,stroke:"var(--baseline)","stroke-width":1.5,
+      "stroke-dasharray":"3 3"}));
+    track.appendChild(svg);
+    row.appendChild(track);
+    row.appendChild(el("span","v",Math.round(d.ds)+"일"));
+    row.addEventListener("pointermove", e=>tipShow(e.clientX,e.clientY,MODELS[mi].id+" · "+MODELS[mi].seg,[
+      {color:cssVar(MODEL_VAR[mi]), label:"Days Supply", value:Math.round(d.ds)+"일"},
+      {label:"딜러 재고", value:fmtNum(Math.round(d.stock))+"대"},
+      {label:"목표 대비", value:(d.ds-DS_TARGET>=0?"+":"")+Math.round(d.ds-DS_TARGET)+"일"},
+    ]));
+    row.addEventListener("pointerleave", tipHide);
+    dsWrap.appendChild(row);
+  }
+  const note = el("div",null,"점선 = 목표 60일 기준선");
+  note.style.cssText = "font-size:11px;color:var(--muted);margin-top:2px";
+  dsWrap.appendChild(note);
+  body.appendChild(dsWrap);
+
+  /* ② 외장색 × 모델 재고 히트맵 */
+  body.appendChild(el("h3",null,"외장색 × 모델 재고 히트맵"));
+  const heat = colorHeat(si==null? -1 : si, i);
+  const rp = ramp();
+  const flat = heat.flat();
+  const hMn = Math.min(...flat), hMx = Math.max(...flat), hSp = hMx-hMn||1;
+  const hm = el("div");
+  hm.style.cssText = "display:grid;grid-template-columns:64px repeat(8,1fr);gap:2px;font-size:10px";
+  hm.appendChild(el("span"));
+  for(const [c] of CAR_COLORS){
+    const h = el("span",null,c.slice(0,3));
+    h.style.cssText = "text-align:center;color:var(--muted)"; hm.appendChild(h);
+  }
+  heat.forEach((row,mi)=>{
+    const nm = el("span",null,MODELS[mi].id);
+    nm.style.cssText = "color:var(--ink2);font-size:11px;align-self:center"; hm.appendChild(nm);
+    row.forEach((v,ci)=>{
+      const cell = el("span");
+      const fill = rp[Math.min(rp.length-1, Math.floor((v-hMn)/hSp*rp.length))];
+      cell.style.cssText = "height:22px;border-radius:3px;background:"+fill+";cursor:default";
+      cell.addEventListener("pointermove", e=>tipShow(e.clientX,e.clientY,
+        MODELS[mi].id+" · "+CAR_COLORS[ci][0],
+        [{label:"재고", value:fmtNum(Math.round(v))+"대"}]));
+      cell.addEventListener("pointerleave", tipHide);
+      hm.appendChild(cell);
+    });
+  });
+  body.appendChild(hm);
+  const hNote = el("div",null,"셀 색이 진할수록 재고 많음 (범위 "+fmtK(hMn)+"~"+fmtK(hMx)+"대) — 지역·색상 조합 편중 확인용");
+  hNote.style.cssText = "font-size:11px;color:var(--muted);margin-top:4px";
+  body.appendChild(hNote);
+
+  /* ③ Days Supply 추이 24개월 */
+  body.appendChild(el("h3",null,"Days Supply 추이 — 24개월"));
+  const from = Math.max(0, i-23), to = Math.min(N_MONTHS-1, Math.max(i+4, from+23));
+  const seriesIdx = []; for(let j=from;j<=to;j++) seriesIdx.push(j);
+  const dsSeries = seriesIdx.map(j=> si==null? natAgg(j).ds : stateAgg(si,j).ds);
+  const W2=436, H2=130, padL=30, padR=8, padT=10, padB=20;
+  const chart = svgEl("svg",{width:"100%",viewBox:"0 0 "+W2+" "+H2});
+  const yMn = Math.min(40, Math.min(...dsSeries))-5, yMx = Math.max(80, Math.max(...dsSeries))+5;
+  const xOf = k => padL + k/(seriesIdx.length-1)*(W2-padL-padR);
+  const yOf = v => padT + (1-(v-yMn)/(yMx-yMn))*(H2-padT-padB);
+  for(const gv of [40,60,80,100]){ if(gv<yMn||gv>yMx) continue;
+    chart.appendChild(svgEl("line",{x1:padL,x2:W2-padR,y1:yOf(gv),y2:yOf(gv),stroke:"var(--grid)","stroke-width":1}));
+    const t = svgEl("text",{x:padL-4,y:yOf(gv)+3.5,"text-anchor":"end","font-size":9.5,fill:"var(--muted)"});
+    t.textContent = gv; chart.appendChild(t);
+  }
+  chart.appendChild(svgEl("line",{x1:padL,x2:W2-padR,y1:yOf(DS_TARGET),y2:yOf(DS_TARGET),
+    stroke:"var(--baseline)","stroke-width":1.5,"stroke-dasharray":"4 4"}));
+  const tl = svgEl("text",{x:W2-padR,y:yOf(DS_TARGET)-4,"text-anchor":"end","font-size":9.5,fill:"var(--muted)"});
+  tl.textContent = "목표 60일"; chart.appendChild(tl);
+  const nowK = seriesIdx.indexOf(NOW);
+  if(nowK>=0 && nowK<seriesIdx.length-1){
+    chart.appendChild(svgEl("rect",{x:xOf(nowK),y:padT,width:xOf(seriesIdx.length-1)-xOf(nowK),
+      height:H2-padT-padB,fill:"var(--s1)",opacity:.07}));
+    chart.appendChild(svgEl("line",{x1:xOf(nowK),x2:xOf(nowK),y1:padT,y2:H2-padB,
+      stroke:"var(--baseline)","stroke-width":1}));
+    const nt = svgEl("text",{x:xOf(nowK)+3,y:padT+8,"font-size":9,fill:"var(--muted)"});
+    nt.textContent = "현재→시뮬레이션"; chart.appendChild(nt);
+  }
+  const mkPts = (upto, fromK) => seriesIdx.map((j,k)=>({k,j,v:dsSeries[k]}))
+    .filter(p=>fromK==null? p.j<=NOW : p.j>=NOW)
+    .map(p=>xOf(p.k).toFixed(1)+","+yOf(p.v).toFixed(1)).join(" ");
+  chart.appendChild(svgEl("polyline",{points:mkPts(true,null),fill:"none",stroke:"var(--s1)",
+    "stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round"}));
+  if(nowK>=0) chart.appendChild(svgEl("polyline",{points:mkPts(null,true),fill:"none",stroke:"var(--s1)",
+    "stroke-width":2,"stroke-dasharray":"5 4","stroke-linejoin":"round"}));
+  const curK = seriesIdx.indexOf(i);
+  if(curK>=0) chart.appendChild(svgEl("circle",{cx:xOf(curK),cy:yOf(dsSeries[curK]),r:4,
+    fill:"var(--s1)",stroke:"var(--surface)","stroke-width":2}));
+  for(const k of [0, Math.floor(seriesIdx.length/2), seriesIdx.length-1]){
+    const t = svgEl("text",{x:xOf(k),y:H2-6,"text-anchor":k===0?"start":k===seriesIdx.length-1?"end":"middle",
+      "font-size":9.5,fill:"var(--muted)"});
+    t.textContent = MONTHS[seriesIdx[k]].ym; chart.appendChild(t);
+  }
+  /* 크로스헤어 + 통합 툴팁 */
+  const cross = svgEl("line",{y1:padT,y2:H2-padB,stroke:"var(--baseline)","stroke-width":1,opacity:0});
+  chart.appendChild(cross);
+  const hit = svgEl("rect",{x:padL,y:0,width:W2-padL-padR,height:H2,fill:"transparent"});
+  hit.addEventListener("pointermove", e=>{
+    const r = chart.getBoundingClientRect();
+    const px = (e.clientX-r.left)/r.width*W2;
+    let k = Math.round((px-padL)/(W2-padL-padR)*(seriesIdx.length-1));
+    k = Math.max(0, Math.min(seriesIdx.length-1, k));
+    cross.setAttribute("x1",xOf(k)); cross.setAttribute("x2",xOf(k)); cross.setAttribute("opacity",1);
+    tipShow(e.clientX, e.clientY, MONTHS[seriesIdx[k]].ym+(seriesIdx[k]>NOW?" (시뮬레이션)":""),
+      [{color:cssVar("--s1"), label:"Days Supply", value:Math.round(dsSeries[k])+"일"},
+       {label:"목표", value:DS_TARGET+"일"}]);
+  });
+  hit.addEventListener("pointerleave", ()=>{ cross.setAttribute("opacity",0); tipHide(); });
+  chart.appendChild(hit);
+  body.appendChild(chart);
+
+  /* ④ Top 5 VoC 카테고리 */
+  body.appendChild(el("h3",null,"Top 5 VoC 카테고리 — 소셜미디어 매핑 일원화 기준"));
+  const cats = vocCats(si==null? -1 : si, i);
+  const vMax = Math.max(...cats.map(c=>c.v))*1.05;
+  for(const c of cats){
+    const row = el("div","bar-row");
+    const nm = el("span","nm",c.cat); nm.style.width = "110px"; row.appendChild(nm);
+    const track = el("div","track");
+    const svg = svgEl("svg",{width:"100%",height:16,viewBox:"0 0 300 16",preserveAspectRatio:"none"});
+    const bw = Math.max(2, c.v/vMax*300);
+    svg.appendChild(svgEl("path",{d:"M0 1 H"+Math.max(0,bw-4)+" a4 4 0 0 1 4 4 v6 a4 4 0 0 1 -4 4 H0 Z",
+      fill:"var(--s1)"}));
+    track.appendChild(svg); row.appendChild(track);
+    row.appendChild(el("span","v",fmtNum(Math.round(c.v))+"건"));
+    row.addEventListener("pointermove", e=>tipShow(e.clientX,e.clientY,c.cat,
+      [{label:"당월 케이스", value:fmtNum(Math.round(c.v))+"건"}]));
+    row.addEventListener("pointerleave", tipHide);
+    body.appendChild(row);
+  }
+
+  /* ⑤ VIN 드릴다운 */
+  if(si!=null){
+    const btn = el("button","vin-btn","VIN 샘플 보기 — 집계에서 개별 차량으로 드릴다운");
+    btn.type = "button";
+    btn.addEventListener("click", ()=>renderVinTable(body, btn, si));
+    body.appendChild(btn);
+  } else {
+    const hint = el("div",null,"주(state)를 선택하면 VIN 샘플까지 드릴다운할 수 있습니다.");
+    hint.style.cssText = "font-size:11.5px;color:var(--muted);margin-top:12px";
+    body.appendChild(hint);
+  }
+
+}
+/* ══════════════ VIN 드릴다운 ══════════════ */
+function renderVinTable(body, btn, si){
+  btn.remove();
+  const cap = el("h3",null,"VIN 샘플 12건 — "+STATES[si].name+" · "+MONTHS[state.month].ym+" (행 클릭 → 이벤트 체인)");
+  body.appendChild(cap);
+  const vins = genVins(si, state.month);
+  const tb = el("table","mini");
+  const thead = el("thead"), trh = el("tr");
+  for(const h of ["VIN","모델","트림","색상","공장","현재 스테이지"]) trh.appendChild(el("th",null,h));
+  thead.appendChild(trh); tb.appendChild(thead);
+  const tbody = el("tbody");
+  for(const v of vins){
+    const tr = el("tr","click");
+    tr.appendChild(el("td",null,v.vin));
+    tr.appendChild(el("td",null,v.model));
+    tr.appendChild(el("td",null,v.trim));
+    tr.appendChild(el("td",null,v.color));
+    tr.appendChild(el("td",null,v.plant));
+    tr.appendChild(el("td",null,STAGE_KO[v.stage]));
+    tr.addEventListener("click", ()=>openVinModal(v));
+    tbody.appendChild(tr);
+  }
+  tb.appendChild(tbody);
+  body.appendChild(tb);
+}
+function openVinModal(v){
+  const modal = document.getElementById("vinModal");
+  document.getElementById("vinTitle").textContent = v.vin;
+  document.getElementById("vinSub").textContent =
+    v.model+" "+v.trim+" · "+v.color+" · 생산 "+v.plant+" ("+PLANTS[v.plant].loc+") · 현재: "+STAGE_KO[v.stage];
+  const bd = document.getElementById("vinBody"); bd.textContent = "";
+  const steps = vinChain(v, state.month);
+  const ul = el("ul","chain");
+  let prev = null;
+  for(const s of steps){
+    const li = el("li");
+    li.appendChild(el("span","dot"));
+    li.appendChild(el("span","dt",s.date));
+    const st = el("span","st");
+    const b = el("b",null,STAGE_KO[s.st]); st.appendChild(b);
+    st.appendChild(el("span",null,s.loc));
+    li.appendChild(st);
+    let elapsed = "";
+    if(prev){
+      const d = Math.round((new Date(s.date)-new Date(prev))/86400000);
+      elapsed = "+"+d+"일";
+    }
+    li.appendChild(el("span","el",elapsed));
+    prev = s.date;
+    ul.appendChild(li);
+  }
+  bd.appendChild(ul);
+  const total = Math.round((new Date(steps[steps.length-1].date)-new Date(steps[0].date))/86400000);
+  const foot = el("div",null,"주문 → 최종 이벤트 총 "+total+"일 · 스테이지 전이는 모두 vin_event 로그 기반 (가이드 §2.1)");
+  foot.style.cssText = "font-size:11.5px;color:var(--muted);margin-top:10px";
+  bd.appendChild(foot);
+  modal.style.display = "flex";
+}
+document.getElementById("vinClose").addEventListener("click",
+  ()=>document.getElementById("vinModal").style.display="none");
+document.getElementById("vinModal").addEventListener("click",
+  e=>{ if(e.target.id==="vinModal") e.target.style.display="none"; });
+
+/* ══════════════ 타임라인 재생 ══════════════ */
+const slider = document.getElementById("slider");
+const btnPlay = document.getElementById("btnPlay");
+const btnSpeed = document.getElementById("btnSpeed");
+let playTimer = null;
+function renderMonthLabel(){
+  const m = MONTHS[state.month];
+  const lab = document.getElementById("monthLabel");
+  lab.textContent = "";
+  lab.appendChild(document.createTextNode(m.ym));
+  const s = el("small",null, state.month<=NOW? "실적 (Parquet 집계)" : "시뮬레이션 (윈도우 생성)");
+  lab.appendChild(s);
+  const badge = document.getElementById("modeBadge");
+  badge.textContent = state.month<=NOW? "실적" : "시뮬레이션";
+  badge.className = "mode-badge"+(state.month>NOW? " sim":"");
+}
+function setMonth(i){
+  state.month = Math.max(0, Math.min(N_MONTHS-1, i));
+  slider.value = state.month;
+  renderAll();
+}
+function tickPlay(){
+  if(state.month >= N_MONTHS-1){ stopPlay(); return; }
+  setMonth(state.month+1);
+}
+function startPlay(){
+  state.playing = true; btnPlay.textContent = "❚❚"; btnPlay.setAttribute("aria-label","일시정지");
+  playTimer = setInterval(tickPlay, 900/state.speed);
+}
+function stopPlay(){
+  state.playing = false; btnPlay.textContent = "▶"; btnPlay.setAttribute("aria-label","재생");
+  if(playTimer){ clearInterval(playTimer); playTimer = null; }
+}
+btnPlay.addEventListener("click", ()=>{
+  if(state.playing) stopPlay();
+  else { if(state.month>=N_MONTHS-1) setMonth(0); startPlay(); }
+});
+btnSpeed.addEventListener("click", ()=>{
+  state.speed = state.speed===1? 2 : state.speed===2? 4 : 1;
+  btnSpeed.textContent = state.speed+"×";
+  if(state.playing){ stopPlay(); startPlay(); }
+});
+slider.addEventListener("input", ()=>{ stopPlay(); setMonth(+slider.value); });
+/* 실적/시뮬레이션 경계 마커 */
+(function(){
+  const track = document.getElementById("tlTrack");
+  const pct = (NOW+0.5)/(N_MONTHS-1)*100;
+  const mark = el("div","tl-mark","실적 ◂ ▸ 시뮬레이션");
+  mark.style.left = pct+"%";
+  track.appendChild(mark);
+})();
+
+/* ══════════════ 필터 & 테마 ══════════════ */
+const fModel = document.getElementById("fModel");
+const fChannel = document.getElementById("fChannel");
+(function(){
+  const oAll = el("option",null,"전체 모델"); oAll.value="ALL"; fModel.appendChild(oAll);
+  for(const m of MODELS){ const o = el("option",null,m.id+" — "+m.seg); o.value=m.id; fModel.appendChild(o); }
+  const cAll = el("option",null,"전체 채널"); cAll.value="ALL"; fChannel.appendChild(cAll);
+  for(const c of CHANNELS){ const o = el("option",null,c.nm+" ("+Math.round(c.share*100)+"%)"); o.value=c.id; fChannel.appendChild(o); }
+  const seg = document.getElementById("metricSeg");
+  for(const m of METRICS){
+    const b = el("button",null,m.nm); b.type="button"; b.dataset.metric = m.id;
+    if(m.id===state.metric) b.classList.add("on");
+    b.addEventListener("click", ()=>{
+      state.metric = m.id;
+      seg.querySelectorAll("button").forEach(x=>x.classList.toggle("on", x.dataset.metric===m.id));
+      renderMap();
+    });
+    seg.appendChild(b);
+  }
+})();
+fModel.addEventListener("change", ()=>{ state.model = fModel.value; renderAll(); });
+fChannel.addEventListener("change", ()=>{ state.channel = fChannel.value; renderAll(); });
+document.getElementById("panelBack").addEventListener("click",
+  ()=>{ state.selState = null; renderMap(); renderPanel(); });
+const btnTheme = document.getElementById("btnTheme");
+btnTheme.addEventListener("click", ()=>{
+  const cur = document.documentElement.getAttribute("data-theme");
+  const next = cur==="dark"? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  btnTheme.textContent = next==="dark"? "라이트 모드" : "다크 모드";
+  renderAll();
+});
+
+/* ══════════════ 전체 렌더 ══════════════ */
+function renderAll(){
+  renderMonthLabel();
+  renderKpis();
+  renderAlerts();
+  renderMap();
+  renderPanel();
+}
+renderAll();
+</script>
+</body>
+</html>

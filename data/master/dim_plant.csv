@@ -1,0 +1,6 @@
+plant_id,plant_name,country,cap_month,lead_month,ship_mode,batch_size,wmi,freight_usd_per_unit
+KR-1,국내 1공장,KR,10000,2,선박,800,VF1,1450
+KR-2,국내 2공장,KR,10000,2,선박,800,VF2,1450
+US-GA,조지아 공장,US,36000,0,트럭·철도,300,VF3,380
+US-SV,사바나 EV 공장,US,10000,0,트럭·철도,300,VF4,380
+MX-MT,몬터레이 공장,MX,13000,1,철도·트럭,300,VF5,640

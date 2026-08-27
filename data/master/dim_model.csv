@@ -1,0 +1,7 @@
+model_id,model_name,segment,primary_plant_id,msrp_usd,unit_margin_usd,is_ev
+TRN,Terron,대형 SUV,US-GA,52000,4600,0
+VST,Vista,중형 SUV,US-GA,38500,3400,0
+AUR,Aurora EV,대형 EV SUV,US-SV,58900,3100,1
+MRD,Meridian,중형 세단,MX-MT,31200,2600,0
+NOV,Nova,미니밴,KR-2,44300,3800,0
+LUM,Lumen EV,준중형 EV CUV,KR-1,42700,2900,1

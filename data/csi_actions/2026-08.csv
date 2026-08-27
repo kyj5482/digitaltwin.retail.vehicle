@@ -1,0 +1,2 @@
+ym,project_id,project_name,model_id,component,target_vins,applied_vins_cum,claim_per_1k_before,claim_per_1k_now,score_impact
+2026-08,OTA-2606-LUM,커넥티드 SW 결함 OTA 시정,LUM,connected,10000,9500,8.5,0.4,17.8

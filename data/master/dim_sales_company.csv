@@ -1,0 +1,4 @@
+company_id,company_name,market,twin_level
+SC-US,미국판매법인,US,full
+SC-CA,캐나다판매법인,CA,aggregate
+SC-MX,멕시코판매법인,MX,aggregate

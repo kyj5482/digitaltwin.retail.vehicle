@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>밸류체인 파이프라인 트윈 — V1</title>
+<style>
+:root{
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4;
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --up-good:#006300; --down-bad:#d03b3b;
+  --seq1:#cde2fb; --seq2:#9ec5f4; --seq3:#6da7ec; --seq4:#3987e5; --seq5:#256abf; --seq6:#184f95; --seq7:#0d366b;
+  --meter-track:#cde2fb;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+    --up-good:#0ca30c;
+    --meter-track:#0d366b;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19;
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+  --up-good:#0ca30c;
+  --meter-track:#0d366b;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html,body{background:var(--page); color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:14px}
+body{padding:16px 20px 96px; max-width:1480px; margin:0 auto}
+button{font:inherit; color:inherit; background:none; border:1px solid var(--border);
+  border-radius:8px; padding:5px 12px; cursor:pointer}
+button:hover{background:rgba(128,128,128,0.08)}
+select{font:inherit; color:var(--ink); background:var(--surface);
+  border:1px solid var(--border); border-radius:8px; padding:5px 10px}
+.card{background:var(--surface); border:1px solid var(--border); border-radius:12px}
+
+/* header */
+header{display:flex; align-items:baseline; gap:12px; margin-bottom:14px}
+header h1{font-size:18px; font-weight:600}
+header .sub{color:var(--ink-2); font-size:13px}
+header .spacer{flex:1}
+
+/* KPI tiles */
+.kpi-row{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:12px}
+.kpi{padding:12px 14px; display:flex; flex-direction:column; gap:4px}
+.kpi .label{font-size:12px; color:var(--ink-2)}
+.kpi .val-row{display:flex; align-items:flex-end; gap:10px}
+.kpi .value{font-size:26px; font-weight:600; line-height:1}
+.kpi .delta{font-size:12px; font-weight:600}
+.kpi .delta .vs{font-weight:400; color:var(--muted)}
+.kpi svg{margin-top:2px}
+
+/* alerts */
+.alerts{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; min-height:30px}
+.chip{display:inline-flex; align-items:center; gap:6px; font-size:12px;
+  padding:5px 10px; border-radius:999px; border:1px solid var(--border); background:var(--surface)}
+.chip .ico{font-size:12px; line-height:1}
+.chip.sev-warn .ico{color:var(--warn)} .chip.sev-serious .ico{color:var(--serious)}
+.chip.sev-critical .ico{color:var(--critical)} .chip.sev-good .ico{color:var(--good)}
+.chip.sev-info .ico{color:var(--s1)}
+
+/* filters */
+.filters{display:flex; gap:10px; align-items:center; margin-bottom:12px}
+.filters label{font-size:12px; color:var(--ink-2)}
+
+/* pipeline board */
+.board{padding:16px 14px 10px; margin-bottom:12px; overflow-x:auto}
+.board-title{font-size:13px; font-weight:600; margin:0 4px 10px}
+.board-title .hint{font-weight:400; color:var(--muted); font-size:12px; margin-left:8px}
+.lane{display:flex; align-items:stretch; min-width:1280px}
+.stage{flex:1 1 0; min-width:0; padding:10px; border:1px solid var(--border);
+  border-radius:10px; background:var(--surface); cursor:pointer; position:relative;
+  display:flex; flex-direction:column; gap:4px}
+.stage:hover{border-color:var(--baseline)}
+.stage.sel{outline:2px solid var(--s1); outline-offset:-1px}
+.stage .st-label{font-size:11px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.stage .st-value{font-size:19px; font-weight:600; line-height:1.1}
+.stage .st-delta{font-size:11px}
+.stage .st-sub{font-size:10.5px; color:var(--muted); line-height:1.5; white-space:nowrap}
+.stage .st-sub b{color:var(--ink-2); font-weight:600}
+.stage .st-badge{position:absolute; top:-9px; right:6px; font-size:10px; padding:2px 7px;
+  border-radius:999px; background:var(--surface); border:1px solid var(--border); display:flex; gap:4px; align-items:center}
+.stage .meter{height:5px; border-radius:3px; background:var(--meter-track); margin-top:auto; overflow:hidden}
+.stage .meter i{display:block; height:100%; background:var(--seq5); border-radius:3px}
+.conn{flex:0 0 36px; display:flex; flex-direction:column; align-items:center; justify-content:center}
+.conn svg{display:block}
+.conn .flow-label{font-size:9.5px; color:var(--muted); text-align:center; line-height:1.2; margin-top:2px}
+
+/* bottom row */
+.bottom{display:grid; grid-template-columns:3fr 2fr; gap:12px}
+.panel{padding:14px}
+.panel h3{font-size:13px; font-weight:600; margin-bottom:2px}
+.panel .desc{font-size:12px; color:var(--muted); margin-bottom:8px}
+.legend{display:flex; gap:14px; font-size:12px; color:var(--ink-2); margin-bottom:6px; flex-wrap:wrap}
+.legend .item{display:inline-flex; align-items:center; gap:6px}
+.legend .key-line{width:16px; height:0; border-top:2px solid; border-radius:2px}
+.legend .key-line.dash{border-top-style:dashed}
+.legend .key-rect{width:10px; height:10px; border-radius:3px}
+
+/* tooltip */
+#tooltip{position:fixed; z-index:50; pointer-events:none; background:var(--surface);
+  border:1px solid var(--border); border-radius:10px; padding:8px 10px; font-size:12px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.18); display:none; min-width:150px}
+#tooltip .tt-title{color:var(--muted); margin-bottom:4px; font-size:11px}
+#tooltip .tt-row{display:flex; align-items:center; gap:7px; line-height:1.7}
+#tooltip .tt-key{width:12px; height:0; border-top:2px solid; border-radius:2px; flex:0 0 auto}
+#tooltip .tt-val{font-weight:600; margin-left:auto; padding-left:12px}
+#tooltip .tt-name{color:var(--ink-2)}
+
+/* drill panel */
+#drill{position:fixed; top:0; right:-480px; width:460px; height:100vh; z-index:40;
+  background:var(--surface); border-left:1px solid var(--border);
+  box-shadow:-8px 0 30px rgba(0,0,0,0.15); transition:right .25s ease; padding:18px; overflow-y:auto}
+#drill.open{right:0}
+#drill h3{font-size:15px; margin-bottom:2px}
+#drill .desc{font-size:12px; color:var(--muted); margin-bottom:12px}
+#drill .close{position:absolute; top:14px; right:14px}
+#drill table{width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:14px}
+#drill th{color:var(--ink-2); font-weight:500; text-align:right; padding:6px 8px; border-bottom:1px solid var(--grid)}
+#drill th:first-child, #drill td:first-child{text-align:left}
+#drill td{text-align:right; padding:6px 8px; border-bottom:1px solid var(--grid);
+  font-variant-numeric:tabular-nums}
+#drill tr.clickable{cursor:pointer}
+#drill tr.clickable:hover td{background:rgba(128,128,128,0.07)}
+#drill .crumb{font-size:12px; color:var(--muted); margin-bottom:10px; display:flex; gap:6px; align-items:center}
+#drill .crumb button{padding:2px 8px; font-size:12px}
+.vinchain{list-style:none}
+.vinchain li{display:flex; gap:10px; padding:7px 0; border-bottom:1px solid var(--grid); font-size:12.5px}
+.vinchain .dot{width:10px; height:10px; border-radius:50%; background:var(--s1);
+  border:2px solid var(--surface); box-shadow:0 0 0 1px var(--grid); margin-top:3px; flex:0 0 auto}
+.vinchain .stg{font-weight:600; min-width:150px}
+.vinchain .meta{color:var(--ink-2)}
+.vinchain .days{margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums}
+
+/* timeline bar */
+#timebar{position:fixed; left:0; right:0; bottom:0; z-index:30; background:var(--surface);
+  border-top:1px solid var(--border); padding:10px 24px; display:flex; align-items:center; gap:16px}
+#timebar .month{font-size:18px; font-weight:600; min-width:130px}
+#timebar .mode-badge{font-size:11px; padding:3px 9px; border-radius:999px; border:1px solid var(--border)}
+#timebar .mode-badge.future{background:color-mix(in srgb, var(--s2) 12%, transparent); border-color:var(--s2)}
+#timebar .mode-badge.actual{background:color-mix(in srgb, var(--s1) 12%, transparent); border-color:var(--s1)}
+.slider-wrap{flex:1; position:relative; height:34px; display:flex; align-items:center}
+.slider-wrap input[type=range]{width:100%; accent-color:var(--s1)}
+.slider-wrap .boundary{position:absolute; top:-2px; width:2px; height:22px; background:var(--baseline)}
+.slider-wrap .boundary-label{position:absolute; top:22px; font-size:10px; color:var(--muted); transform:translateX(-50%); white-space:nowrap}
+#timebar .yr{font-size:10.5px; color:var(--muted); position:absolute; top:24px}
+</style>
+</head>
+<body>
+<header>
+  <h1>밸류체인 파이프라인 트윈 — V1</h1>
+  <span class="sub">주문 → 생산 → 운송 → 딜러 → 고객 · 프로세스/흐름 관점 (가상 데이터)</span>
+  <span class="spacer"></span>
+  <button id="themeToggle">테마</button>
+</header>
+
+<div class="kpi-row" id="kpiRow"></div>
+<div class="alerts" id="alerts"></div>
+
+<div class="filters" id="filters">
+  <label>모델</label><select id="fModel"></select>
+  <label>지역</label><select id="fRegion"></select>
+  <label>채널</label><select id="fChannel"></select>
+</div>
+
+<div class="card board">
+  <div class="board-title">파이프라인 현황<span class="hint">카드 클릭 = 시계열 전환 · 카드의 「드릴 ↗」 = VIN 드릴다운</span></div>
+  <div class="lane" id="lane"></div>
+</div>
+
+<div class="bottom">
+  <div class="card panel">
+    <h3 id="tsTitle"></h3>
+    <div class="desc" id="tsDesc"></div>
+    <div class="legend" id="tsLegend"></div>
+    <div id="tsChart"></div>
+  </div>
+  <div class="card panel">
+    <h3>당월 모델별 파이프라인 구성</h3>
+    <div class="desc">막대 클릭 시 모델 드릴다운 · 값은 현재 필터 적용</div>
+    <div class="legend" id="barLegend"></div>
+    <div id="barChart"></div>
+  </div>
+</div>
+
+<div id="drill"></div>
+<div id="tooltip"></div>
+
+<div id="timebar">
+  <button id="playBtn" style="min-width:74px">▶ 재생</button>
+  <button id="speedBtn" style="min-width:48px">1×</button>
+  <span class="month" id="monthLabel"></span>
+  <span class="mode-badge actual" id="modeBadge">실적</span>
+  <div class="slider-wrap" id="sliderWrap">
+    <input type="range" id="monthSlider" min="0" max="47" value="31" step="1">
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   PART A — 순수 데이터 생성 (DOM 비의존, node 스모크 테스트 가능)
+   ============================================================ */
+const MONTHS = 48;                 // 2024-01 ~ 2027-12
+const NOW = 31;                    // 2026-08
+const BASE_RETAIL = 35000;
+
+const MODELS = [
+  {id:'Aurora',   seg:'EV 크로스오버', trims:['SE','XLE','GT'],        plant:'KR-UL', share:0.18, margin:4100},
+  {id:'Meridian', seg:'중형 SUV',      trims:['LE','XLE','Trail'],     plant:'US-AL', share:0.32, margin:3400},
+  {id:'Vista',    seg:'중형 세단',     trims:['SE','XSE','Hybrid'],    plant:'MX-MT', share:0.22, margin:2600},
+  {id:'Terron',   seg:'픽업',          trims:['Work','Sport','Pro'],   plant:'US-AL', share:0.28, margin:3800},
+];
+const TRIM_SHARE = [0.42, 0.38, 0.20];
+const PLANTS = {
+  'US-AL':{name:'Montgomery, AL', modes:{truck:{share:0.7,dur:0.30},rail:{share:0.3,dur:0.50}}, transCost:260},
+  'KR-UL':{name:'울산',           modes:{ship:{share:1.0,dur:1.35}},                            transCost:1450},
+  'MX-MT':{name:'Monterrey',      modes:{rail:{share:0.8,dur:0.60},truck:{share:0.2,dur:0.40}}, transCost:520},
+};
+const REGIONS = [
+  ['West',0.17],['Southwest',0.09],['Mountain',0.06],['Central',0.09],['South',0.12],
+  ['Southeast',0.11],['Great Lakes',0.13],['Northeast',0.09],['Mid-Atlantic',0.08],['Florida',0.06]
+];
+const CHANNELS = [['Retail',0.78],['Fleet',0.12],['Government',0.04],['Rental',0.06]];
+const SEASON = [0.92,0.94,1.12,1.00,1.02,1.00,0.98,1.10,1.00,0.99,1.02,1.15];
+const MKT_COST = 18e6, INCENTIVE = 950, SVC_UNIT_COST = 310, CAMP_UNIT_COST = 850;
+
+function ymOf(i){ return {y:2024+Math.floor(i/12), m:(i%12)+1}; }
+function ymLabel(i){ const {y,m}=ymOf(i); return y+'년 '+m+'월'; }
+function ymShort(i){ const {y,m}=ymOf(i); return y+'-'+String(m).padStart(2,'0'); }
+
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed>>>15, 1 | seed);
+    t = t + Math.imul(t ^ t>>>7, 61 | t) ^ t;
+    return ((t ^ t>>>14) >>> 0) / 4294967296;
+  };
+}
+
+// KR-UL 설비 이상: 2025-07(i=18) 생산 -20%, 2025-08(i=19) -15%
+function plantFactor(plant,i,noisy){
+  if(!noisy) return 1;
+  if(plant==='KR-UL'){ if(i===18) return 0.80; if(i===19) return 0.85; }
+  return 1;
+}
+// 설비 이상 여파(도착 지연) → Aurora wholesale
+function wsFactor(model,i,noisy){
+  if(!noisy) return 1;
+  if(model==='Aurora'){ if(i===19) return 0.88; if(i===20) return 0.90; }
+  return 1;
+}
+// Aurora 품질 캠페인: 2026-03(i=26)~06(i=29)
+function campRetailFactor(model,i,noisy){
+  if(!noisy || model!=='Aurora') return 1;
+  return ({26:0.93,27:0.95,28:0.97})[i] || 1;
+}
+function campSvcRate(model,i,noisy){
+  if(!noisy || model!=='Aurora') return 0;
+  return ({26:0.060,27:0.050,28:0.030,29:0.020})[i] || 0;
+}
+function campCsiDip(i,noisy){
+  if(!noisy) return 0;
+  return ({26:4.5,27:3.2,28:2.2,29:1.2})[i] || 0;
+}
+
+function bpRetailOf(model,i){
+  const {y,m}=ymOf(i);
+  return BASE_RETAIL*model.share*SEASON[m-1]*Math.pow(1.03, y-2024);
+}
+
+/* 시리즈 생성 — noisy=true: 실적+시뮬레이션(이벤트 포함), false: BP(계획, 무이벤트) */
+function buildSeries(noisy){
+  const rng = mulberry32(noisy?42:7);
+  const months = [];
+  const carry = {};
+  MODELS.forEach(md=>{ carry[md.id] = {
+    plantStock: bpRetailOf(md,0)*0.35,
+    dealerStock: bpRetailOf(md,0)*2.0,
+    uio: 1200000*md.share,
+  };});
+  for(let i=0;i<MONTHS;i++){
+    const amp = (noisy && i>NOW) ? 0.5 : 1;      // 미래 구간은 노이즈 축소
+    const n = a => noisy ? (rng()*2-1)*a*amp : 0;
+    const byModel = {};
+    let tRetail=0,tWholesale=0,tBpRetail=0,tBpWholesale=0,tMargin=0,tIncent=0,tQual=0,tTrans=0;
+    let tDealer=0,tService=0,tUio=0;
+    for(const md of MODELS){
+      const c = carry[md.id];
+      const bpR = bpRetailOf(md,i);
+      const bpNext = bpRetailOf(md, Math.min(i+1,MONTHS-1));
+      const bpNext2 = bpRetailOf(md, Math.min(i+2,MONTHS-1));
+      const retail = bpR*(1+n(0.06))*campRetailFactor(md.id,i,noisy);
+      // Wholesale: 판매 속도 + 재고 목표(약 60일 = 2개월치) 수렴 보정
+      const targetStock = bpR*2.0;
+      const wholesale = Math.max(0,
+        (bpR + (targetStock - c.dealerStock)*0.30) * (1+n(0.05)) * wsFactor(md.id,i,noisy));
+      const production = bpNext*(1+n(0.05))*plantFactor(md.plant,i,noisy);
+      const inProduction = production*0.45*(1+n(0.10));
+      const orderBacklog = (bpNext+bpNext2)*0.9*(1+n(0.04));
+      const shipments = production*(1+n(0.05));
+      c.plantStock = Math.max(c.plantStock + production - shipments, production*0.15);
+      const transit = {ship:0,rail:0,truck:0};
+      const pm = PLANTS[md.plant].modes;
+      for(const mode in pm) transit[mode] += shipments*pm[mode].share*pm[mode].dur;
+      const port = pm.ship ? shipments*0.40 : 0;
+      c.dealerStock = Math.max(c.dealerStock + wholesale - retail, retail*0.5);
+      const daysSupply = c.dealerStock/(retail/30.4);
+      c.uio += retail*0.985;
+      const campExtra = c.uio*campSvcRate(md.id,i,noisy);
+      const serviceIn = c.uio*0.045*(1+n(0.08)) + campExtra;
+      byModel[md.id] = {
+        retail, wholesale, bpRetail:bpR, production, inProduction, orderBacklog,
+        shipments, plantStock:c.plantStock, transit, port,
+        dealerStock:c.dealerStock, daysSupply, uio:c.uio, serviceIn, campExtra,
+        activation: retail*0.985,
+      };
+      tRetail+=retail; tWholesale+=wholesale; tBpRetail+=bpR; tBpWholesale+=bpR*1.08;
+      tMargin += wholesale*md.margin;
+      tIncent += retail*INCENTIVE;
+      tQual += serviceIn*SVC_UNIT_COST + campExtra*CAMP_UNIT_COST;
+      tTrans += wholesale*PLANTS[md.plant].transCost;
+      tDealer += c.dealerStock; tService += serviceIn; tUio += c.uio;
+    }
+    const profit = tMargin - tIncent - tQual - tTrans - MKT_COST;
+    const csi = 86 + n(0.8) - campCsiDip(i,noisy)
+      - Math.max(0,(tDealer/(tRetail/30.4))-85)*0.03;
+    months.push({ i, byModel, totals:{
+      retail:tRetail, wholesale:tWholesale, profit, csi,
+      daysSupply: tDealer/(tRetail/30.4),
+      dealerStock:tDealer, serviceIn:tService, uio:tUio,
+    }});
+  }
+  return months;
+}
+
+/* 스테이지 정의 (파이프라인 보드/시계열 공용) */
+const STAGES = [
+  {id:'order',   label:'주문 잔량',      kind:'stock', get:m=>m.orderBacklog},
+  {id:'prod',    label:'생산 중',        kind:'stock', get:m=>m.inProduction},
+  {id:'plant',   label:'공장 재고',      kind:'stock', get:m=>m.plantStock},
+  {id:'transit', label:'운송 중',        kind:'stock', get:m=>m.transit.ship+m.transit.rail+m.transit.truck},
+  {id:'port',    label:'항만/야드',      kind:'stock', get:m=>m.port},
+  {id:'dealer',  label:'딜러 재고',      kind:'stock', get:m=>m.dealerStock},
+  {id:'retail',  label:'당월 Retail',    kind:'flow',  get:m=>m.retail},
+  {id:'uio',     label:'운행 중 (UIO)',  kind:'stock', get:m=>m.uio},
+  {id:'service', label:'당월 서비스 입고',kind:'flow',  get:m=>m.serviceIn},
+];
+const FLOWS = [ // 커넥터: from stage idx → 유량
+  {label:'생산 투입',    get:m=>m.production},
+  {label:'생산 완료',    get:m=>m.production},
+  {label:'공장 출하',    get:m=>m.shipments},
+  {label:'항만 경유',    get:m=>m.transit.ship>0? m.shipments*0.4 : m.shipments*0.0},
+  {label:'Wholesale',    get:m=>m.wholesale},
+  {label:'Retail 판매',  get:m=>m.retail},
+  {label:'신규 개통',    get:m=>m.activation},
+  {label:'서비스 입고',  get:m=>m.serviceIn},
+];
+
+/* 필터 적용 집계: 선택 모델 목록 × 지역/채널 배율 */
+function aggregate(monthRec, modelFilter, mult){
+  const agg = {orderBacklog:0,inProduction:0,plantStock:0,production:0,shipments:0,
+    transit:{ship:0,rail:0,truck:0}, port:0, dealerStock:0, retail:0, wholesale:0,
+    uio:0, serviceIn:0, activation:0, bpRetail:0,
+    plantStockBy:{'US-AL':0,'KR-UL':0,'MX-MT':0}};
+  let dsNum=0, dsDen=0;
+  for(const md of MODELS){
+    if(modelFilter && md.id!==modelFilter) continue;
+    const m = monthRec.byModel[md.id];
+    agg.orderBacklog += m.orderBacklog*mult;
+    agg.inProduction += m.inProduction*mult;
+    agg.plantStock   += m.plantStock*mult;
+    agg.plantStockBy[md.plant] += m.plantStock*mult;
+    agg.production   += m.production*mult;
+    agg.shipments    += m.shipments*mult;
+    agg.transit.ship += m.transit.ship*mult;
+    agg.transit.rail += m.transit.rail*mult;
+    agg.transit.truck+= m.transit.truck*mult;
+    agg.port         += m.port*mult;
+    agg.dealerStock  += m.dealerStock*mult;
+    agg.retail       += m.retail*mult;
+    agg.wholesale    += m.wholesale*mult;
+    agg.uio          += m.uio*mult;
+    agg.serviceIn    += m.serviceIn*mult;
+    agg.activation   += m.activation*mult;
+    agg.bpRetail     += m.bpRetail*mult;
+    dsNum += m.dealerStock; dsDen += m.retail;
+  }
+  agg.daysSupply = dsDen>0 ? dsNum/(dsDen/30.4) : 0;
+  return agg;
+}
+
+/* VIN 합성 (결정적) */
+const VIN_CHARS = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+const WMI = {'US-AL':'5AT','KR-UL':'KAU','MX-MT':'3MV'};
+const COLORS = ['화이트 펄','미드나잇 블랙','실버 메탈릭','딥 오션 블루','가넷 레드','스틸 그레이'];
+function synthVin(model, trimIdx, monthIdx, k){
+  const md = MODELS.find(x=>x.id===model);
+  const rng = mulberry32(monthIdx*7919 + k*131 + trimIdx*17 + model.length);
+  let v = WMI[md.plant] + model[0] + 'ENV'[trimIdx] ;
+  while(v.length<17) v += VIN_CHARS[Math.floor(rng()*VIN_CHARS.length)];
+  return v;
+}
+function synthVinRows(model, trimIdx, stageId, monthIdx, count){
+  const md = MODELS.find(x=>x.id===model);
+  const rows = [];
+  for(let k=0;k<count;k++){
+    const rng = mulberry32(monthIdx*104729 + k*271 + trimIdx*31);
+    rows.push({
+      vin: synthVin(model,trimIdx,monthIdx,k),
+      model, trim: md.trims[trimIdx],
+      color: COLORS[Math.floor(rng()*COLORS.length)],
+      region: REGIONS[Math.floor(rng()*REGIONS.length)][0],
+      stage: stageId,
+    });
+  }
+  return rows;
+}
+/* VIN 이벤트 체인 합성 */
+function synthChain(vinRow, monthIdx){
+  const md = MODELS.find(x=>x.id===vinRow.model);
+  const plant = PLANTS[md.plant];
+  const rng = mulberry32(vinRow.vin.split('').reduce((a,c)=>a+c.charCodeAt(0),0));
+  const overseas = md.plant!=='US-AL';
+  const modeNames = Object.keys(plant.modes);
+  const mode = modeNames[Math.floor(rng()*modeNames.length)];
+  const modeKo = {ship:'선박',rail:'철도',truck:'트럭'}[mode];
+  const {y,m} = ymOf(monthIdx);
+  const anchor = new Date(y, m-1, 1+Math.floor(rng()*25)); // RETAIL_SALE 일자
+  const D = 24*3600*1000;
+  const steps = [];
+  let back = 0;
+  const push = (stage, loc, gapDays) => { back += gapDays; steps.unshift({stage, loc, back}); };
+  // 뒤에서부터 역산
+  push('RETAIL_SALE', vinRow.region+' 딜러', 0);
+  push('DEALER_STOCK', vinRow.region+' 딜러', 18+Math.floor(rng()*20));
+  push('DEALER_ARRIVAL (=WHOLESALE)', vinRow.region+' 딜러', 2);
+  if(overseas && mode==='ship'){
+    push('PORT_YARD', 'Long Beach 항만', 6+Math.floor(rng()*6));
+    push('IN_TRANSIT ('+modeKo+')', md.plant+' → 서부 항만', 14+Math.floor(rng()*7));
+  } else {
+    push('IN_TRANSIT ('+modeKo+')', md.plant+' → '+vinRow.region, mode==='rail'?12+Math.floor(rng()*5):5+Math.floor(rng()*4));
+  }
+  push('PLANT_STOCK', plant.name, 2+Math.floor(rng()*4));
+  push('IN_PRODUCTION', plant.name, 15+Math.floor(rng()*8));
+  push('ORDERED', '판매법인 (월 주문)', 12+Math.floor(rng()*10));
+  const chain = steps.map(s=>({ stage:s.stage, loc:s.loc,
+    date: new Date(anchor.getTime() - s.back*D) }));
+  // A/S: 40% 확률로 서비스 이벤트 부가
+  if(rng()<0.4){
+    const types=['Warranty','CustomerPay','Campaign'];
+    const t = types[Math.floor(rng()*types.length)];
+    chain.push({stage:'IN_SERVICE', loc:'커넥티드 개통', date:new Date(anchor.getTime()+1*D)});
+    chain.push({stage:'SERVICE_EVENT ('+t+')', loc:vinRow.region+' 딜러 서비스', date:new Date(anchor.getTime()+(30+Math.floor(rng()*60))*D)});
+  } else {
+    chain.push({stage:'IN_SERVICE', loc:'커넥티드 개통', date:new Date(anchor.getTime()+1*D)});
+  }
+  return chain;
+}
+
+/* 알림 계산 */
+function alertsFor(i, agg){
+  const list = [];
+  if(i===18||i===19) list.push({sev:'serious', ico:'▲', text:'KR-UL 설비 이상 — 생산 −'+(i===18?20:15)+'%'});
+  if(i>=19&&i<=20) list.push({sev:'warn', ico:'⚠', text:'Aurora 도착 지연 — Wholesale 영향'});
+  if(i>=26&&i<=29) list.push({sev:'critical', ico:'⛑', text:'Aurora 품질 캠페인 진행 중 — 서비스 부하 ↑ · 품질비용 ↑'});
+  if(agg.daysSupply>80) list.push({sev:'warn', ico:'⚠', text:'딜러 재고 '+Math.round(agg.daysSupply)+'일 — 목표(60일) 초과'});
+  else if(agg.daysSupply<40) list.push({sev:'warn', ico:'⚠', text:'딜러 재고 '+Math.round(agg.daysSupply)+'일 — 재고 부족 위험'});
+  if(i>NOW) list.push({sev:'info', ico:'ℹ', text:'시뮬레이션 구간 — 과거 윈도우 기반 생성 데이터'});
+  if(!list.length) list.push({sev:'good', ico:'●', text:'이상 없음'});
+  return list;
+}
+
+const DATA = buildSeries(true);   // 실적 + 시뮬레이션
+const BP   = buildSeries(false);  // 계획(BP) 기준선
+
+/* ===== RENDER (DOM) — 이 아래는 브라우저 전용 ===== */
+const $ = s => document.querySelector(s);
+const state = { i: NOW, model:'', region:'', channel:'', stage:'dealer', playing:false, speed:1 };
+
+function multOf(){
+  let m = 1;
+  if(state.region){ m *= REGIONS.find(r=>r[0]===state.region)[1]; }
+  if(state.channel){ m *= CHANNELS.find(c=>c[0]===state.channel)[1]; }
+  return m;
+}
+function aggAt(i, src){ return aggregate((src||DATA)[i], state.model||null, multOf()); }
+
+/* 포맷터 */
+function fmt(v){
+  const a = Math.abs(v);
+  if(a>=1e6) return (v/1e6).toFixed(2)+'M';
+  if(a>=10000) return (v/1e3).toFixed(1)+'K';
+  if(a>=1000) return Math.round(v).toLocaleString('en-US');
+  return String(Math.round(v));
+}
+function fmtM(v){ return '$'+(v/1e6).toFixed(1)+'M'; }
+function fmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+/* SVG helper */
+const NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs, parent){
+  const e = document.createElementNS(NS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  if(parent) parent.appendChild(e);
+  return e;
+}
+function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+/* ---------- KPI 타일 ---------- */
+const KPI_DEFS = [
+  {label:'Retail 판매량', get:t=>t.retail, bp:t=>t.retail, fmt:v=>fmt(v), upGood:true},
+  {label:'Wholesale', get:t=>t.wholesale, bp:t=>t.wholesale, fmt:v=>fmt(v), upGood:true},
+  {label:'영업이익', get:t=>t.profit, bp:t=>t.profit, fmt:fmtM, upGood:true, scaled:true},
+  {label:'고객만족도 (CSI)', get:t=>t.csi, bp:t=>t.csi, fmt:v=>v.toFixed(1), upGood:true, noScale:true},
+  {label:'Days Supply', get:t=>t.daysSupply, bp:()=>60, fmt:v=>Math.round(v)+'일', target:true, noScale:true},
+];
+function kpiTotals(i, src){
+  // 필터 반영: 볼륨성 지표는 배율/모델 필터 적용, CSI/DS는 비율 유지
+  const agg = aggAt(i, src);
+  const t = (src||DATA)[i].totals;
+  const volShare = state.model ? MODELS.find(m=>m.id===state.model).share : 1;
+  return {
+    retail: agg.retail, wholesale: agg.wholesale,
+    profit: t.profit * volShare * multOf(),
+    csi: t.csi, daysSupply: agg.daysSupply,
+  };
+}
+function renderKpis(){
+  const row = $('#kpiRow'); row.textContent='';
+  const cur = kpiTotals(state.i, DATA);
+  const bp  = kpiTotals(state.i, BP);
+  KPI_DEFS.forEach(def=>{
+    const tile = document.createElement('div'); tile.className='card kpi';
+    const lab = document.createElement('div'); lab.className='label'; lab.textContent=def.label; tile.appendChild(lab);
+    const vr = document.createElement('div'); vr.className='val-row';
+    const val = document.createElement('div'); val.className='value'; val.textContent = def.fmt(def.get(cur)); vr.appendChild(val);
+    const delta = document.createElement('div'); delta.className='delta';
+    let dv, txt, goodDir;
+    if(def.target){ dv = def.get(cur)-60; txt=(dv>=0?'+':'')+Math.round(dv)+'일'; goodDir = Math.abs(dv)<=15; }
+    else { const b=def.bp(bp); dv = b!==0 ? (def.get(cur)-b)/Math.abs(b)*100 : 0; txt=(dv>=0?'+':'')+dv.toFixed(1)+'%'; goodDir = def.upGood ? dv>=0 : dv<0; }
+    delta.style.color = goodDir ? 'var(--up-good)' : 'var(--down-bad)';
+    delta.textContent = (goodDir?'▲ ':'▼ ')+txt+' ';
+    const vs = document.createElement('span'); vs.className='vs'; vs.textContent = def.target?'vs 목표 60일':'vs BP'; delta.appendChild(vs);
+    vr.appendChild(delta); tile.appendChild(vr);
+    // 12개월 스파크라인
+    const s0 = Math.max(0, state.i-11);
+    const pts=[]; for(let k=s0;k<=state.i;k++) pts.push(def.get(kpiTotals(k,DATA)));
+    const w=120,h=26, mn=Math.min(...pts), mx=Math.max(...pts), rgap=(mx-mn)||1;
+    const svg = svgEl('svg',{width:w,height:h,viewBox:'0 0 '+w+' '+h});
+    let d=''; pts.forEach((p,k)=>{ const x=k/(Math.max(pts.length-1,1))*(w-8)+4, y=h-4-(p-mn)/rgap*(h-8); d+=(k?'L':'M')+x.toFixed(1)+' '+y.toFixed(1); });
+    svgEl('path',{d, fill:'none', stroke:'var(--baseline)','stroke-width':2,'stroke-linejoin':'round','stroke-linecap':'round'},svg);
+    const lx=(pts.length-1)/(Math.max(pts.length-1,1))*(w-8)+4, ly=h-4-(pts[pts.length-1]-mn)/rgap*(h-8);
+    svgEl('circle',{cx:lx,cy:ly,r:4,fill:'var(--s1)',stroke:'var(--surface)','stroke-width':2},svg);
+    tile.appendChild(svg);
+    row.appendChild(tile);
+  });
+}
+
+/* ---------- 알림 스트립 ---------- */
+function renderAlerts(){
+  const box = $('#alerts'); box.textContent='';
+  alertsFor(state.i, aggAt(state.i)).forEach(a=>{
+    const c = document.createElement('span'); c.className='chip sev-'+a.sev;
+    const ic = document.createElement('span'); ic.className='ico'; ic.textContent=a.ico;
+    const tx = document.createElement('span'); tx.textContent=a.text;
+    c.append(ic,tx); box.appendChild(c);
+  });
+}
+
+/* ---------- 파이프라인 보드 ---------- */
+function renderBoard(){
+  const lane = $('#lane'); lane.textContent='';
+  const agg = aggAt(state.i);
+  const prevAgg = state.i>0 ? aggAt(state.i-1) : agg;
+  STAGES.forEach((st,idx)=>{
+    const v = st.get(agg), pv = st.get(prevAgg);
+    const card = document.createElement('div'); card.className='stage'+(state.stage===st.id?' sel':'');
+    card.tabIndex=0;
+    const lab = document.createElement('div'); lab.className='st-label';
+    lab.textContent = st.label + (st.kind==='flow'?' (월)':''); card.appendChild(lab);
+    const val = document.createElement('div'); val.className='st-value'; val.textContent=fmt(v); card.appendChild(val);
+    const dl = document.createElement('div'); dl.className='st-delta';
+    const d = pv!==0 ? (v-pv)/pv*100 : 0;
+    dl.style.color = 'var(--ink-2)';
+    dl.textContent = (d>=0?'+':'')+d.toFixed(1)+'% 전월비'; card.appendChild(dl);
+    // 서브 구성 (공장/모드)
+    if(st.id==='plant'){
+      const sub=document.createElement('div'); sub.className='st-sub';
+      sub.textContent='';
+      [['US-AL','AL'],['KR-UL','UL'],['MX-MT','MT']].forEach(([pid,ab])=>{
+        const line=document.createElement('div');
+        const b=document.createElement('b'); b.textContent=ab+' ';
+        line.appendChild(b); line.appendChild(document.createTextNode(fmt(agg.plantStockBy[pid])));
+        sub.appendChild(line);
+      });
+      card.appendChild(sub);
+    }
+    if(st.id==='transit'){
+      const sub=document.createElement('div'); sub.className='st-sub';
+      [['ship','선박'],['rail','철도'],['truck','트럭']].forEach(([k,ko])=>{
+        const line=document.createElement('div');
+        const b=document.createElement('b'); b.textContent=ko+' ';
+        line.appendChild(b); line.appendChild(document.createTextNode(fmt(agg.transit[k])));
+        sub.appendChild(line);
+      });
+      card.appendChild(sub);
+    }
+    if(st.id==='dealer'){
+      const sub=document.createElement('div'); sub.className='st-sub';
+      const line=document.createElement('div');
+      const b=document.createElement('b'); b.textContent='Days Supply ';
+      line.appendChild(b); line.appendChild(document.createTextNode(Math.round(agg.daysSupply)+'일 / 목표 60'));
+      sub.appendChild(line); card.appendChild(sub);
+    }
+    // 상태 배지
+    let badge=null;
+    if(st.id==='plant' && (state.i===18||state.i===19)) badge={ico:'▲',cls:'sev-serious',t:'생산 차질'};
+    if(st.id==='dealer' && agg.daysSupply>80) badge={ico:'⚠',cls:'sev-warn',t:'재고 과다'};
+    if(st.id==='dealer' && agg.daysSupply<40) badge={ico:'⚠',cls:'sev-warn',t:'재고 부족'};
+    if(st.id==='service' && state.i>=26 && state.i<=29) badge={ico:'⛑',cls:'sev-critical',t:'캠페인 부하'};
+    if(badge){
+      const bd=document.createElement('span'); bd.className='st-badge chip '+badge.cls;
+      const ic=document.createElement('span'); ic.className='ico'; ic.textContent=badge.ico;
+      const tx=document.createElement('span'); tx.textContent=badge.t;
+      bd.append(ic,tx); card.appendChild(bd);
+    }
+    // 미터 (목표/케파 대비)
+    const meter=document.createElement('div'); meter.className='meter';
+    const fill=document.createElement('i');
+    let ratio=0.5;
+    if(st.id==='dealer') ratio=agg.daysSupply/120;
+    else if(st.kind==='flow') ratio=v/(st.get(aggregate(BP[state.i], state.model||null, multOf()))*1.4||1);
+    else ratio=v/(pv*1.6||1);
+    fill.style.width=Math.min(100,Math.max(4,ratio*100)).toFixed(0)+'%';
+    meter.appendChild(fill); card.appendChild(meter);
+    // 드릴 버튼
+    const db=document.createElement('button'); db.textContent='드릴 ↗';
+    db.style.cssText='font-size:10px;padding:2px 7px;margin-top:5px;align-self:flex-start';
+    db.addEventListener('click',e=>{ e.stopPropagation(); openDrill(st.id, state.model||null); });
+    card.appendChild(db);
+    card.addEventListener('click',()=>{ state.stage=st.id; renderBoard(); renderTs(); });
+    lane.appendChild(card);
+    // 커넥터
+    if(idx<STAGES.length-1){
+      const f = FLOWS[idx], fv = f.get(agg);
+      const conn=document.createElement('div'); conn.className='conn';
+      const th = Math.min(26, Math.max(4, 4+22*(fv/40000)));
+      const svg=svgEl('svg',{width:36,height:40,viewBox:'0 0 36 40'});
+      const y=20;
+      svgEl('path',{d:'M0 '+(y-th/2)+' L24 '+(y-th/2)+' L24 '+(y-th/2-4)+' L34 '+y+' L24 '+(y+th/2+4)+' L24 '+(y+th/2)+' L0 '+(y+th/2)+' Z',
+        fill:'var(--seq2)', opacity:0.9},svg);
+      conn.appendChild(svg);
+      const fl=document.createElement('div'); fl.className='flow-label';
+      fl.textContent=f.label+' '+fmt(fv); conn.appendChild(fl);
+      lane.appendChild(conn);
+    }
+  });
+}
+
+/* ---------- 툴팁 ---------- */
+const tooltip = ()=>$('#tooltip');
+function showTip(x,y){ const t=tooltip(); t.style.display='block';
+  const r=t.getBoundingClientRect();
+  t.style.left=Math.min(x+14, innerWidth-r.width-10)+'px';
+  t.style.top=Math.min(y+14, innerHeight-r.height-10)+'px'; }
+function hideTip(){ tooltip().style.display='none'; }
+function tipContent(title, rows){
+  const t=tooltip(); t.textContent='';
+  const h=document.createElement('div'); h.className='tt-title'; h.textContent=title; t.appendChild(h);
+  rows.forEach(r=>{
+    const row=document.createElement('div'); row.className='tt-row';
+    const k=document.createElement('span'); k.className='tt-key'; k.style.borderTopColor=r.color;
+    if(r.dash) k.style.borderTopStyle='dashed';
+    const nm=document.createElement('span'); nm.className='tt-name'; nm.textContent=r.name;
+    const vl=document.createElement('span'); vl.className='tt-val'; vl.textContent=r.value;
+    row.append(k,nm,vl); t.appendChild(row);
+  });
+}
+
+/* ---------- 시계열 라인차트 ---------- */
+function niceMax(v){ const p=Math.pow(10,Math.floor(Math.log10(v||1))); const s=v/p;
+  return (s<=1?1:s<=2?2:s<=2.5?2.5:s<=5?5:10)*p; }
+function renderTs(){
+  const st = STAGES.find(s=>s.id===state.stage);
+  $('#tsTitle').textContent = st.label + ' — 48개월 시계열';
+  $('#tsDesc').textContent = (st.kind==='flow'?'월간 유량':'월말 재고') + ' · 실선=실적, 점선=시뮬레이션(2026-09~), 회색 점선=BP';
+  const box = $('#tsChart'); box.textContent='';
+  const W = box.clientWidth||760, H=240, L=52, R=14, T=12, B=28;
+  const actual=[], plan=[];
+  for(let i=0;i<MONTHS;i++){ actual.push(st.get(aggAt(i,DATA))); plan.push(st.get(aggAt(i,BP))); }
+  const mx = niceMax(Math.max(...actual,...plan)*1.08);
+  const xOf = i => L + i/(MONTHS-1)*(W-L-R);
+  const yOf = v => T + (1-v/mx)*(H-T-B);
+  const svg = svgEl('svg',{width:W,height:H,viewBox:'0 0 '+W+' '+H});
+  // grid + y ticks
+  for(let g=0;g<=4;g++){ const gv=mx*g/4, gy=yOf(gv);
+    svgEl('line',{x1:L,x2:W-R,y1:gy,y2:gy,stroke:'var(--grid)','stroke-width':1},svg);
+    const tx=svgEl('text',{x:L-6,y:gy+4,'text-anchor':'end','font-size':10,fill:'var(--muted)'},svg);
+    tx.textContent=fmt(gv);
+  }
+  // x ticks (연도 1월)
+  for(let i=0;i<MONTHS;i+=12){ const tx=svgEl('text',{x:xOf(i),y:H-8,'font-size':10,fill:'var(--muted)'},svg);
+    tx.textContent=String(2024+i/12); }
+  // 실적/미래 경계
+  svgEl('line',{x1:xOf(NOW),x2:xOf(NOW),y1:T,y2:H-B,stroke:'var(--baseline)','stroke-width':1,'stroke-dasharray':'2 3'},svg);
+  const bt=svgEl('text',{x:xOf(NOW)+4,y:T+10,'font-size':10,fill:'var(--muted)'},svg); bt.textContent='현재';
+  // BP 라인 (회색 점선)
+  let dBp=''; plan.forEach((v,i)=>{ dBp+=(i?'L':'M')+xOf(i).toFixed(1)+' '+yOf(v).toFixed(1); });
+  svgEl('path',{d:dBp,fill:'none',stroke:'var(--muted)','stroke-width':2,'stroke-dasharray':'5 4','stroke-linejoin':'round'},svg);
+  // 실적: 실선(~NOW), 점선(NOW~)
+  let dA=''; for(let i=0;i<=NOW;i++) dA+=(i?'L':'M')+xOf(i).toFixed(1)+' '+yOf(actual[i]).toFixed(1);
+  svgEl('path',{d:dA,fill:'none',stroke:'var(--s1)','stroke-width':2,'stroke-linejoin':'round','stroke-linecap':'round'},svg);
+  let dF='M'+xOf(NOW).toFixed(1)+' '+yOf(actual[NOW]).toFixed(1);
+  for(let i=NOW+1;i<MONTHS;i++) dF+='L'+xOf(i).toFixed(1)+' '+yOf(actual[i]).toFixed(1);
+  svgEl('path',{d:dF,fill:'none',stroke:'var(--s1)','stroke-width':2,'stroke-dasharray':'4 4','stroke-linejoin':'round'},svg);
+  // 재생 위치 마커 + 현재값 직접 라벨
+  svgEl('line',{x1:xOf(state.i),x2:xOf(state.i),y1:T,y2:H-B,stroke:'var(--s2)','stroke-width':1.5},svg);
+  svgEl('circle',{cx:xOf(state.i),cy:yOf(actual[state.i]),r:4.5,fill:'var(--s1)',stroke:'var(--surface)','stroke-width':2},svg);
+  const cl=svgEl('text',{x:Math.min(xOf(state.i)+7,W-R-40),y:yOf(actual[state.i])-8,'font-size':11,'font-weight':600,fill:'var(--ink)'},svg);
+  cl.textContent=fmt(actual[state.i]);
+  // crosshair 오버레이
+  const cross=svgEl('line',{x1:0,x2:0,y1:T,y2:H-B,stroke:'var(--baseline)','stroke-width':1,visibility:'hidden'},svg);
+  const hit=svgEl('rect',{x:L,y:T,width:W-L-R,height:H-T-B,fill:'transparent'},svg);
+  hit.addEventListener('pointermove',e=>{
+    const r=svg.getBoundingClientRect();
+    const i=Math.max(0,Math.min(MONTHS-1,Math.round((e.clientX-r.left-L)/((W-L-R)/(MONTHS-1)))));
+    cross.setAttribute('x1',xOf(i)); cross.setAttribute('x2',xOf(i)); cross.setAttribute('visibility','visible');
+    tipContent(ymLabel(i)+(i>NOW?' (시뮬레이션)':' (실적)'),[
+      {color:cssVar('--s1'),name:st.label,value:fmt(actual[i]),dash:i>NOW},
+      {color:cssVar('--muted'),name:'BP',value:fmt(plan[i]),dash:true},
+    ]);
+    showTip(e.clientX,e.clientY);
+  });
+  hit.addEventListener('pointerleave',()=>{ cross.setAttribute('visibility','hidden'); hideTip(); });
+  hit.addEventListener('click',e=>{
+    const r=svg.getBoundingClientRect();
+    const i=Math.max(0,Math.min(MONTHS-1,Math.round((e.clientX-r.left-L)/((W-L-R)/(MONTHS-1)))));
+    setMonth(i);
+  });
+  box.appendChild(svg);
+  // 범례 (2 시리즈)
+  const lg=$('#tsLegend'); lg.textContent='';
+  [{n:st.label+' (실적/시뮬레이션)',c:'var(--s1)',dash:false},{n:'BP 기준선',c:'var(--muted)',dash:true}].forEach(it=>{
+    const item=document.createElement('span'); item.className='item';
+    const key=document.createElement('span'); key.className='key-line'+(it.dash?' dash':''); key.style.borderTopColor=it.c;
+    const nm=document.createElement('span'); nm.textContent=it.n;
+    item.append(key,nm); lg.appendChild(item);
+  });
+}
+
+/* ---------- 모델별 스택 바 ---------- */
+const BAR_SEGS = [
+  {id:'plant', label:'공장 재고', color:'--s1', get:m=>m.plantStock},
+  {id:'transit', label:'운송 중', color:'--s2', get:m=>m.transit.ship+m.transit.rail+m.transit.truck},
+  {id:'dealer', label:'딜러 재고', color:'--s3', get:m=>m.dealerStock},
+  {id:'retail', label:'당월 Retail', color:'--s4', get:m=>m.retail},
+];
+function renderBars(){
+  const box=$('#barChart'); box.textContent='';
+  const mult=multOf();
+  const models = state.model? MODELS.filter(m=>m.id===state.model) : MODELS;
+  const rows = models.map(md=>{
+    const m = DATA[state.i].byModel[md.id];
+    return {model:md.id, segs:BAR_SEGS.map(s=>s.get(m)*mult)};
+  });
+  const W=box.clientWidth||460, rowH=42, H=rows.length*rowH+26, L=76, R=14;
+  const mx=niceMax(Math.max(...rows.map(r=>r.segs.reduce((a,b)=>a+b,0)))*1.05);
+  const svg=svgEl('svg',{width:W,height:H,viewBox:'0 0 '+W+' '+H});
+  // x grid
+  for(let g=1;g<=3;g++){ const gx=L+(W-L-R)*g/3;
+    svgEl('line',{x1:gx,x2:gx,y1:6,y2:H-20,stroke:'var(--grid)','stroke-width':1},svg);
+    const t=svgEl('text',{x:gx,y:H-6,'font-size':10,fill:'var(--muted)','text-anchor':'middle'},svg);
+    t.textContent=fmt(mx*g/3);
+  }
+  rows.forEach((r,ri)=>{
+    const y=ri*rowH+12, bh=20;
+    const nm=svgEl('text',{x:L-8,y:y+bh/2+4,'text-anchor':'end','font-size':12,fill:'var(--ink-2)'},svg);
+    nm.textContent=r.model;
+    let x=L;
+    const total=r.segs.reduce((a,b)=>a+b,0);
+    r.segs.forEach((sv,si)=>{
+      const w=Math.max(0, sv/mx*(W-L-R)-2); // 2px surface gap
+      const isLast = si===r.segs.length-1;
+      const rect=svgEl('rect',{x:x,y:y,width:Math.max(w,0),height:bh,
+        rx:isLast?4:0, fill:'var('+BAR_SEGS[si].color+')'},svg);
+      // 세그먼트 내부 직접 라벨 (충분히 넓을 때만)
+      const txt=fmt(sv);
+      if(w>txt.length*7+14){
+        const fillHex=cssVar(BAR_SEGS[si].color);
+        const rr=parseInt(fillHex.slice(1,3),16),gg=parseInt(fillHex.slice(3,5),16),bb2=parseInt(fillHex.slice(5,7),16);
+        const lum=(0.299*rr+0.587*gg+0.114*bb2)/255;
+        const lb=svgEl('text',{x:x+w/2,y:y+bh/2+4,'text-anchor':'middle','font-size':10.5,'font-weight':600,
+          fill:lum>0.62?'#0b0b0b':'#ffffff'},svg);
+        lb.textContent=txt;
+      }
+      rect.style.cursor='pointer';
+      rect.addEventListener('pointermove',e=>{
+        rect.setAttribute('opacity','0.85');
+        tipContent(r.model+' · '+ymLabel(state.i),[
+          {color:cssVar(BAR_SEGS[si].color),name:BAR_SEGS[si].label,value:fmt(sv)},
+          {color:cssVar('--muted'),name:'합계',value:fmt(total)},
+        ]);
+        showTip(e.clientX,e.clientY);
+      });
+      rect.addEventListener('pointerleave',()=>{ rect.removeAttribute('opacity'); hideTip(); });
+      rect.addEventListener('click',()=>openDrill(BAR_SEGS[si].id, r.model));
+      x+=w+2;
+    });
+  });
+  box.appendChild(svg);
+  const lg=$('#barLegend'); lg.textContent='';
+  BAR_SEGS.forEach(s=>{
+    const item=document.createElement('span'); item.className='item';
+    const key=document.createElement('span'); key.className='key-rect'; key.style.background='var('+s.color+')';
+    const nm=document.createElement('span'); nm.textContent=s.label;
+    item.append(key,nm); lg.appendChild(item);
+  });
+}
+
+/* ---------- 드릴다운 패널 ---------- */
+const drillState = {stage:null, model:null, trim:null, vins:null, chain:null};
+function openDrill(stageId, model){
+  drillState.stage=stageId; drillState.model=model; drillState.trim=null; drillState.vins=null; drillState.chain=null;
+  renderDrill(); $('#drill').classList.add('open');
+}
+function closeDrill(){ $('#drill').classList.remove('open'); }
+function renderDrill(){
+  const d=$('#drill'); d.textContent='';
+  const st=STAGES.find(s=>s.id===drillState.stage) || STAGES[5];
+  const close=document.createElement('button'); close.className='close'; close.textContent='닫기 ✕';
+  close.addEventListener('click',closeDrill); d.appendChild(close);
+  const h=document.createElement('h3');
+  h.textContent=(drillState.model||'전체 모델')+' · '+st.label; d.appendChild(h);
+  const ds=document.createElement('div'); ds.className='desc';
+  ds.textContent=ymLabel(state.i)+' 기준 — 집계 → 트림 → VIN → 이벤트 체인'; d.appendChild(ds);
+
+  if(drillState.chain){ // 레벨 3: VIN 체인
+    const crumb=document.createElement('div'); crumb.className='crumb';
+    const back=document.createElement('button'); back.textContent='← VIN 목록';
+    back.addEventListener('click',()=>{ drillState.chain=null; renderDrill(); });
+    crumb.appendChild(back);
+    const c=document.createElement('span'); c.textContent=drillState.chain.vin.vin; crumb.appendChild(c);
+    d.appendChild(crumb);
+    const info=document.createElement('div'); info.className='desc';
+    info.textContent=drillState.chain.vin.model+' '+drillState.chain.vin.trim+' · '+drillState.chain.vin.color+' · '+drillState.chain.vin.region;
+    d.appendChild(info);
+    const ul=document.createElement('ul'); ul.className='vinchain';
+    let prev=null;
+    drillState.chain.steps.forEach(s=>{
+      const li=document.createElement('li');
+      const dot=document.createElement('span'); dot.className='dot';
+      const stg=document.createElement('span'); stg.className='stg'; stg.textContent=s.stage;
+      const meta=document.createElement('span'); meta.className='meta'; meta.textContent=fmtDate(s.date)+' · '+s.loc;
+      const days=document.createElement('span'); days.className='days';
+      days.textContent = prev? '+'+Math.round((s.date-prev)/(24*3600*1000))+'일' : '';
+      prev=s.date;
+      li.append(dot,stg,meta,days); ul.appendChild(li);
+    });
+    d.appendChild(ul);
+    return;
+  }
+  if(drillState.vins){ // 레벨 2: VIN 목록
+    const crumb=document.createElement('div'); crumb.className='crumb';
+    const back=document.createElement('button'); back.textContent='← 트림 테이블';
+    back.addEventListener('click',()=>{ drillState.vins=null; renderDrill(); });
+    crumb.appendChild(back);
+    const c=document.createElement('span'); c.textContent=drillState.model+' '+drillState.trim+' · VIN 샘플 12건'; crumb.appendChild(c);
+    d.appendChild(crumb);
+    const tb=document.createElement('table');
+    const thead=document.createElement('thead'); const hr=document.createElement('tr');
+    ['VIN','색상','지역','스테이지'].forEach(t=>{ const th=document.createElement('th'); th.textContent=t; hr.appendChild(th); });
+    thead.appendChild(hr); tb.appendChild(thead);
+    const tbody=document.createElement('tbody');
+    drillState.vins.forEach(v=>{
+      const tr=document.createElement('tr'); tr.className='clickable';
+      [v.vin,v.color,v.region,st.label].forEach(t=>{ const td=document.createElement('td'); td.textContent=t; tr.appendChild(td); });
+      tr.addEventListener('click',()=>{ drillState.chain={vin:v, steps:synthChain(v, state.i)}; renderDrill(); });
+      tbody.appendChild(tr);
+    });
+    tb.appendChild(tbody); d.appendChild(tb);
+    const hint=document.createElement('div'); hint.className='desc';
+    hint.textContent='행 클릭 → 생산부터 A/S까지 VIN 이벤트 체인'; d.appendChild(hint);
+    return;
+  }
+  // 레벨 1: 모델×트림 테이블
+  const models = drillState.model? MODELS.filter(m=>m.id===drillState.model) : MODELS;
+  const mult=multOf();
+  const tb=document.createElement('table');
+  const thead=document.createElement('thead'); const hr=document.createElement('tr');
+  ['모델 / 트림', st.label, '구성비', ''].forEach(t=>{ const th=document.createElement('th'); th.textContent=t; hr.appendChild(th); });
+  thead.appendChild(hr); tb.appendChild(thead);
+  const tbody=document.createElement('tbody');
+  models.forEach(md=>{
+    const m=DATA[state.i].byModel[md.id];
+    const stageVal=st.get(m)*mult;
+    md.trims.forEach((tr2,ti)=>{
+      const v=stageVal*TRIM_SHARE[ti];
+      const row=document.createElement('tr'); row.className='clickable';
+      const c1=document.createElement('td'); c1.textContent=md.id+' '+tr2;
+      const c2=document.createElement('td'); c2.textContent=fmt(v);
+      const c3=document.createElement('td'); c3.textContent=(TRIM_SHARE[ti]*100).toFixed(0)+'%';
+      const c4=document.createElement('td');
+      const btn=document.createElement('button'); btn.textContent='VIN 샘플'; btn.style.fontSize='11px';
+      btn.addEventListener('click',e=>{ e.stopPropagation();
+        drillState.model=md.id; drillState.trim=tr2;
+        drillState.vins=synthVinRows(md.id, ti, st.id, state.i, 12); renderDrill(); });
+      c4.appendChild(btn);
+      row.append(c1,c2,c3,c4);
+      row.addEventListener('click',()=>{ drillState.model=md.id; drillState.trim=tr2;
+        drillState.vins=synthVinRows(md.id, ti, st.id, state.i, 12); renderDrill(); });
+      tbody.appendChild(row);
+    });
+  });
+  tb.appendChild(tbody); d.appendChild(tb);
+}
+
+/* ---------- 타임라인 ---------- */
+function setMonth(i){
+  state.i=Math.max(0,Math.min(MONTHS-1,i));
+  $('#monthSlider').value=state.i;
+  renderAll(false);
+}
+function renderTimebar(){
+  $('#monthLabel').textContent=ymLabel(state.i);
+  const b=$('#modeBadge');
+  if(state.i>NOW){ b.textContent='시뮬레이션'; b.className='mode-badge future'; }
+  else { b.textContent='실적'; b.className='mode-badge actual'; }
+  $('#playBtn').textContent = state.playing? '⏸ 정지':'▶ 재생';
+  $('#speedBtn').textContent = state.speed+'×';
+}
+let playTimer=null;
+function togglePlay(){
+  state.playing=!state.playing;
+  if(playTimer){ clearInterval(playTimer); playTimer=null; }
+  if(state.playing){
+    if(state.i>=MONTHS-1) setMonth(0);
+    playTimer=setInterval(()=>{
+      if(state.i>=MONTHS-1){ togglePlay(); return; }
+      setMonth(state.i+1);
+    }, 700/state.speed);
+  }
+  renderTimebar();
+}
+
+/* ---------- 초기화 ---------- */
+function renderAll(rebuildFilters){
+  renderKpis(); renderAlerts(); renderBoard(); renderTs(); renderBars(); renderTimebar();
+  if($('#drill').classList.contains('open')) renderDrill();
+}
+function fillSelect(sel, items, allLabel){
+  sel.textContent='';
+  const o=document.createElement('option'); o.value=''; o.textContent=allLabel; sel.appendChild(o);
+  items.forEach(it=>{ const op=document.createElement('option'); op.value=it; op.textContent=it; sel.appendChild(op); });
+}
+function init(){
+  fillSelect($('#fModel'), MODELS.map(m=>m.id), '전체 모델');
+  fillSelect($('#fRegion'), REGIONS.map(r=>r[0]), '전체 지역');
+  fillSelect($('#fChannel'), CHANNELS.map(c=>c[0]), '전체 채널');
+  $('#fModel').addEventListener('change',e=>{ state.model=e.target.value; renderAll(); });
+  $('#fRegion').addEventListener('change',e=>{ state.region=e.target.value; renderAll(); });
+  $('#fChannel').addEventListener('change',e=>{ state.channel=e.target.value; renderAll(); });
+  $('#monthSlider').addEventListener('input',e=>setMonth(+e.target.value));
+  $('#playBtn').addEventListener('click',togglePlay);
+  $('#speedBtn').addEventListener('click',()=>{ state.speed = state.speed===1?2:state.speed===2?4:1;
+    if(state.playing){ togglePlay(); togglePlay(); } renderTimebar(); });
+  $('#themeToggle').addEventListener('click',()=>{
+    const cur=document.documentElement.getAttribute('data-theme');
+    const sysDark=matchMedia('(prefers-color-scheme: dark)').matches;
+    const next=(cur? cur==='dark' : sysDark)? 'light':'dark';
+    document.documentElement.setAttribute('data-theme',next);
+    renderAll();
+  });
+  // 실적/미래 경계 마커
+  const wrap=$('#sliderWrap');
+  const pct=(NOW/(MONTHS-1))*100;
+  const bd=document.createElement('div'); bd.className='boundary'; bd.style.left='calc('+pct.toFixed(2)+'% )';
+  const bl=document.createElement('div'); bl.className='boundary-label'; bl.style.left=pct.toFixed(2)+'%';
+  bl.textContent='실적 │ 시뮬레이션';
+  wrap.append(bd,bl);
+  addEventListener('resize',()=>{ renderTs(); renderBars(); });
+  renderAll(true);
+}
+init();
+</script>
+</body>
+</html>

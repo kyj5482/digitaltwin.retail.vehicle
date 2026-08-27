@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시뮬레이션 콕핏 — V3 · 판매법인 디지털 트윈</title>
+<style>
+/* ── 디자인 토큰 (dataviz 레퍼런스 팔레트) ─────────────────────────── */
+:root {
+  color-scheme: light;
+  --page:           #f9f9f7;
+  --surface-1:      #fcfcfb;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --gridline:       #e1e0d9;
+  --baseline:       #c3c2b7;
+  --border:         rgba(11,11,11,0.10);
+  --series-1:       #2a78d6;
+  --series-2:       #eb6834;
+  --series-3:       #1baf7a;
+  --series-4:       #eda100;
+  --series-5:       #e87ba4;
+  --div-neg:        #e34948;   /* 다이버징 red 극 */
+  --div-mid:        #f0efec;   /* 다이버징 중립 */
+  --status-good:    #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical:#d03b3b;
+  --delta-good:     #006300;   /* ↑좋음 텍스트 */
+  --delta-bad:      #b02a2a;
+  --seq-2:          #9ec5f4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --series-2:       #d95926;
+    --series-3:       #199e70;
+    --series-4:       #c98500;
+    --series-5:       #d55181;
+    --div-neg:        #e66767;
+    --div-mid:        #383835;
+    --delta-good:     #0ca30c;
+    --delta-bad:      #e66767;
+    --seq-2:          #256abf;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page:           #0d0d0d;
+  --surface-1:      #1a1a19;
+  --text-primary:   #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted:     #898781;
+  --gridline:       #2c2c2a;
+  --baseline:       #383835;
+  --border:         rgba(255,255,255,0.10);
+  --series-1:       #3987e5;
+  --series-2:       #d95926;
+  --series-3:       #199e70;
+  --series-4:       #c98500;
+  --series-5:       #d55181;
+  --div-neg:        #e66767;
+  --div-mid:        #383835;
+  --delta-good:     #0ca30c;
+  --delta-bad:      #e66767;
+  --seq-2:          #256abf;
+}
+
+/* ── 레이아웃 ──────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page);
+  color: var(--text-primary);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding-bottom: 64px; /* 하단 타임라인 바 공간 */
+}
+.wrap { max-width: 1440px; margin: 0 auto; padding: 0 16px; }
+
+header.app {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 0 10px;
+}
+header.app h1 { font-size: 17px; font-weight: 700; margin: 0; }
+header.app .tag {
+  font-size: 11px; color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px;
+}
+header.app .spacer { flex: 1; }
+button, select, input[type=range] { font: inherit; color: inherit; }
+button.ghost {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 11px; cursor: pointer;
+}
+button.ghost:hover { border-color: var(--baseline); }
+
+/* KPI 스탯 타일 */
+.kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 10px; }
+.kpi {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px 8px; display: flex; flex-direction: column; gap: 2px;
+}
+.kpi .lbl { font-size: 11.5px; color: var(--text-secondary); }
+.kpi .val { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.kpi .deltas { display: flex; gap: 10px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; }
+.kpi .deltas b { font-weight: 600; }
+.kpi .d-good { color: var(--delta-good); }
+.kpi .d-bad  { color: var(--delta-bad); }
+.kpi svg { margin-top: 4px; display: block; }
+
+/* 필터 행 */
+.filter-row {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;
+}
+.filter-row label { font-size: 11.5px; color: var(--text-secondary); }
+.filter-row select {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 7px;
+  padding: 4px 8px;
+}
+.filter-row .hint { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+
+/* 사이드바 + 메인 */
+.layout { display: grid; grid-template-columns: 300px 1fr; gap: 12px; align-items: start; }
+aside.controls {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px; position: sticky; top: 10px;
+}
+aside.controls h2 { font-size: 13px; margin: 0 0 10px; }
+.ctl { margin-bottom: 13px; }
+.ctl .ctl-head { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
+.ctl .ctl-head b { font-weight: 600; }
+.ctl .ctl-val { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.ctl input[type=range] { width: 100%; accent-color: var(--series-1); }
+.ctl .chain { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
+.ctl select, .ctl input[type=month] {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px;
+}
+.ctl .row { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 12px; flex-wrap: wrap; }
+.alloc-note { font-size: 10.5px; color: var(--text-muted); }
+.scenario-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.scenario-btns button { flex: 1; min-width: 80px; font-size: 12px; }
+.scenario-btns button.active { border-color: var(--series-2); color: var(--text-primary); }
+hr.thin { border: 0; border-top: 1px solid var(--gridline); margin: 12px 0; }
+
+/* 차트 그리드 */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px 8px; min-width: 0;
+}
+.card h3 { font-size: 13px; font-weight: 600; margin: 0 0 2px; }
+.card .sub { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text-secondary); margin: 2px 0 4px; }
+.legend .li { display: inline-flex; align-items: center; gap: 5px; }
+.legend .sw-line { width: 14px; height: 0; border-top: 2px solid; border-radius: 2px; }
+.legend .sw-line.dash { border-top-style: dashed; }
+.legend .sw-rect { width: 10px; height: 10px; border-radius: 2px; }
+.card svg.chart { display: block; width: 100%; }
+
+/* 액션 아이템 */
+section.actions { margin-top: 12px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+section.actions h3 { font-size: 13px; margin: 0 0 6px; }
+.action-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.action-list li {
+  display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; border-radius: 7px;
+  border: 1px solid var(--gridline); cursor: pointer; font-size: 12.5px;
+}
+.action-list li:hover { border-color: var(--baseline); }
+.action-list .sev { font-size: 10.5px; font-weight: 700; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+.sev.critical { background: color-mix(in srgb, var(--status-critical) 14%, transparent); color: var(--status-critical); }
+.sev.serious  { background: color-mix(in srgb, var(--status-serious) 16%, transparent); color: var(--status-serious); }
+.sev.warning  { background: color-mix(in srgb, var(--status-warning) 18%, transparent); color: #7a5600; }
+:root[data-theme="dark"] .sev.warning { color: var(--status-warning); }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .sev.warning { color: var(--status-warning); } }
+.action-list .mo { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.action-list .empty { color: var(--text-muted); border-style: dashed; cursor: default; }
+
+/* 타임라인 바 */
+.timeline {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: var(--surface-1); border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px; padding: 9px 18px;
+}
+.timeline button.play {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--series-1); color: #fff; cursor: pointer; font-size: 13px;
+}
+.timeline select { background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; }
+.timeline .track { flex: 1; position: relative; height: 30px; display: flex; align-items: center; }
+.timeline input[type=range] { width: 100%; accent-color: var(--series-1); position: relative; z-index: 2; margin: 0; }
+.timeline .boundary {
+  position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px dashed var(--baseline); z-index: 1;
+}
+.timeline .boundary span {
+  position: absolute; top: -13px; left: -4px; transform: translateX(-100%);
+  font-size: 10px; color: var(--text-muted); white-space: nowrap;
+}
+.timeline .mo-label { font-size: 13px; font-weight: 600; min-width: 122px; text-align: right; font-variant-numeric: tabular-nums; }
+.timeline .mo-label .mode { font-size: 10.5px; font-weight: 400; color: var(--text-muted); display: block; }
+
+/* 툴팁 */
+.tooltip {
+  position: fixed; z-index: 50; pointer-events: none; display: none;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18); padding: 7px 10px; font-size: 11.5px; max-width: 260px;
+}
+.tooltip .tt-title { color: var(--text-muted); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.tooltip .tt-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.tooltip .tt-key { width: 12px; height: 0; border-top: 2px solid; border-radius: 2px; flex: none; }
+.tooltip .tt-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tooltip .tt-name { color: var(--text-secondary); }
+
+/* 드릴다운 슬라이드오버 */
+.drill {
+  position: fixed; top: 0; right: -520px; width: 500px; max-width: 92vw; bottom: 0; z-index: 40;
+  background: var(--surface-1); border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(0,0,0,0.15); transition: right .22s ease;
+  overflow-y: auto; padding: 14px 16px 80px;
+}
+.drill.open { right: 0; }
+.drill h3 { font-size: 14px; margin: 0 0 2px; }
+.drill .sub { font-size: 11px; color: var(--text-muted); margin-bottom: 10px; }
+.drill .close { position: absolute; top: 10px; right: 12px; }
+.drill h4 { font-size: 12px; margin: 14px 0 6px; color: var(--text-secondary); }
+table.calc { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.calc td { padding: 4px 6px; border-bottom: 1px solid var(--gridline); }
+table.calc td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+table.calc tr.total td { border-top: 2px solid var(--baseline); border-bottom: 0; }
+table.vins { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+table.vins th { text-align: left; color: var(--text-muted); font-weight: 500; padding: 3px 6px; border-bottom: 1px solid var(--baseline); }
+table.vins td { padding: 4px 6px; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+table.vins tr.vrow { cursor: pointer; }
+table.vins tr.vrow:hover td { background: color-mix(in srgb, var(--series-1) 7%, transparent); }
+.chain-steps { list-style: none; margin: 6px 0 0; padding: 0; }
+.chain-steps li { display: flex; gap: 10px; padding: 5px 0 5px 14px; border-left: 2px solid var(--seq-2); position: relative; font-size: 12px; }
+.chain-steps li::before {
+  content: ""; position: absolute; left: -5px; top: 10px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--series-1); box-shadow: 0 0 0 2px var(--surface-1);
+}
+.chain-steps li.future::before { background: var(--surface-1); border: 2px solid var(--series-1); left: -6px; }
+.chain-steps .st { font-weight: 600; min-width: 128px; }
+.chain-steps .dt { color: var(--text-secondary); font-variant-numeric: tabular-nums; min-width: 84px; }
+.chain-steps .loc { color: var(--text-muted); }
+.note-est { font-size: 10.5px; color: var(--text-muted); }
+
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: 1fr; }
+  .chart-grid { grid-template-columns: 1fr; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app">
+    <h1>시뮬레이션 콕핏 <span style="color:var(--text-muted);font-weight:400">— V3</span></h1>
+    <span class="tag">판매법인 디지털 트윈 · 가상 데이터 프로토타입</span>
+    <span class="spacer"></span>
+    <button class="ghost" id="themeBtn" title="라이트/다크 전환">◐ 테마</button>
+  </header>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="filter-row" id="filterRow">
+    <label>모델 <select id="fModel"><option value="">전체</option></select></label>
+    <label>리전 <select id="fRegion"><option value="">전체</option></select></label>
+    <label>채널 <select id="fChannel"><option value="">전체</option></select></label>
+    <span class="hint" id="filterHint">필터는 KPI·차트·액션아이템 전체에 일괄 적용됩니다</span>
+  </div>
+
+  <div class="layout">
+    <aside class="controls">
+      <h2>시나리오 컨트롤</h2>
+
+      <div class="ctl">
+        <div class="ctl-head"><b>인센티브</b><span class="ctl-val" id="vIncentive"></span></div>
+        <input type="range" id="cIncentive" min="0" max="3000" step="50" value="1200">
+        <div class="chain">인센티브↑ → 판매↑ · 대당 마진↓</div>
+      </div>
+
+      <div class="ctl">
+        <div class="ctl-head"><b>마케팅 예산 지수</b><span class="ctl-val" id="vMkt"></span></div>
+        <input type="range" id="cMkt" min="50" max="150" step="5" value="100">
+        <div class="chain">예산↑ → 인지·방문↑ → 판매↑ (체감 효과) · 비용↑</div>
+      </div>
+
+      <div class="ctl">
+        <div class="ctl-head"><b>공장별 생산 배분</b><span class="ctl-val" id="vAlloc"></span></div>
+        <div class="row"><span style="width:46px">US-AL</span><input type="range" id="cAllocUS" min="10" max="70" value="40" style="flex:1"></div>
+        <div class="row"><span style="width:46px">KR-UL</span><input type="range" id="cAllocKR" min="10" max="70" value="35" style="flex:1"></div>
+        <div class="row"><span style="width:46px">MX-MT</span><input type="range" id="cAllocMX" min="10" max="70" value="25" style="flex:1"></div>
+        <div class="alloc-note" id="allocNote"></div>
+        <div class="chain">해외 비중↑ → 운송비·리드타임↑ → 재고 파동 · 케파 리스크 분산</div>
+      </div>
+
+      <div class="ctl">
+        <div class="ctl-head"><b>품질 캠페인 가정</b></div>
+        <div class="row">
+          <label><input type="checkbox" id="cCampaign"> 발생</label>
+          <select id="cCampModel"></select>
+          <select id="cCampMonth"></select>
+        </div>
+        <div class="chain">캠페인 → 품질비↑ · 서비스 예약 지연↑ → CSI↓</div>
+      </div>
+
+      <div class="ctl">
+        <div class="ctl-head"><b>목표 Days Supply</b><span class="ctl-val" id="vDS"></span></div>
+        <input type="range" id="cDS" min="40" max="80" step="5" value="60">
+        <div class="chain">목표 재고일수 기준으로 월 주문량 역산</div>
+      </div>
+
+      <hr class="thin">
+      <div class="scenario-btns">
+        <button class="ghost" id="btnSaveA">시나리오 A 저장</button>
+        <button class="ghost" id="btnSaveB">시나리오 B 저장</button>
+        <button class="ghost" id="btnCompare">A vs B 비교</button>
+      </div>
+      <div class="alloc-note" id="scenarioNote" style="margin-top:6px"></div>
+    </aside>
+
+    <main>
+      <div class="chart-grid">
+        <div class="card">
+          <h3>Retail 판매 — BP vs 실적 vs 시나리오</h3>
+          <div class="sub">월별 대수 · 미래 구간은 점선+신뢰밴드 · 포인트 클릭 시 산출 근거 드릴다운</div>
+          <div class="legend" id="legRetail"></div>
+          <svg class="chart" id="chRetail" height="235"></svg>
+        </div>
+        <div class="card">
+          <h3>Days Supply 프로젝션</h3>
+          <div class="sub">딜러 재고일수 · 목표 및 40/80일 경보 임계</div>
+          <div class="legend" id="legDS"></div>
+          <svg class="chart" id="chDS" height="235"></svg>
+        </div>
+        <div class="card">
+          <h3>영업이익 워터폴 <span class="sub" style="display:inline" id="wfMonth"></span></h3>
+          <div class="sub">선택 월 기준 · 기준 마진에서 비용 차감 구조</div>
+          <svg class="chart" id="chWaterfall" height="235"></svg>
+        </div>
+        <div class="card">
+          <h3>KPI 트레이드오프 — 베이스라인 대비</h3>
+          <div class="sub">현재 시나리오가 기본 가정 대비 무엇을 얻고 잃는지 (미래 12개월 평균)</div>
+          <svg class="chart" id="chTradeoff" height="235"></svg>
+        </div>
+      </div>
+
+      <section class="actions">
+        <h3>Action Item · 리스크 자동 도출 <span class="sub" style="display:inline" id="actionCount"></span></h3>
+        <ul class="action-list" id="actionList"></ul>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="timeline">
+  <button class="play" id="btnPlay" title="재생/일시정지">▶</button>
+  <select id="speed"><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option></select>
+  <div class="track">
+    <div class="boundary" id="boundary"><span>실적 ⟨ ⟩ 시뮬레이션</span></div>
+    <input type="range" id="cursor" min="0" max="47" value="31">
+  </div>
+  <div class="mo-label"><span id="curMonth"></span><span class="mode" id="curMode"></span></div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<div class="drill" id="drill">
+  <button class="ghost close" id="drillClose">✕ 닫기</button>
+  <div id="drillBody"></div>
+</div>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════
+   V3 시뮬레이션 콕핏 — 가상 데이터 + 규칙 기반 시뮬레이션
+   구조: [순수부] 상수/데이터생성/시뮬레이션  →  [DOM부] 렌더/인터랙션
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 시드 고정 난수 ── */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ── 시간 축: 2024-01 ~ 2027-12 (48개월), NOW = 2026-08 (idx 31) ── */
+const MONTHS = [];
+for (let y = 2024; y <= 2027; y++) for (let m = 1; m <= 12; m++) MONTHS.push(y + "-" + String(m).padStart(2, "0"));
+const NOW_IDX = MONTHS.indexOf("2026-08");
+const N = MONTHS.length;
+
+/* ── 비즈니스 상수 ── */
+const MODELS = [
+  { id: "Aurora",   seg: "EV 크로스오버", trims: ["SE", "XLE", "GT"],          plant: "KR-UL", share: 0.18, margin: 5200 },
+  { id: "Meridian", seg: "중형 SUV",     trims: ["LE", "XLE", "Trail"],       plant: "US-AL", share: 0.34, margin: 4800 },
+  { id: "Vista",    seg: "중형 세단",     trims: ["SE", "XSE", "Hybrid"],      plant: "MX-MT", share: 0.22, margin: 3200 },
+  { id: "Terron",   seg: "픽업",         trims: ["Work", "Sport", "Pro"],     plant: "US-AL", share: 0.26, margin: 6000 },
+];
+const PLANTS = {
+  "US-AL": { name: "Montgomery, AL", leadWk: 2,   transCost: 350,  capacity: 17000, mode: "트럭·철도" },
+  "KR-UL": { name: "울산 (한국)",     leadWk: 5.5, transCost: 1400, capacity: 15000, mode: "선박→서부항만→철도" },
+  "MX-MT": { name: "Monterrey, MX",  leadWk: 3,   transCost: 700,  capacity: 11000, mode: "철도·트럭" },
+};
+const REGIONS = [
+  { id: "West", share: 0.16 }, { id: "Southwest", share: 0.09 }, { id: "Mountain", share: 0.06 },
+  { id: "Central", share: 0.09 }, { id: "South", share: 0.12 }, { id: "Southeast", share: 0.11 },
+  { id: "Great Lakes", share: 0.13 }, { id: "Northeast", share: 0.10 }, { id: "Mid-Atlantic", share: 0.08 },
+  { id: "Florida", share: 0.06 },
+];
+const CHANNELS = [
+  { id: "Retail", share: 0.78 }, { id: "Fleet", share: 0.12 },
+  { id: "Government", share: 0.04 }, { id: "Rental", share: 0.06 },
+];
+const SEASON = [0.88, 0.90, 1.10, 0.98, 1.02, 1.00, 0.96, 1.08, 0.98, 0.97, 1.00, 1.13];
+const BASE_ALLOC = { "US-AL": 40, "KR-UL": 35, "MX-MT": 25 };
+const DEFAULT_PARAMS = {
+  incentive: 1200, mkt: 100,
+  alloc: { "US-AL": 40, "KR-UL": 35, "MX-MT": 25 },
+  campaign: false, campModel: "Aurora", campMonthIdx: NOW_IDX + 3,
+  targetDS: 60,
+};
+const MKT_BASE_SPEND = 55;       /* $M/월 */
+const QUALITY_BASE = 12;         /* $M/월 기본 품질비 */
+const CSI_BASE = 87;
+
+/* ── BP (비즈니스 플랜) 월별 목표 ──
+   연간 Retail 목표: 2024 39.0만 / 2025 40.5만 / 2026 42.0만 / 2027 45.0만 */
+const BP_YEAR = { 2024: 390000, 2025: 405000, 2026: 420000, 2027: 450000 };
+const BP = MONTHS.map((mo, i) => {
+  const y = +mo.slice(0, 4), mIdx = i % 12;
+  const retail = BP_YEAR[y] / 12 * SEASON[mIdx];
+  return {
+    retail: Math.round(retail),
+    wholesale: Math.round(retail * 1.02),
+    profit: +(retail * 4.83 / 1000 * 0.235).toFixed(1), /* $M — 대당 기여 가정 */
+    csi: 88, ds: 60,
+  };
+});
+
+/* ── 실적 데이터 생성 (idx 0..NOW_IDX) ──
+   월 × 모델 레벨 코어 + 리전/채널 분해 가중치. 재고는 stock[m] = stock[m-1] + WS - RT 플로우로 정합 유지 */
+function genActuals() {
+  const rnd = mulberry32(20260820);
+  const rows = [];                     /* per month: { retail, wholesale, stockEnd, byModel:{...} } */
+  const stock = {};                    /* 모델별 딜러 재고 (대) */
+  MODELS.forEach(md => { stock[md.id] = Math.round(33000 * md.share * 2.0); }); /* 약 60일치로 초기화 */
+
+  for (let i = 0; i <= NOW_IDX; i++) {
+    const mIdx = i % 12;
+    const trend = 1 + 0.0028 * i;                     /* 완만한 성장 */
+    const totalBase = 33000 * trend * SEASON[mIdx];
+    const byModel = {};
+    let retailSum = 0, wsSum = 0, stockSum = 0;
+
+    MODELS.forEach(md => {
+      let rt = totalBase * md.share * (1 + (rnd() - 0.5) * 0.09);
+      /* 2026-03 Aurora 품질 캠페인: 판매 소폭 위축 */
+      if (md.id === "Aurora" && i >= MONTHS.indexOf("2026-03") && i <= MONTHS.indexOf("2026-05")) rt *= 0.94;
+      rt = Math.round(rt);
+
+      /* Wholesale = 수요 추종 + 재고 보정 + 노이즈 */
+      const targetStock = rt * 2.0;                   /* 60일치 */
+      let ws = rt + (targetStock - stock[md.id]) * 0.25 + (rnd() - 0.5) * rt * 0.10;
+      /* 2025-07 KR-UL 설비 이상: 해당 공장 모델 생산/WS -20% */
+      if (md.plant === "KR-UL" && i === MONTHS.indexOf("2025-07")) ws *= 0.80;
+      ws = Math.max(0, Math.round(ws));
+
+      stock[md.id] = Math.max(0, stock[md.id] + ws - rt);
+      byModel[md.id] = { retail: rt, wholesale: ws, stockEnd: stock[md.id] };
+      retailSum += rt; wsSum += ws; stockSum += stock[md.id];
+    });
+
+    /* 재무/품질 파생 */
+    const campaignActive = (i >= MONTHS.indexOf("2026-03") && i <= MONTHS.indexOf("2026-05"));
+    const quality = QUALITY_BASE + (campaignActive ? 18 : 0) + (rnd() - 0.5) * 2;
+    const grossM = MODELS.reduce((s, md) => s + byModel[md.id].retail * md.margin, 0) / 1e6;
+    const incCost = retailSum * 1200 / 1e6;
+    const transCost = MODELS.reduce((s, md) => s + byModel[md.id].wholesale * PLANTS[md.plant].transCost, 0) / 1e6;
+    const mktCost = MKT_BASE_SPEND * (1 + (rnd() - 0.5) * 0.06);
+    const profit = grossM - incCost - quality - transCost - mktCost;
+    const svcDelay = 4 + (campaignActive ? 9 : 0) + (rnd() - 0.5) * 1.2;   /* 서비스 예약 지연(일) */
+    const csi = CSI_BASE - (campaignActive ? 4 : 0) - Math.max(0, svcDelay - 5) * 0.15 + (rnd() - 0.5) * 0.8;
+
+    rows.push({
+      month: MONTHS[i], byModel,
+      retail: retailSum, wholesale: wsSum, stockEnd: stockSum,
+      ds: stockSum / (retailSum / 30),
+      profit: +profit.toFixed(1), gross: +grossM.toFixed(1),
+      incCost: +incCost.toFixed(1), quality: +quality.toFixed(1),
+      transCost: +transCost.toFixed(1), mktCost: +mktCost.toFixed(1),
+      csi: +csi.toFixed(1), svcDelay: +svcDelay.toFixed(1),
+      incentive: 1200,
+    });
+  }
+  return rows;
+}
+const ACTUALS = genActuals();
+
+/* ── 리전별 재고 편차 계수 (결정적) — 리전 레벨 리스크 도출용 ── */
+const REGION_DS_FACTOR = (() => {
+  const rnd = mulberry32(7741);
+  const f = {};
+  REGIONS.forEach(r => { f[r.id] = +(0.85 + rnd() * 0.30).toFixed(3); });
+  return f;
+})();
+
+/* ═══ 시뮬레이션 (규칙 기반, 순수 함수) ═══════════════════════════════
+   미래 월(NOW_IDX+1 .. N-1)을 생성. 반환 행은 ACTUALS와 동일 스키마 +
+   band(신뢰구간), derivation(산출 근거), capOver(케파 초과) */
+function simulate(params) {
+  /* 수요 베이스라인: 최근 3개월 실적을 탈계절화한 평균 (모델별) */
+  const base3 = {};
+  MODELS.forEach(md => {
+    let s = 0;
+    for (let k = NOW_IDX - 2; k <= NOW_IDX; k++)
+      s += ACTUALS[k].byModel[md.id].retail / SEASON[k % 12];
+    base3[md.id] = s / 3;
+  });
+
+  /* 탄력성 */
+  const incMult = 1 + 0.008 * (params.incentive - 1200) / 100;              /* +$100 → +0.8% */
+  const mktMult = 1 + 0.012 * (Math.log(params.mkt / 100) / Math.log(1.1)); /* +10% → +1.2%, 체감(log) */
+
+  /* 생산 배분 정규화 → 가중 운송비/리드타임 */
+  const aSum = params.alloc["US-AL"] + params.alloc["KR-UL"] + params.alloc["MX-MT"];
+  const alloc = {};
+  Object.keys(params.alloc).forEach(p => { alloc[p] = params.alloc[p] / aSum; });
+  const wTransCost = Object.keys(alloc).reduce((s, p) => s + alloc[p] * PLANTS[p].transCost, 0);
+  const wLeadWk = Object.keys(alloc).reduce((s, p) => s + alloc[p] * PLANTS[p].leadWk, 0);
+  const baseLeadWk = Object.keys(BASE_ALLOC).reduce((s, p) => s + BASE_ALLOC[p] / 100 * PLANTS[p].leadWk, 0);
+  const leadDeltaWk = wLeadWk - baseLeadWk;   /* 리드타임 증가 → 초기 재고 파동 */
+
+  const stock = {};
+  MODELS.forEach(md => { stock[md.id] = ACTUALS[NOW_IDX].byModel[md.id].stockEnd; });
+
+  const rows = [];
+  for (let i = NOW_IDX + 1; i < N; i++) {
+    const mIdx = i % 12, hor = i - NOW_IDX;          /* horizon: 1.. */
+    const trend = 1 + 0.003 * hor;
+    const campaignActive = params.campaign && i >= params.campMonthIdx && i < params.campMonthIdx + 3;
+
+    const byModel = {}, deriv = { base3: {}, incMult, mktMult, season: SEASON[mIdx], trend };
+    let retailSum = 0, wsSum = 0, stockSum = 0, orderSum = 0;
+
+    MODELS.forEach(md => {
+      let demand = base3[md.id] * SEASON[mIdx] * trend * incMult * mktMult;
+      if (campaignActive && md.id === params.campModel) demand *= 0.94;   /* 캠페인 → 해당 모델 수요 위축 */
+      demand = Math.round(demand);
+      deriv.base3[md.id] = Math.round(base3[md.id]);
+
+      /* 주문(=도착 Wholesale 근사): 목표 Days Supply 유지 역산 */
+      const desiredStock = demand * params.targetDS / 30;
+      let order = Math.max(0, demand + (desiredStock - stock[md.id]) * 0.35);
+
+      /* 리드타임 파동: 배분 변경 직후 1~2개월은 파이프라인이 길어진 만큼 도착 지연 */
+      if (leadDeltaWk > 0 && hor <= 2) order *= Math.max(0.6, 1 - leadDeltaWk * 0.10 * (3 - hor) / 2);
+      order = Math.round(order);
+
+      stock[md.id] = Math.max(0, stock[md.id] + order - demand);
+      byModel[md.id] = { retail: demand, wholesale: order, stockEnd: stock[md.id] };
+      retailSum += demand; wsSum += order; orderSum += order; stockSum += stock[md.id];
+    });
+
+    /* 공장 케파 체크 (총 주문 × 배분비) */
+    const capOver = [];
+    Object.keys(alloc).forEach(p => {
+      const load = orderSum * alloc[p];
+      if (load > PLANTS[p].capacity) capOver.push({ plant: p, load: Math.round(load), cap: PLANTS[p].capacity });
+    });
+
+    /* 재무/품질 */
+    const quality = QUALITY_BASE + (campaignActive ? 18 : 0);
+    const grossM = MODELS.reduce((s, md) => s + byModel[md.id].retail * md.margin, 0) / 1e6;
+    const incCost = retailSum * params.incentive / 1e6;
+    const transCost = wsSum * wTransCost / 1e6;
+    const mktCost = MKT_BASE_SPEND * params.mkt / 100;
+    const profit = grossM - incCost - quality - transCost - mktCost;
+    const svcDelay = 4 + (campaignActive ? 9 : 0);
+    const csi = CSI_BASE - (campaignActive ? 4 : 0) - Math.max(0, svcDelay - 5) * 0.15
+      - Math.max(0, params.incentive - 2200) * 0.0008;   /* 과도한 인센티브 → 브랜드/만족 미세 하락 */
+
+    /* 신뢰밴드: 지평선이 멀수록 확대 */
+    const bandPct = 0.03 + 0.006 * hor;
+
+    rows.push({
+      month: MONTHS[i], byModel,
+      retail: retailSum, wholesale: wsSum, stockEnd: stockSum,
+      ds: stockSum / (retailSum / 30),
+      profit: +profit.toFixed(1), gross: +grossM.toFixed(1),
+      incCost: +incCost.toFixed(1), quality: +quality.toFixed(1),
+      transCost: +transCost.toFixed(1), mktCost: +mktCost.toFixed(1),
+      csi: +csi.toFixed(1), svcDelay: +svcDelay.toFixed(1),
+      incentive: params.incentive,
+      bandPct, capOver, campaignActive,
+      deriv: Object.assign({}, deriv, {
+        targetDS: params.targetDS, wTransCost: Math.round(wTransCost), wLeadWk: +wLeadWk.toFixed(1),
+      }),
+    });
+  }
+  return rows;
+}
+
+/* ── 필터 반영 계수: 리전/채널은 점유율 스케일, 모델은 byModel 실측 사용 ── */
+function filterScale(filters) {
+  let f = 1;
+  if (filters.region) f *= REGIONS.find(r => r.id === filters.region).share;
+  if (filters.channel) f *= CHANNELS.find(c => c.id === filters.channel).share;
+  return f;
+}
+/* 행(실적/시뮬 공통 스키마) → 필터 적용된 뷰 값 */
+function viewRow(row, filters) {
+  const f = filterScale(filters);
+  if (!filters.model) {
+    return {
+      retail: row.retail * f, wholesale: row.wholesale * f,
+      stockEnd: row.stockEnd * f, ds: row.ds, profit: row.profit * f, csi: row.csi,
+    };
+  }
+  const m = row.byModel[filters.model];
+  const gShare = (m.retail * MODELS.find(x => x.id === filters.model).margin) /
+    MODELS.reduce((s, md) => s + row.byModel[md.id].retail * md.margin, 0);
+  return {
+    retail: m.retail * f, wholesale: m.wholesale * f,
+    stockEnd: m.stockEnd * f, ds: m.stockEnd / (m.retail / 30),
+    profit: row.profit * gShare * (filters.region || filters.channel ? f : 1), csi: row.csi,
+  };
+}
+
+/* ── Action Item 자동 도출 ── */
+function deriveActions(simRows, params) {
+  const acts = [];
+  const seen = { over: false, under: false };
+  simRows.forEach(r => {
+    const i = MONTHS.indexOf(r.month);
+    /* 리전별 재고일수 근사 → 최악 리전 경보 (월별 최초 1건씩) */
+    let worst = null;
+    REGIONS.forEach(rg => {
+      const ds = r.ds * REGION_DS_FACTOR[rg.id];
+      if (!worst || ds > worst.ds) worst = { rg: rg.id, ds };
+    });
+    if (worst && worst.ds > 80 && !seen.over) {
+      seen.over = true;
+      acts.push({
+        sev: worst.ds > 95 ? "critical" : "serious", month: r.month, idx: i,
+        text: `${r.month} ${worst.rg} 리전 Days Supply ${Math.round(worst.ds)}일 예상 — 재고 과잉, 해당 리전 배정 축소·주문 감축 검토`,
+      });
+    }
+    let best = null;
+    REGIONS.forEach(rg => {
+      const ds = r.ds * REGION_DS_FACTOR[rg.id];
+      if (!best || ds < best.ds) best = { rg: rg.id, ds };
+    });
+    if (best && best.ds < 40 && !seen.under) {
+      seen.under = true;
+      acts.push({
+        sev: best.ds < 30 ? "critical" : "warning", month: r.month, idx: i,
+        text: `${r.month} ${best.rg} 리전 Days Supply ${Math.round(best.ds)}일 예상 — 재고 부족, 기회손실 위험 · 주문 증량/타 리전 재배정 검토`,
+      });
+    }
+    /* 공장 케파 초과 */
+    r.capOver.forEach(c => {
+      if (acts.filter(a => a.kind === "cap" + c.plant).length) return;
+      const slack = Object.keys(PLANTS).filter(p => p !== c.plant)
+        .sort((a, b) => PLANTS[b].capacity - PLANTS[a].capacity)[0];
+      const overPct = Math.round((c.load / c.cap - 1) * 100);
+      acts.push({
+        sev: "critical", month: r.month, idx: i, kind: "cap" + c.plant,
+        text: `${r.month} ${c.plant} 생산 케파 초과 (${c.load.toLocaleString()}대 / ${c.cap.toLocaleString()}대, +${overPct}%) — ${slack}로 배분 이관 필요`,
+      });
+    });
+  });
+  /* 캠페인 영향 */
+  if (params.campaign) {
+    const mo = MONTHS[params.campMonthIdx];
+    acts.push({
+      sev: "serious", month: mo, idx: params.campMonthIdx,
+      text: `${mo} ${params.campModel} 품질 캠페인 가정 — 품질비 +$18M/월×3, 서비스 예약 지연 +9일 → CSI −4pt · 딜러 서비스 케파 사전 증설 및 Part 사전 확보 필요`,
+    });
+  }
+  /* 이익 vs BP 연속 미달 */
+  let run = 0;
+  for (const r of simRows) {
+    const i = MONTHS.indexOf(r.month);
+    if (r.profit < BP[i].profit * 0.9) { run++; if (run === 2) {
+      acts.push({
+        sev: "serious", month: r.month, idx: i,
+        text: `${r.month}부터 영업이익 BP 대비 10%↑ 미달 지속 — 인센티브/마케팅 재조정 또는 트림 Mix 상향 검토`,
+      });
+      break;
+    } } else run = 0;
+  }
+  /* 과도 인센티브 경고 */
+  if (params.incentive >= 2400) {
+    acts.push({
+      sev: "warning", month: MONTHS[NOW_IDX + 1], idx: NOW_IDX + 1,
+      text: `인센티브 $${params.incentive.toLocaleString()}/대 — 판매 증대 대비 대당 마진 훼손 큼, 잔존가치 하락 리스크 검토`,
+    });
+  }
+  acts.sort((a, b) => ({ critical: 0, serious: 1, warning: 2 }[a.sev] - { critical: 0, serious: 1, warning: 2 }[b.sev]) || a.idx - b.idx);
+  return acts;
+}
+
+/* ── VIN 합성 (결정적) + 예상 이벤트 체인 ── */
+const VIN_CH = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";  /* I,O,Q 제외 */
+function synthVin(seed) {
+  const rnd = mulberry32(seed);
+  const wmi = { "US-AL": "1V7", "KR-UL": "KV8", "MX-MT": "3V2" };
+  let v = "";
+  for (let k = 0; k < 13; k++) v += VIN_CH[Math.floor(rnd() * VIN_CH.length)];
+  return { pick(plant) { return wmi[plant] + v + String(seed % 10); } };
+}
+function addWeeks(monthStr, dayOfs, wk) {
+  const d = new Date(monthStr + "-01T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + dayOfs + Math.round(wk * 7));
+  return d.toISOString().slice(0, 10);
+}
+/* 미래 월의 샘플 VIN 흐름: 해당 월 Retail 예정 차량이 언제 주문/생산/운송되는지 역산 */
+function sampleVinChains(monthStr, params, count) {
+  const chains = [];
+  const rnd = mulberry32(MONTHS.indexOf(monthStr) * 977 + 11);
+  for (let k = 0; k < count; k++) {
+    const md = MODELS[Math.floor(rnd() * MODELS.length)];
+    const trim = md.trims[Math.floor(rnd() * md.trims.length)];
+    const rg = REGIONS[Math.floor(rnd() * REGIONS.length)].id;
+    const plant = md.plant;
+    const leadWk = PLANTS[plant].leadWk;
+    const vin = synthVin(MONTHS.indexOf(monthStr) * 100 + k).pick(plant);
+    const retailDay = Math.floor(rnd() * 26) + 2;
+    /* Retail일 기준 역산: 딜러재고 ~3주, 운송 leadWk, 생산 1주, 주문 접수 2주 전 */
+    const steps = [
+      { st: "ORDERED",        wkBefore: leadWk + 6.5, loc: "판매법인 → " + plant },
+      { st: "IN_PRODUCTION",  wkBefore: leadWk + 4.5, loc: plant + " " + PLANTS[plant].name },
+      { st: "PLANT_STOCK",    wkBefore: leadWk + 3.5, loc: plant + " 야드" },
+      { st: "IN_TRANSIT",     wkBefore: leadWk + 3.0, loc: PLANTS[plant].mode },
+    ];
+    if (plant === "KR-UL") steps.push({ st: "PORT_YARD", wkBefore: 4.0, loc: "서부 항만 (하역·통관)" });
+    steps.push(
+      { st: "DEALER_ARRIVAL", wkBefore: 3.0, loc: rg + " 딜러 (= Wholesale)" },
+      { st: "DEALER_STOCK",   wkBefore: 2.9, loc: rg + " 딜러 재고" },
+      { st: "RETAIL_SALE",    wkBefore: 0,   loc: rg + " (커넥티드 개통 예정)" },
+    );
+    chains.push({
+      vin, model: md.id, trim, region: rg, plant,
+      steps: steps.map(s => ({ st: s.st, dt: addWeeks(monthStr, retailDay, -s.wkBefore), loc: s.loc })),
+    });
+  }
+  return chains;
+}
+/* __SIM_END__ */
+
+/* ═══ 렌더링 유틸 (SVG) ═══════════════════════════════════════════ */
+const SVGNS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs, parent) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+const fmtInt = v => Math.round(v).toLocaleString("en-US");
+const fmtK = v => (v >= 1000 ? (v / 1000).toFixed(1) + "K" : Math.round(v).toString());
+const fmtM = v => "$" + v.toFixed(0) + "M";
+
+/* ── 툴팁 싱글턴 (textContent만 사용) ── */
+const ttEl = () => document.getElementById("tooltip");
+function showTooltip(px, py, title, rows) {
+  const tt = ttEl();
+  tt.replaceChildren();
+  const t = document.createElement("div"); t.className = "tt-title"; t.textContent = title; tt.appendChild(t);
+  rows.forEach(r => {
+    const row = document.createElement("div"); row.className = "tt-row";
+    const key = document.createElement("span"); key.className = "tt-key"; key.style.borderTopColor = r.color;
+    if (r.dash) key.style.borderTopStyle = "dashed";
+    const val = document.createElement("span"); val.className = "tt-val"; val.textContent = r.val;
+    const nm = document.createElement("span"); nm.className = "tt-name"; nm.textContent = r.name;
+    row.appendChild(key); row.appendChild(val); row.appendChild(nm); tt.appendChild(row);
+  });
+  tt.style.display = "block";
+  const rect = tt.getBoundingClientRect();
+  let x = px + 14, y = py - rect.height - 8;
+  if (x + rect.width > innerWidth - 8) x = px - rect.width - 14;
+  if (y < 8) y = py + 14;
+  tt.style.left = x + "px"; tt.style.top = y + "px";
+}
+function hideTooltip() { ttEl().style.display = "none"; }
+
+/* ── 라인 차트 (시계열 공용) ──
+   cfg: { series:[{name,color,values[N|null],dash,band:{lo[],hi[]}}],
+          yFmt, refLines:[{y,label}], zones:[{y0,y1,label}],
+          cursorIdx, onPointClick(i) } */
+function renderLineChart(svg, cfg) {
+  svg.replaceChildren();
+  const W = svg.clientWidth || 620, H = +svg.getAttribute("height");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const M = { t: 10, r: 12, b: 22, l: 46 };
+  const iw = W - M.l - M.r, ih = H - M.t - M.b;
+
+  /* y 도메인 */
+  let lo = Infinity, hi = -Infinity;
+  cfg.series.forEach(s => {
+    s.values.forEach(v => { if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } });
+    if (s.band) { s.band.lo.forEach(v => { if (v != null) lo = Math.min(lo, v); }); s.band.hi.forEach(v => { if (v != null) hi = Math.max(hi, v); }); }
+  });
+  (cfg.refLines || []).forEach(r => { lo = Math.min(lo, r.y); hi = Math.max(hi, r.y); });
+  (cfg.zones || []).forEach(z => { lo = Math.min(lo, z.y0); hi = Math.max(hi, z.y1); });
+  if (!isFinite(lo)) { lo = 0; hi = 1; }
+  const pad = (hi - lo) * 0.08 || 1; lo -= pad; hi += pad;
+  if (cfg.yMin != null) lo = cfg.yMin;
+
+  const X = i => M.l + i / (N - 1) * iw;
+  const Y = v => M.t + (1 - (v - lo) / (hi - lo)) * ih;
+  const yFmt = cfg.yFmt || fmtK;
+
+  /* 존(경보 밴드) */
+  (cfg.zones || []).forEach(z => {
+    svgEl("rect", { x: M.l, y: Y(z.y1), width: iw, height: Math.max(0, Y(z.y0) - Y(z.y1)),
+      fill: cssVar(z.colorVar || "--status-warning"), opacity: 0.07 }, svg);
+    const t = svgEl("text", { x: M.l + iw - 4, y: Y(z.y1) + 11, "text-anchor": "end",
+      "font-size": 9.5, fill: cssVar("--text-muted") }, svg);
+    t.textContent = z.label;
+  });
+
+  /* y 그리드 + 눈금 */
+  const ticks = 4;
+  for (let k = 0; k <= ticks; k++) {
+    const v = lo + (hi - lo) * k / ticks, y = Y(v);
+    svgEl("line", { x1: M.l, x2: M.l + iw, y1: y, y2: y, stroke: cssVar("--gridline"), "stroke-width": 1 }, svg);
+    const t = svgEl("text", { x: M.l - 6, y: y + 3.5, "text-anchor": "end", "font-size": 10,
+      fill: cssVar("--text-muted"), style: "font-variant-numeric:tabular-nums" }, svg);
+    t.textContent = yFmt(v);
+  }
+  /* x 눈금: 연도 경계 */
+  MONTHS.forEach((mo, i) => {
+    if (mo.endsWith("-01")) {
+      svgEl("line", { x1: X(i), x2: X(i), y1: M.t + ih, y2: M.t + ih + 4, stroke: cssVar("--baseline"), "stroke-width": 1 }, svg);
+      const t = svgEl("text", { x: X(i) + 3, y: M.t + ih + 15, "font-size": 10, fill: cssVar("--text-muted") }, svg);
+      t.textContent = mo.slice(0, 4);
+    }
+  });
+  /* 베이스라인 */
+  svgEl("line", { x1: M.l, x2: M.l + iw, y1: M.t + ih, y2: M.t + ih, stroke: cssVar("--baseline"), "stroke-width": 1 }, svg);
+
+  /* NOW 경계 */
+  svgEl("line", { x1: X(NOW_IDX), x2: X(NOW_IDX), y1: M.t, y2: M.t + ih,
+    stroke: cssVar("--baseline"), "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+  const nowT = svgEl("text", { x: X(NOW_IDX) - 4, y: M.t + 10, "text-anchor": "end", "font-size": 9.5, fill: cssVar("--text-muted") }, svg);
+  nowT.textContent = "현재";
+
+  /* 기준선 */
+  (cfg.refLines || []).forEach(r => {
+    svgEl("line", { x1: M.l, x2: M.l + iw, y1: Y(r.y), y2: Y(r.y),
+      stroke: cssVar("--baseline"), "stroke-width": 1, "stroke-dasharray": "5 4" }, svg);
+    const t = svgEl("text", { x: M.l + 4, y: Y(r.y) - 4, "font-size": 9.5, fill: cssVar("--text-muted") }, svg);
+    t.textContent = r.label;
+  });
+
+  /* 신뢰밴드 (시리즈색 ~10% wash) */
+  cfg.series.forEach(s => {
+    if (!s.band) return;
+    let up = "", down = "";
+    for (let i = 0; i < N; i++) if (s.band.hi[i] != null) up += (up ? "L" : "M") + X(i) + " " + Y(s.band.hi[i]);
+    for (let i = N - 1; i >= 0; i--) if (s.band.lo[i] != null) down += "L" + X(i) + " " + Y(s.band.lo[i]);
+    if (up) svgEl("path", { d: up + down + "Z", fill: cssVar(s.color), opacity: 0.10 }, svg);
+  });
+
+  /* 시리즈 라인 (2px round) */
+  cfg.series.forEach(s => {
+    let d = "", pen = false;
+    for (let i = 0; i < N; i++) {
+      const v = s.values[i];
+      if (v == null) { pen = false; continue; }
+      d += (pen ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1); pen = true;
+    }
+    if (!d) return;
+    svgEl("path", { d, fill: "none", stroke: cssVar(s.color), "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round",
+      "stroke-dasharray": s.dash ? "5 4" : "none" }, svg);
+  });
+
+  /* 경보 마커 (아이콘 △) */
+  (cfg.markers || []).forEach(mk => {
+    const x = X(mk.idx), y = Y(mk.y) - 9;
+    const t = svgEl("text", { x, y, "text-anchor": "middle", "font-size": 10, fill: cssVar("--status-" + mk.sev) }, svg);
+    t.textContent = "▲";
+  });
+
+  /* 커서 월 하이라이트 */
+  if (cfg.cursorIdx != null) {
+    svgEl("line", { x1: X(cfg.cursorIdx), x2: X(cfg.cursorIdx), y1: M.t, y2: M.t + ih,
+      stroke: cssVar("--series-1"), "stroke-width": 1, opacity: 0.45 }, svg);
+  }
+
+  /* 크로스헤어 + 통합 툴팁 + 클릭 드릴 */
+  const cross = svgEl("line", { x1: 0, x2: 0, y1: M.t, y2: M.t + ih, stroke: cssVar("--baseline"),
+    "stroke-width": 1, visibility: "hidden" }, svg);
+  const dots = cfg.series.map(s => svgEl("circle", { r: 4.5, fill: cssVar(s.color),
+    stroke: cssVar("--surface-1"), "stroke-width": 2, visibility: "hidden" }, svg));
+  const hit = svgEl("rect", { x: M.l, y: M.t, width: iw, height: ih, fill: "transparent", cursor: cfg.onPointClick ? "pointer" : "default" }, svg);
+
+  function idxFromEvent(ev) {
+    const r = svg.getBoundingClientRect();
+    const px = (ev.clientX - r.left) * (W / r.width);
+    return Math.max(0, Math.min(N - 1, Math.round((px - M.l) / iw * (N - 1))));
+  }
+  hit.addEventListener("pointermove", ev => {
+    const i = idxFromEvent(ev);
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i));
+    cross.setAttribute("visibility", "visible");
+    const rows = [];
+    cfg.series.forEach((s, k) => {
+      const v = s.values[i];
+      if (v == null) { dots[k].setAttribute("visibility", "hidden"); return; }
+      dots[k].setAttribute("cx", X(i)); dots[k].setAttribute("cy", Y(v));
+      dots[k].setAttribute("visibility", "visible");
+      rows.push({ color: cssVar(s.color), dash: s.dash, name: s.name, val: yFmt(v) });
+    });
+    if (cfg.tooltipExtra) rows.push(...cfg.tooltipExtra(i));
+    showTooltip(ev.clientX, ev.clientY, MONTHS[i] + (i > NOW_IDX ? " · 시뮬레이션" : " · 실적"), rows);
+  });
+  hit.addEventListener("pointerleave", () => {
+    cross.setAttribute("visibility", "hidden");
+    dots.forEach(d => d.setAttribute("visibility", "hidden"));
+    hideTooltip();
+  });
+  if (cfg.onPointClick) hit.addEventListener("click", ev => cfg.onPointClick(idxFromEvent(ev)));
+}
+
+/* ── 워터폴 (선택 월 이익 구조) ── */
+function renderWaterfall(svg, row) {
+  svg.replaceChildren();
+  const W = svg.clientWidth || 620, H = +svg.getAttribute("height");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const M = { t: 16, r: 12, b: 26, l: 46 };
+  const iw = W - M.l - M.r, ih = H - M.t - M.b;
+  const items = [
+    { name: "기준 마진", v: row.gross, type: "start" },
+    { name: "인센티브", v: -row.incCost, type: "dec" },
+    { name: "품질비용", v: -row.quality, type: "dec" },
+    { name: "운송비", v: -row.transCost, type: "dec" },
+    { name: "마케팅", v: -row.mktCost, type: "dec" },
+    { name: "영업이익", v: row.profit, type: "end" },
+  ];
+  const hi = row.gross * 1.06, lo = Math.min(0, row.profit) - 5;
+  const Y = v => M.t + (1 - (v - lo) / (hi - lo)) * ih;
+  const bw = 24, slot = iw / items.length;
+
+  /* 그리드 */
+  for (let k = 0; k <= 3; k++) {
+    const v = lo + (hi - lo) * k / 3;
+    svgEl("line", { x1: M.l, x2: M.l + iw, y1: Y(v), y2: Y(v), stroke: cssVar("--gridline"), "stroke-width": 1 }, svg);
+    const t = svgEl("text", { x: M.l - 6, y: Y(v) + 3.5, "text-anchor": "end", "font-size": 10, fill: cssVar("--text-muted") }, svg);
+    t.textContent = "$" + Math.round(v) + "M";
+  }
+
+  let run = 0;
+  items.forEach((it, k) => {
+    const x = M.l + slot * k + (slot - bw) / 2;
+    let y0, y1, fill;
+    if (it.type === "start") { y0 = 0; y1 = it.v; run = it.v; fill = cssVar("--div-mid"); }
+    else if (it.type === "end") { y0 = 0; y1 = it.v; fill = cssVar("--div-mid"); }
+    else { y0 = run; run += it.v; y1 = run; fill = it.v < 0 ? cssVar("--div-neg") : cssVar("--series-1"); }
+    const top = Y(Math.max(y0, y1)), hgt = Math.max(2, Math.abs(Y(y0) - Y(y1)));
+    const rect = svgEl("path", {
+      d: roundTopRect(x, top, bw, hgt, 4), fill,
+      stroke: (it.type === "start" || it.type === "end") ? cssVar("--baseline") : "none", "stroke-width": 1,
+    }, svg);
+    /* 커넥터 */
+    if (k < items.length - 1) {
+      const cy = Y(it.type === "start" ? it.v : (it.type === "dec" ? run : it.v));
+      svgEl("line", { x1: x + bw, x2: M.l + slot * (k + 1) + (slot - bw) / 2, y1: cy, y2: cy,
+        stroke: cssVar("--baseline"), "stroke-width": 1, "stroke-dasharray": "2 3" }, svg);
+    }
+    /* 값 라벨 (캡 위) + 카테고리 */
+    const vt = svgEl("text", { x: x + bw / 2, y: top - 4, "text-anchor": "middle", "font-size": 10,
+      "font-weight": 600, fill: cssVar("--text-primary") }, svg);
+    vt.textContent = (it.v < 0 ? "−" : "") + "$" + Math.abs(it.v).toFixed(0) + "M";
+    const ct = svgEl("text", { x: x + bw / 2, y: M.t + ih + 14, "text-anchor": "middle", "font-size": 10, fill: cssVar("--text-secondary") }, svg);
+    ct.textContent = it.name;
+    /* 마크별 툴팁 */
+    rect.addEventListener("pointermove", ev => {
+      rect.setAttribute("opacity", 0.85);
+      showTooltip(ev.clientX, ev.clientY, row.month + " · " + it.name,
+        [{ color: fill, name: it.type === "dec" ? "차감" : "금액", val: (it.v < 0 ? "−" : "") + "$" + Math.abs(it.v).toFixed(1) + "M" }]);
+    });
+    rect.addEventListener("pointerleave", () => { rect.setAttribute("opacity", 1); hideTooltip(); });
+  });
+  svgEl("line", { x1: M.l, x2: M.l + iw, y1: Y(0), y2: Y(0), stroke: cssVar("--baseline"), "stroke-width": 1 }, svg);
+}
+function roundTopRect(x, y, w, h, r) {
+  r = Math.min(r, h / 2, w / 2);
+  return `M${x} ${y + h} L${x} ${y + r} Q${x} ${y} ${x + r} ${y} L${x + w - r} ${y} Q${x + w} ${y} ${x + w} ${y + r} L${x + w} ${y + h} Z`;
+}
+
+/* ── KPI 트레이드오프 다이버징 바 (베이스라인 대비 ±) ── */
+function renderTradeoff(svg, deltas) {
+  /* deltas: [{name, val, fmt, goodDir}] — val: %p 또는 pt */
+  svg.replaceChildren();
+  const W = svg.clientWidth || 620, H = +svg.getAttribute("height");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const M = { t: 18, r: 60, b: 10, l: 110 };
+  const iw = W - M.l - M.r;
+  const rowH = (H - M.t - M.b) / deltas.length;
+  const maxAbs = Math.max(3, ...deltas.map(d => Math.abs(d.val))) * 1.15;
+  const X = v => M.l + iw / 2 + (v / maxAbs) * (iw / 2);
+
+  /* 중앙 0 축 */
+  svgEl("line", { x1: X(0), x2: X(0), y1: M.t - 6, y2: H - M.b, stroke: cssVar("--baseline"), "stroke-width": 1 }, svg);
+  const zt = svgEl("text", { x: X(0), y: M.t - 8, "text-anchor": "middle", "font-size": 9.5, fill: cssVar("--text-muted") }, svg);
+  zt.textContent = "베이스라인 = 0";
+
+  deltas.forEach((d, k) => {
+    const yC = M.t + rowH * k + rowH / 2;
+    const bw = Math.min(24, rowH - 14);
+    const x0 = X(0), x1 = X(d.val);
+    const fill = d.val >= 0 ? cssVar("--series-1") : cssVar("--div-neg");
+    const left = Math.min(x0, x1), wdt = Math.max(2, Math.abs(x1 - x0));
+    const isPos = d.val >= 0;
+    const r = 4;
+    /* 4px rounded data-end (0 쪽은 square) */
+    const dPath = isPos
+      ? `M${left} ${yC - bw / 2} L${left + wdt - r} ${yC - bw / 2} Q${left + wdt} ${yC - bw / 2} ${left + wdt} ${yC - bw / 2 + r} L${left + wdt} ${yC + bw / 2 - r} Q${left + wdt} ${yC + bw / 2} ${left + wdt - r} ${yC + bw / 2} L${left} ${yC + bw / 2} Z`
+      : `M${left + wdt} ${yC - bw / 2} L${left + r} ${yC - bw / 2} Q${left} ${yC - bw / 2} ${left} ${yC - bw / 2 + r} L${left} ${yC + bw / 2 - r} Q${left} ${yC + bw / 2} ${left + r} ${yC + bw / 2} L${left + wdt} ${yC + bw / 2} Z`;
+    const bar = svgEl("path", { d: dPath, fill }, svg);
+    const lt = svgEl("text", { x: M.l - 8, y: yC + 3.5, "text-anchor": "end", "font-size": 11.5, fill: cssVar("--text-primary") }, svg);
+    lt.textContent = d.name;
+    const vt = svgEl("text", { x: isPos ? x1 + 6 : x1 - 6, y: yC + 3.5, "text-anchor": isPos ? "start" : "end",
+      "font-size": 11, "font-weight": 600, fill: cssVar("--text-primary") }, svg);
+    vt.textContent = (d.val >= 0 ? "+" : "−") + Math.abs(d.val).toFixed(1) + d.unit;
+    /* 방향 해석 라벨 (색 단독 금지 보조) */
+    const good = (d.val >= 0) === d.upIsGood;
+    const gt = svgEl("text", { x: W - 6, y: yC + 3.5, "text-anchor": "end", "font-size": 10,
+      fill: good ? cssVar("--delta-good") : cssVar("--delta-bad") }, svg);
+    gt.textContent = good ? "▲ 개선" : "▼ 악화";
+    bar.addEventListener("pointermove", ev => {
+      bar.setAttribute("opacity", 0.85);
+      showTooltip(ev.clientX, ev.clientY, d.name + " (미래 12개월 평균)",
+        [{ color: fill, name: "베이스라인 대비", val: (d.val >= 0 ? "+" : "−") + Math.abs(d.val).toFixed(2) + d.unit }]);
+    });
+    bar.addEventListener("pointerleave", () => { bar.setAttribute("opacity", 1); hideTooltip(); });
+  });
+}
+
+/* ── KPI 타일 스파크라인 (12pt, de-emphasis + 현재 강조) ── */
+function sparkline(values, w, h) {
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("width", w); svg.setAttribute("height", h);
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  const vs = values.filter(v => v != null);
+  if (!vs.length) return svg;
+  const lo = Math.min(...vs), hi = Math.max(...vs), span = (hi - lo) || 1;
+  const X = i => 2 + i / (values.length - 1) * (w - 4);
+  const Y = v => 2 + (1 - (v - lo) / span) * (h - 4);
+  let d = "";
+  values.forEach((v, i) => { if (v != null) d += (d ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1); });
+  svgEl("path", { d, fill: "none", stroke: cssVar("--text-muted"), "stroke-width": 1.5,
+    "stroke-linejoin": "round", "stroke-linecap": "round", opacity: 0.8 }, svg);
+  const last = values[values.length - 1];
+  if (last != null) svgEl("circle", { cx: X(values.length - 1), cy: Y(last), r: 3,
+    fill: cssVar("--series-1"), stroke: cssVar("--surface-1"), "stroke-width": 2 }, svg);
+  return svg;
+}
+/* ═══ 애플리케이션 상태 & 오케스트레이션 ═══════════════════════════ */
+const $ = id => document.getElementById(id);
+const state = {
+  params: JSON.parse(JSON.stringify(DEFAULT_PARAMS)),
+  filters: { model: "", region: "", channel: "" },
+  cursor: NOW_IDX,
+  scenA: null, scenB: null, compare: false,
+  playing: false, timer: null,
+};
+let simLive = [], simB = null;
+const simBaseline = simulate(DEFAULT_PARAMS);
+
+function rowAt(i, sim) { return i <= NOW_IDX ? ACTUALS[i] : (sim || simLive)[i - NOW_IDX - 1]; }
+function recompute() {
+  simLive = simulate(state.params);
+  simB = (state.compare && state.scenB) ? simulate(state.scenB) : null;
+}
+
+/* ── KPI 타일 ── */
+function renderKPIs() {
+  const i = state.cursor, f = state.filters;
+  const row = rowAt(i), v = viewRow(row, f);
+  const bp = BP[i], scale = filterScale(f) * (f.model ? MODELS.find(m => m.id === f.model).share : 1);
+  const isFuture = i > NOW_IDX;
+  const base = isFuture ? viewRow(rowAt(i, simBaseline), f) : null;
+
+  const defs = [
+    { lbl: "Retail 판매", val: fmtInt(v.retail) + "대", cur: v.retail, bp: bp.retail * scale, up: true, get: r => viewRow(r, f).retail },
+    { lbl: "Wholesale", val: fmtInt(v.wholesale) + "대", cur: v.wholesale, bp: bp.wholesale * scale, up: true, get: r => viewRow(r, f).wholesale },
+    { lbl: "영업이익", val: "$" + v.profit.toFixed(1) + "M", cur: v.profit, bp: bp.profit * scale, up: true, get: r => viewRow(r, f).profit },
+    { lbl: "고객만족도 (CSI)", val: v.csi.toFixed(1), cur: v.csi, bp: bp.csi, up: true, get: r => r.csi },
+    { lbl: "Days Supply", val: Math.round(v.ds) + "일", cur: v.ds, bp: bp.ds, up: null, get: r => viewRow(r, f).ds },
+  ];
+  const root = $("kpiRow"); root.replaceChildren();
+  defs.forEach((d, di) => {
+    const tile = document.createElement("div"); tile.className = "kpi";
+    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = d.lbl; tile.appendChild(lbl);
+    const val = document.createElement("div"); val.className = "val"; val.textContent = d.val; tile.appendChild(val);
+    const ds = document.createElement("div"); ds.className = "deltas";
+    const mkDelta = (label, ref) => {
+      const diff = d.cur - ref;
+      const pct = ref ? diff / ref * 100 : 0;
+      const s = document.createElement("span");
+      let good = null;
+      if (d.up === true) good = diff >= 0;
+      else if (d.up === null) good = Math.abs(d.cur - 60) <= Math.max(5, Math.abs(ref - 60)); /* DS: 60±5일이면 양호 */
+      const b = document.createElement("b");
+      b.className = good == null ? "" : (good ? "d-good" : "d-bad");
+      b.textContent = (diff >= 0 ? "▲+" : "▼−") + (d.lbl.includes("만족") || d.lbl.includes("Days") ? Math.abs(diff).toFixed(1) : Math.abs(pct).toFixed(1) + "%");
+      s.appendChild(b); s.appendChild(document.createTextNode(" " + label));
+      return s;
+    };
+    ds.appendChild(mkDelta("vs BP", d.bp));
+    if (base) {
+      const refV = [base.retail, base.wholesale, base.profit, base.csi, base.ds][di];
+      ds.appendChild(mkDelta("vs 베이스라인", refV));
+    }
+    tile.appendChild(ds);
+    /* 12개월 스파크라인 */
+    const vals = [];
+    for (let k = i - 11; k <= i; k++) vals.push(k < 0 ? null : d.get(rowAt(k)));
+    tile.appendChild(sparkline(vals, 120, 22));
+    root.appendChild(tile);
+  });
+}
+
+/* ── 범례 빌더 ── */
+function buildLegend(el, items) {
+  el.replaceChildren();
+  items.forEach(it => {
+    const li = document.createElement("span"); li.className = "li";
+    const sw = document.createElement("span");
+    sw.className = it.rect ? "sw-rect" : ("sw-line" + (it.dash ? " dash" : ""));
+    if (it.rect) sw.style.background = cssVar(it.color); else sw.style.borderTopColor = cssVar(it.color);
+    if (it.opacity) sw.style.opacity = it.opacity;
+    const tx = document.createElement("span"); tx.textContent = it.name;
+    li.appendChild(sw); li.appendChild(tx); el.appendChild(li);
+  });
+}
+
+/* ── 차트 렌더 ── */
+function seriesValues(getter) {
+  /* [실적 배열, 시나리오 배열(NOW 연결)] */
+  const act = MONTHS.map((_, i) => i <= NOW_IDX ? getter(viewRow(ACTUALS[i], state.filters), ACTUALS[i]) : null);
+  const mk = sim => MONTHS.map((_, i) => {
+    if (i < NOW_IDX) return null;
+    if (i === NOW_IDX) return act[NOW_IDX];
+    return getter(viewRow(sim[i - NOW_IDX - 1], state.filters), sim[i - NOW_IDX - 1]);
+  });
+  return { act, sim: mk(simLive), simB: simB ? mk(simB) : null };
+}
+
+function renderCharts() {
+  const f = state.filters;
+
+  /* ① Retail */
+  const rv = seriesValues(v => v.retail);
+  const bpVals = MONTHS.map((_, i) => BP[i].retail * filterScale(f) * (f.model ? MODELS.find(m => m.id === f.model).share : 1));
+  const band = { lo: MONTHS.map(() => null), hi: MONTHS.map(() => null) };
+  simLive.forEach((r, k) => {
+    const i = NOW_IDX + 1 + k, v = rv.sim[i];
+    if (v != null) { band.lo[i] = v * (1 - r.bandPct); band.hi[i] = v * (1 + r.bandPct); }
+  });
+  const retailSeries = [
+    { name: "BP 목표", color: "--text-muted", values: bpVals, dash: true },
+    { name: "실적", color: "--series-1", values: rv.act },
+    { name: state.compare ? "시나리오 A (현재 컨트롤)" : "시나리오", color: "--series-1", values: rv.sim, dash: true, band },
+  ];
+  if (rv.simB) retailSeries.push({ name: "시나리오 B", color: "--series-2", values: rv.simB, dash: true });
+  buildLegend($("legRetail"), retailSeries.map(s => ({ name: s.name, color: s.color, dash: s.dash })));
+  renderLineChart($("chRetail"), {
+    series: retailSeries, yFmt: fmtK, cursorIdx: state.cursor,
+    tooltipExtra: i => {
+      const v = rv.sim[i] != null ? rv.sim[i] : rv.act[i];
+      return v == null ? [] : [{ color: cssVar("--text-muted"), name: "BP 대비", dash: true,
+        val: (v - bpVals[i] >= 0 ? "+" : "−") + fmtK(Math.abs(v - bpVals[i])) }];
+    },
+    onPointClick: i => { if (i > NOW_IDX) openDrill(i); },
+  });
+
+  /* ② Days Supply */
+  const dv = seriesValues(v => v.ds);
+  const markers = [];
+  simLive.forEach((r, k) => {
+    const i = NOW_IDX + 1 + k, v = dv.sim[i];
+    if (v != null && (v > 80 || v < 40)) markers.push({ idx: i, y: v, sev: v > 95 || v < 30 ? "critical" : "warning" });
+  });
+  const dsSeries = [
+    { name: "실적", color: "--series-1", values: dv.act },
+    { name: "시나리오", color: "--series-1", values: dv.sim, dash: true },
+  ];
+  if (dv.simB) dsSeries.push({ name: "시나리오 B", color: "--series-2", values: dv.simB, dash: true });
+  buildLegend($("legDS"), dsSeries.map(s => ({ name: s.name, color: s.color, dash: s.dash }))
+    .concat([{ name: "경보 임계 (40/80일)", color: "--status-warning", rect: true, opacity: 0.35 }]));
+  renderLineChart($("chDS"), {
+    series: dsSeries, yFmt: v => Math.round(v) + "일", cursorIdx: state.cursor, yMin: 0,
+    refLines: [{ y: state.params.targetDS, label: "목표 " + state.params.targetDS + "일" }],
+    zones: [{ y0: 80, y1: 100, label: "과잉 위험 ≥80일" }, { y0: 20, y1: 40, label: "부족 위험 ≤40일" }],
+    markers,
+  });
+
+  /* ③ 워터폴 (커서 월) */
+  $("wfMonth").textContent = "· " + MONTHS[state.cursor] + (state.cursor > NOW_IDX ? " (시뮬레이션)" : " (실적)");
+  renderWaterfall($("chWaterfall"), rowAt(state.cursor));
+
+  /* ④ 트레이드오프 (미래 12개월 평균, 베이스라인 대비) */
+  const h = Math.min(12, simLive.length);
+  const avg = (rows, g) => rows.slice(0, h).reduce((s, r) => s + g(r), 0) / h;
+  const dRetail = (avg(simLive, r => r.retail) / avg(simBaseline, r => r.retail) - 1) * 100;
+  const dProfit = (avg(simLive, r => r.profit) / avg(simBaseline, r => r.profit) - 1) * 100;
+  const dCsi = avg(simLive, r => r.csi) - avg(simBaseline, r => r.csi);
+  renderTradeoff($("chTradeoff"), [
+    { name: "판매량", val: +dRetail.toFixed(2), unit: "%", upIsGood: true },
+    { name: "영업이익", val: +dProfit.toFixed(2), unit: "%", upIsGood: true },
+    { name: "고객만족도", val: +dCsi.toFixed(2), unit: "pt", upIsGood: true },
+  ]);
+}
+
+/* ── Action Items ── */
+function renderActions() {
+  const acts = deriveActions(simLive, state.params);
+  const ul = $("actionList"); ul.replaceChildren();
+  $("actionCount").textContent = "· " + acts.length + "건 (시나리오 기준 자동 도출)";
+  if (!acts.length) {
+    const li = document.createElement("li"); li.className = "empty";
+    li.textContent = "현재 시나리오에서 도출된 리스크가 없습니다.";
+    ul.appendChild(li); return;
+  }
+  const sevLabel = { critical: "위험", serious: "주의", warning: "경고" };
+  const sevIcon = { critical: "⛔", serious: "🔶", warning: "⚠" };
+  acts.forEach(a => {
+    const li = document.createElement("li");
+    const sev = document.createElement("span"); sev.className = "sev " + a.sev;
+    sev.textContent = sevIcon[a.sev] + " " + sevLabel[a.sev];
+    const mo = document.createElement("span"); mo.className = "mo"; mo.textContent = a.month;
+    const tx = document.createElement("span"); tx.textContent = a.text;
+    li.appendChild(sev); li.appendChild(mo); li.appendChild(tx);
+    li.addEventListener("click", () => { setCursor(a.idx); });
+    ul.appendChild(li);
+  });
+}
+
+/* ── 드릴다운: 미래 월 산출 근거 + 샘플 VIN 체인 ── */
+function openDrill(i) {
+  const r = simLive[i - NOW_IDX - 1];
+  if (!r) return;
+  const body = $("drillBody"); body.replaceChildren();
+  const h3 = document.createElement("h3"); h3.textContent = r.month + " 시뮬레이션 산출 근거"; body.appendChild(h3);
+  const sub = document.createElement("div"); sub.className = "sub";
+  sub.textContent = "집계 → 근거 → VIN 3단 드릴 · 값은 규칙 기반 모델 v1의 결과입니다";
+  body.appendChild(sub);
+
+  /* 근거 테이블 */
+  const h4a = document.createElement("h4"); h4a.textContent = "① 수요 산출"; body.appendChild(h4a);
+  const t1 = document.createElement("table"); t1.className = "calc";
+  const addRow = (tbl, name, val, total) => {
+    const tr = document.createElement("tr"); if (total) tr.className = "total";
+    const td1 = document.createElement("td"); td1.textContent = name;
+    const td2 = document.createElement("td"); td2.textContent = val;
+    tr.appendChild(td1); tr.appendChild(td2); tbl.appendChild(tr);
+  };
+  const base3Sum = Object.values(r.deriv.base3).reduce((a, b) => a + b, 0);
+  addRow(t1, "수요 베이스라인 (최근 3개월 탈계절화 평균)", fmtInt(base3Sum) + "대");
+  addRow(t1, "계절지수 (" + r.month.slice(5) + "월)", "× " + r.deriv.season.toFixed(2));
+  addRow(t1, "성장 트렌드", "× " + r.deriv.trend.toFixed(3));
+  addRow(t1, "인센티브 탄력 ($" + state.params.incentive.toLocaleString() + ")", "× " + r.deriv.incMult.toFixed(3));
+  addRow(t1, "마케팅 탄력 (지수 " + state.params.mkt + ")", "× " + r.deriv.mktMult.toFixed(3));
+  if (r.campaignActive) addRow(t1, "품질 캠페인 (" + state.params.campModel + ")", "× 0.94 (해당 모델)");
+  addRow(t1, "예상 Retail 수요", fmtInt(r.retail) + "대", true);
+  body.appendChild(t1);
+
+  const h4b = document.createElement("h4"); h4b.textContent = "② 주문·재고 전이 (목표 DS " + r.deriv.targetDS + "일 역산)"; body.appendChild(h4b);
+  const t2 = document.createElement("table"); t2.className = "calc";
+  const prev = MONTHS.indexOf(r.month) - NOW_IDX - 2 >= 0 ? simLive[MONTHS.indexOf(r.month) - NOW_IDX - 2] : null;
+  addRow(t2, "전월 딜러 재고", fmtInt(prev ? prev.stockEnd : ACTUALS[NOW_IDX].stockEnd) + "대");
+  addRow(t2, "+ 주문 도착 (Wholesale)", "+" + fmtInt(r.wholesale) + "대");
+  addRow(t2, "− Retail 판매", "−" + fmtInt(r.retail) + "대");
+  addRow(t2, "월말 재고 → Days Supply", fmtInt(r.stockEnd) + "대 → " + Math.round(r.ds) + "일", true);
+  addRow(t2, "가중 운송비 / 리드타임 (배분 반영)", "$" + r.deriv.wTransCost + "/대 · " + r.deriv.wLeadWk + "주");
+  body.appendChild(t2);
+
+  const h4c = document.createElement("h4"); h4c.textContent = "③ 이 월의 예상 VIN 흐름 (샘플 6건)"; body.appendChild(h4c);
+  const note = document.createElement("div"); note.className = "note-est";
+  note.textContent = "생산→운송→Wholesale→Retail 예상 일자를 리드타임으로 역산한 가상 VIN입니다. 행을 클릭하면 이벤트 체인이 펼쳐집니다.";
+  body.appendChild(note);
+  const tv = document.createElement("table"); tv.className = "vins";
+  const thead = document.createElement("tr");
+  ["VIN", "모델·트림", "리전", "공장"].forEach(h => { const th = document.createElement("th"); th.textContent = h; thead.appendChild(th); });
+  tv.appendChild(thead);
+  sampleVinChains(r.month, state.params, 6).forEach(c => {
+    const tr = document.createElement("tr"); tr.className = "vrow";
+    [c.vin, c.model + " " + c.trim, c.region, c.plant].forEach(x => {
+      const td = document.createElement("td"); td.textContent = x; tr.appendChild(td);
+    });
+    const trD = document.createElement("tr"); trD.style.display = "none";
+    const tdD = document.createElement("td"); tdD.colSpan = 4;
+    const ol = document.createElement("ul"); ol.className = "chain-steps";
+    c.steps.forEach(s => {
+      const li = document.createElement("li"); li.className = "future";
+      const st = document.createElement("span"); st.className = "st"; st.textContent = s.st;
+      const dt = document.createElement("span"); dt.className = "dt"; dt.textContent = s.dt;
+      const loc = document.createElement("span"); loc.className = "loc"; loc.textContent = s.loc;
+      li.appendChild(st); li.appendChild(dt); li.appendChild(loc); ol.appendChild(li);
+    });
+    tdD.appendChild(ol); trD.appendChild(tdD);
+    tr.addEventListener("click", () => { trD.style.display = trD.style.display === "none" ? "" : "none"; });
+    tv.appendChild(tr); tv.appendChild(trD);
+  });
+  body.appendChild(tv);
+  $("drill").classList.add("open");
+}
+$("drillClose").addEventListener("click", () => $("drill").classList.remove("open"));
+
+/* ── 타임라인 ── */
+function setCursor(i) {
+  state.cursor = Math.max(0, Math.min(N - 1, i));
+  $("cursor").value = state.cursor;
+  $("curMonth").textContent = MONTHS[state.cursor];
+  $("curMode").textContent = state.cursor > NOW_IDX ? "시뮬레이션 (미래)" : "실적";
+  renderKPIs(); renderCharts();
+}
+function togglePlay(force) {
+  state.playing = force != null ? force : !state.playing;
+  $("btnPlay").textContent = state.playing ? "❚❚" : "▶";
+  clearInterval(state.timer);
+  if (state.playing) {
+    const iv = 700 / +$("speed").value;
+    state.timer = setInterval(() => {
+      if (state.cursor >= N - 1) { togglePlay(false); return; }
+      setCursor(state.cursor + 1);
+    }, iv);
+  }
+}
+$("btnPlay").addEventListener("click", () => togglePlay());
+$("speed").addEventListener("change", () => { if (state.playing) { togglePlay(false); togglePlay(true); } });
+$("cursor").addEventListener("input", e => { togglePlay(false); setCursor(+e.target.value); });
+
+/* ── 컨트롤 바인딩 ── */
+function readControls() {
+  state.params.incentive = +$("cIncentive").value;
+  state.params.mkt = +$("cMkt").value;
+  state.params.alloc = { "US-AL": +$("cAllocUS").value, "KR-UL": +$("cAllocKR").value, "MX-MT": +$("cAllocMX").value };
+  state.params.campaign = $("cCampaign").checked;
+  state.params.campModel = $("cCampModel").value;
+  state.params.campMonthIdx = +$("cCampMonth").value;
+  state.params.targetDS = +$("cDS").value;
+}
+function updateControlLabels() {
+  $("vIncentive").textContent = "$" + state.params.incentive.toLocaleString() + "/대";
+  $("vMkt").textContent = state.params.mkt + "%";
+  $("vDS").textContent = state.params.targetDS + "일";
+  const a = state.params.alloc, s = a["US-AL"] + a["KR-UL"] + a["MX-MT"];
+  $("vAlloc").textContent = [a["US-AL"], a["KR-UL"], a["MX-MT"]].map(x => Math.round(x / s * 100) + "%").join(" / ");
+  $("allocNote").textContent = "합계 100%로 정규화 적용 · 케파: US 17.0K / KR 15.0K / MX 11.0K대월";
+}
+function onParamChange() {
+  readControls(); updateControlLabels(); recompute();
+  renderKPIs(); renderCharts(); renderActions();
+}
+["cIncentive", "cMkt", "cAllocUS", "cAllocKR", "cAllocMX", "cDS"].forEach(id => $(id).addEventListener("input", onParamChange));
+["cCampaign", "cCampModel", "cCampMonth"].forEach(id => $(id).addEventListener("change", onParamChange));
+
+/* ── 시나리오 A/B ── */
+function scenSummary(p) {
+  return "인센티브 $" + p.incentive + " · 마케팅 " + p.mkt + "% · DS " + p.targetDS + "일" + (p.campaign ? " · 캠페인(" + p.campModel + ")" : "");
+}
+function updateScenNote() {
+  const parts = [];
+  if (state.scenA) parts.push("A: " + scenSummary(state.scenA));
+  if (state.scenB) parts.push("B: " + scenSummary(state.scenB));
+  $("scenarioNote").textContent = parts.length ? parts.join("  |  ") : "시나리오를 저장하면 A/B 비교가 가능합니다.";
+  $("btnCompare").classList.toggle("active", state.compare);
+}
+$("btnSaveA").addEventListener("click", () => { state.scenA = JSON.parse(JSON.stringify(state.params)); updateScenNote(); });
+$("btnSaveB").addEventListener("click", () => { state.scenB = JSON.parse(JSON.stringify(state.params)); updateScenNote(); });
+$("btnCompare").addEventListener("click", () => {
+  if (!state.scenB) { $("scenarioNote").textContent = "먼저 시나리오 B를 저장하세요. (현재 컨트롤 = A로 표시)"; return; }
+  state.compare = !state.compare; recompute(); updateScenNote(); renderCharts();
+});
+
+/* ── 필터 ── */
+function populateFilters() {
+  MODELS.forEach(m => { const o = document.createElement("option"); o.value = m.id; o.textContent = m.id + " (" + m.seg + ")"; $("fModel").appendChild(o); });
+  REGIONS.forEach(r => { const o = document.createElement("option"); o.value = r.id; o.textContent = r.id; $("fRegion").appendChild(o); });
+  CHANNELS.forEach(c => { const o = document.createElement("option"); o.value = c.id; o.textContent = c.id; $("fChannel").appendChild(o); });
+  ["fModel", "fRegion", "fChannel"].forEach(id => $(id).addEventListener("change", () => {
+    state.filters = { model: $("fModel").value, region: $("fRegion").value, channel: $("fChannel").value };
+    renderKPIs(); renderCharts();
+  }));
+  /* 캠페인 컨트롤 옵션 */
+  MODELS.forEach(m => { const o = document.createElement("option"); o.value = m.id; o.textContent = m.id; $("cCampModel").appendChild(o); });
+  for (let i = NOW_IDX + 1; i < N; i++) {
+    const o = document.createElement("option"); o.value = i; o.textContent = MONTHS[i];
+    if (i === DEFAULT_PARAMS.campMonthIdx) o.selected = true;
+    $("cCampMonth").appendChild(o);
+  }
+}
+
+/* ── 테마 토글 ── */
+$("themeBtn").addEventListener("click", () => {
+  const root = document.documentElement;
+  const dark = root.getAttribute("data-theme") === "dark" ||
+    (!root.getAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+  root.setAttribute("data-theme", dark ? "light" : "dark");
+  renderKPIs(); renderCharts();
+});
+
+/* ── 경계 마커 위치 & 리사이즈 ── */
+function placeBoundary() { $("boundary").style.left = (NOW_IDX / (N - 1) * 100).toFixed(2) + "%"; }
+let rsT = null;
+addEventListener("resize", () => { clearTimeout(rsT); rsT = setTimeout(() => { renderKPIs(); renderCharts(); }, 150); });
+
+/* ── 초기화 ── */
+populateFilters();
+readControls(); updateControlLabels(); updateScenNote();
+recompute();
+placeBoundary();
+setCursor(NOW_IDX);
+renderActions();
+
+</script>
+</body>
+</html>

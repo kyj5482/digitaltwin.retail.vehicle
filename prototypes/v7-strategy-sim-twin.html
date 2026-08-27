@@ -1,0 +1,2584 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V7 · 전략 시뮬레이션 트윈 — 미국판매법인(SC-US)</title>
+<style>
+:root{
+  --page:#161614; --surface:#1e1e1c; --surface2:#262623; --line:#33332f;
+  --ink:#f0efec; --muted:#a3a199; --edge:#6e6e67; --edge-hi:#79b8ff;
+  --actual:#e8e6e1; --bp:#8f8d85; --scnA:#79b8ff; --scnB:#eaa93e;
+  --good:#4cc38a; --good-mk:#199e70; --warn:#eaa93e; --warn-mk:#c98500; --crit:#e5484d;
+  --cmd:#eaa93e; --fb:#4cc38a;
+  --iso-top:#3a3a36; --iso-left:#2b2b28; --iso-right:#222220;
+  --land:#20211e; --sea:#1a2026;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html,body{height:100%}
+body{background:var(--page); color:var(--ink);
+  font:13px/1.45 "Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
+  display:flex; flex-direction:column; overflow:hidden}
+button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
+
+/* ── 헤더 ── */
+header{height:46px; flex:0 0 auto; display:flex; align-items:center; gap:14px;
+  padding:0 14px; border-bottom:1px solid var(--line); background:var(--surface)}
+header h1{font-size:14px; font-weight:700}
+header h1 small{color:var(--muted); font-weight:400; margin-left:8px; font-size:11px}
+.chip{border:1px solid var(--line); border-radius:20px; padding:3px 12px; font-size:11px;
+  color:var(--muted); display:flex; align-items:center; gap:6px}
+.chip .dot{width:8px; height:8px; border-radius:50%}
+.chip.on{color:var(--ink); border-color:var(--edge)}
+.chip.sandbox{border-style:dashed; border-color:var(--scnA); color:var(--scnA)}
+#presetBar{display:flex; gap:6px; margin-left:auto}
+.preset{border:1px solid var(--line); border-radius:7px; padding:4px 10px; font-size:11px;
+  color:var(--muted); background:var(--surface2)}
+.preset:hover{border-color:var(--edge-hi); color:var(--ink)}
+.preset.on{border-color:var(--scnA); color:var(--scnA); background:rgba(121,184,255,.08)}
+
+/* ── 메인 그리드 ── */
+#main{flex:1; display:grid; grid-template-columns:216px 1fr 264px; min-height:0}
+/* KPI 레일 */
+#kpiRail{border-right:1px solid var(--line); background:var(--surface); padding:10px 10px;
+  display:flex; flex-direction:column; gap:8px; overflow-y:auto}
+.kpi{border:1px solid var(--line); border-radius:9px; padding:9px 10px; cursor:pointer}
+.kpi:hover{border-color:var(--edge)}
+.kpi.sel{border-color:var(--scnA); background:rgba(121,184,255,.06)}
+.kpi .t{font-size:11px; color:var(--muted); display:flex; justify-content:space-between}
+.kpi .v{font-size:19px; font-weight:700; margin:2px 0 1px; font-variant-numeric:tabular-nums}
+.kpi .d{font-size:11px; font-variant-numeric:tabular-nums}
+.kpi .d .vs{color:var(--muted)}
+.up{color:var(--good)} .dn{color:var(--crit)}
+.kpi svg{display:block; margin-top:5px}
+#railNote{font-size:10px; color:var(--muted); line-height:1.5; padding:2px 2px}
+#kpiFilterBand{border:1px dashed var(--scnA); color:var(--scnA); border-radius:7px;
+  padding:4px 8px; font-size:10px; line-height:1.4; word-break:keep-all}
+
+/* 중앙: 씬 + 차트 밴드 */
+#center{display:flex; flex-direction:column; min-width:0; min-height:0}
+#sceneWrap{flex:1; position:relative; min-height:0; background:
+  radial-gradient(1200px 500px at 55% 30%, #1b1c19 0%, var(--page) 70%); overflow:hidden}
+#scene{width:100%; height:100%; display:block; cursor:grab}
+#scene.panning{cursor:grabbing}
+#simWm{position:absolute; top:10px; right:56px; font-size:11px; letter-spacing:2px;
+  color:var(--scnA); border:1px dashed var(--scnA); border-radius:6px; padding:3px 10px;
+  opacity:0; pointer-events:none; transition:opacity .3s; background:rgba(22,22,20,.7)}
+#simWm.on{opacity:.9}
+#sceneHint{position:absolute; left:14px; bottom:10px; font-size:10px; color:var(--muted);
+  pointer-events:none; background:rgba(22,22,20,.6); padding:2px 8px; border-radius:5px}
+/* 선택 노드 정보 칩 — 노드 클릭 시 해당 노드 기준 1-depth 상세 표시 */
+#nodeInfo{position:absolute; left:14px; top:10px; font-size:10px; color:var(--muted); line-height:1.55;
+  background:rgba(22,22,20,.9); border:1px solid var(--scnA); padding:6px 11px; border-radius:7px;
+  display:none; max-width:320px; max-height:70%; overflow-y:auto}
+#nodeInfo.on{display:block}
+#nodeInfo b{color:var(--ink); font-weight:600}
+#nodeInfo .nx{float:right; margin-left:10px; cursor:pointer; color:var(--muted)}
+#nodeInfo .nx:hover{color:var(--ink)}
+#nodeInfo .niH{margin-top:5px; padding-top:4px; border-top:1px dashed var(--line); color:var(--muted)}
+.niRow{display:flex; align-items:center; gap:7px; font-variant-numeric:tabular-nums}
+.niRow span:first-child{width:78px; flex:0 0 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.niRow .bar{flex:1; height:5px; background:var(--surface2); border-radius:3px; overflow:hidden}
+.niRow .bar i{display:block; height:100%; background:var(--scnA); opacity:.75}
+.niRow b{width:64px; text-align:right; color:var(--ink); font-weight:500}
+#chartBand{flex:0 0 236px; border-top:1px solid var(--line); background:var(--surface);
+  display:grid; grid-template-columns:1fr 340px; min-width:0}
+#mainChartBox{padding:8px 4px 4px 8px; min-width:0; position:relative}
+#wfBox{border-left:1px solid var(--line); padding:8px 10px 4px; min-width:0}
+.bandTitle{font-size:11px; color:var(--muted); margin:0 0 2px 6px; display:flex; gap:10px; align-items:center}
+.lgd{display:inline-flex; align-items:center; gap:4px; font-size:10px}
+.lgd i{display:inline-block; width:16px; height:0; border-top:2px solid}
+.lgd.actual i{border-color:var(--actual)} .lgd.bp i{border-top:1px solid var(--bp)}
+.lgd.scnA i{border-color:var(--scnA); border-top-style:dashed}
+.lgd.scnB i{border-color:var(--scnB); border-top-style:dashed}
+
+/* 레버 패널 */
+#leverPanel{border-left:1px solid var(--line); background:var(--surface); padding:12px;
+  overflow-y:auto; display:flex; flex-direction:column; gap:11px}
+#leverPanel h2{font-size:12px; color:var(--ink)}
+#leverPanel h2 small{color:var(--muted); font-weight:400; margin-left:6px; font-size:10px}
+.lever{display:flex; flex-direction:column; gap:3px}
+.lever .lt{display:flex; justify-content:space-between; font-size:11px; color:var(--muted)}
+.lever .lt b{color:var(--ink); font-variant-numeric:tabular-nums}
+.lever .lt b.chg{color:var(--scnA)}
+input[type=range]{width:100%; accent-color:var(--scnA); height:20px}
+.lvNote{font-size:10px; color:var(--muted)}
+#leverBtns{display:flex; gap:6px; flex-wrap:wrap; margin-top:2px}
+.btn{border:1px solid var(--line); border-radius:7px; padding:5px 10px; font-size:11px; background:var(--surface2)}
+.btn:hover{border-color:var(--edge)}
+.btn.primary{border-color:var(--scnA); color:var(--scnA)}
+.btn.on{background:rgba(121,184,255,.12); border-color:var(--scnA); color:var(--scnA)}
+.btn.onB{background:rgba(234,169,62,.12); border-color:var(--scnB); color:var(--scnB)}
+#impactList{border-top:1px solid var(--line); padding-top:9px; display:flex; flex-direction:column; gap:5px}
+#impactList .row{display:flex; justify-content:space-between; font-size:11px}
+#impactList .row span:first-child{color:var(--muted)}
+#impactList .row b{font-variant-numeric:tabular-nums}
+
+/* 타임라인 */
+footer{height:58px; flex:0 0 auto; border-top:1px solid var(--line); background:var(--surface);
+  display:flex; align-items:center; gap:12px; padding:0 16px}
+#playBtn{width:34px; height:34px; border-radius:50%; border:1px solid var(--edge);
+  font-size:14px; display:flex; align-items:center; justify-content:center}
+#playBtn:hover{border-color:var(--edge-hi); color:var(--edge-hi)}
+.spd{border:1px solid var(--line); border-radius:6px; padding:2px 8px; font-size:11px; color:var(--muted)}
+.spd.on{color:var(--scnA); border-color:var(--scnA)}
+#tlWrap{flex:1; position:relative; height:34px}
+#tl{width:100%; position:absolute; top:8px}
+#nowTick{position:absolute; top:2px; width:2px; height:14px; background:var(--crit); pointer-events:none}
+#tlLabel{width:120px; text-align:right; font-variant-numeric:tabular-nums}
+#tlLabel b{font-size:15px}
+#tlLabel small{display:block; color:var(--muted); font-size:10px}
+
+/* 드릴 패널 */
+#drill{position:fixed; top:46px; right:0; bottom:58px; width:420px; background:var(--surface);
+  border-left:1px solid var(--line); transform:translateX(102%); transition:transform .25s ease;
+  z-index:70; display:flex; flex-direction:column; box-shadow:-12px 0 30px rgba(0,0,0,.35)}
+  /* z 70 = 확장 오버레이(60)·브리핑(50)·분석(40)보다 위 — 어디서 노드를 클릭해도 드릴이 가려지지 않게 */
+#drill.open{transform:none}
+#drillHead{padding:12px 14px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px}
+#drillHead h3{font-size:13px; flex:1}
+#drillHead .sub{font-size:10px; color:var(--muted)}
+#drillBody{flex:1; overflow-y:auto; padding:12px 14px}
+#drillBody h4{font-size:11px; color:var(--muted); margin:12px 0 6px; font-weight:600}
+#drillBody h4:first-child{margin-top:0}
+table.dt{width:100%; border-collapse:collapse; font-size:11px}
+table.dt th{color:var(--muted); font-weight:500; text-align:right; padding:3px 6px; border-bottom:1px solid var(--line)}
+table.dt td{text-align:right; padding:3px 6px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums}
+table.dt th:first-child, table.dt td:first-child{text-align:left}
+tr.clickable{cursor:pointer} tr.clickable:hover td{background:var(--surface2)}
+.tagEst{font-size:9px; font-weight:700; color:var(--warn); border:1px solid var(--warn-mk);
+  border-radius:4px; padding:0 4px; margin-left:5px}
+/* 드릴 특이점 카드 */
+.insList{display:flex; flex-direction:column; gap:4px; margin:2px 0 4px}
+.ins{border:1px solid var(--line); border-left:3px solid var(--muted); border-radius:6px;
+  padding:5px 9px; font-size:11px; line-height:1.5; color:var(--muted)}
+.ins b{color:var(--ink)}
+.ins.good{border-left-color:var(--good)} .ins.warn{border-left-color:var(--warn)} .ins.crit{border-left-color:var(--crit)}
+.vinChain{margin:6px 0 10px; border-left:2px solid var(--line); padding-left:10px}
+.vinChain .ev{font-size:11px; padding:2px 0; display:flex; gap:8px}
+.vinChain .ev .d{color:var(--muted); width:76px; flex:0 0 auto; font-variant-numeric:tabular-nums}
+.xBtn{color:var(--muted); font-size:15px; padding:2px 6px}
+.xBtn:hover{color:var(--ink)}
+
+/* 차트 툴팁 + Y축 컨트롤 */
+.tip{position:absolute; pointer-events:none; background:rgba(28,28,26,.96); border:1px solid var(--line);
+  border-radius:7px; padding:6px 9px; font-size:11px; display:none; z-index:6; white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.tip .tr{display:flex; align-items:center; gap:6px; padding:1px 0; font-variant-numeric:tabular-nums}
+.tip .tr i{width:8px; height:8px; border-radius:50%; display:inline-block; flex:0 0 auto}
+.tip .tr .tv{margin-left:auto; padding-left:12px}
+.tip .th{color:var(--muted); font-size:10px; margin-bottom:2px}
+.yreset{border:1px solid var(--line); border-radius:6px; padding:1px 8px; font-size:10px; color:var(--muted)}
+.yreset.on{border-color:var(--scnA); color:var(--scnA)}
+.yreset.on:hover{background:rgba(121,184,255,.12)}
+
+/* 시나리오 매니저 */
+#scnReg{display:flex; gap:6px; margin-top:2px}
+#scnName{flex:1; min-width:0; background:var(--surface2); border:1px solid var(--line); border-radius:7px;
+  color:var(--ink); font:inherit; font-size:11px; padding:5px 8px}
+#scnName:focus{outline:none; border-color:var(--scnA)}
+#scnList{display:flex; flex-direction:column; gap:4px}
+.scnRow{display:flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:7px;
+  padding:4px 7px; font-size:11px}
+.scnRow .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
+.scnRow .nm{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.scnRow.off .nm{color:var(--muted); text-decoration:line-through}
+.scnRow button{color:var(--muted); font-size:11px; padding:1px 4px}
+.scnRow button:hover{color:var(--ink)}
+.scnEmpty{font-size:10px; color:var(--muted)}
+
+/* 패널 확장/축소 — 모든 그래프 우상단 ⛶ 클릭 시 오른쪽 전체 오버레이로 확대 */
+.maxBtn{border:1px solid var(--line); border-radius:6px; padding:0 7px; font-size:11px;
+  line-height:17px; color:var(--muted); background:var(--surface2); flex:0 0 auto}
+.maxBtn:hover{color:var(--ink); border-color:var(--edge-hi)}
+.maxBtn.abs{position:absolute; top:8px; right:10px; z-index:5; padding:2px 8px}
+#wfTitleBar .maxBtn, #anaBarsBar .maxBtn{margin-left:auto; margin-right:6px}
+#maxOverlay{position:fixed; inset:46px 0 58px 216px; background:var(--page); z-index:60;
+  display:none; flex-direction:column; border-left:1px solid var(--line)}
+#maxOverlay.open{display:flex}
+#maxHead{display:flex; align-items:center; gap:10px; padding:7px 14px;
+  border-bottom:1px solid var(--line); background:var(--surface); flex:0 0 auto}
+#maxHead span{font-size:12px; flex:1}
+#maxBody{flex:1; min-height:0; display:flex; flex-direction:column}
+#maxBody > *{flex:1; min-height:0; min-width:0}
+.maxed{overflow:hidden}
+
+/* 원인 분석 모달 */
+#btnAna,#btnBrief{border:1px solid var(--line); border-radius:7px; padding:4px 10px; font-size:11px;
+  color:var(--muted); background:var(--surface2)}
+#btnAna:hover,#btnBrief:hover{border-color:var(--edge-hi); color:var(--ink)}
+/* 브리핑·상세 분석 버튼은 열려 있을 때만 활성 표시 (토글) */
+#btnBrief.on,#btnAna.on{border-color:var(--scnA); color:var(--scnA); background:rgba(121,184,255,.1)}
+
+/* 오늘의 브리핑 (CEO 첫 화면) + AI 워게이밍 오버레이 */
+#brief,#war{position:fixed; inset:46px 0 58px 216px; background:var(--page); z-index:50; display:none;
+  flex-direction:column; border-left:1px solid var(--line); border-top:1px solid var(--line)}
+#brief.open,#war.open{display:flex}
+#bfHead,#warHead{display:flex; align-items:center; gap:12px; padding:10px 16px;
+  border-bottom:1px solid var(--line); background:var(--surface)}
+#bfHead h3,#warHead h3{font-size:13px; flex:1}
+#bfHead h3 small,#warHead h3 small{color:var(--muted); font-weight:400; margin-left:8px; font-size:10px}
+#warBody{flex:1; overflow-y:auto; padding:14px 18px; display:flex; flex-direction:column; gap:10px}
+#warCtl{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+#btnWar{border-color:var(--scnB); color:var(--scnB); width:100%}
+#bfBody{flex:1; overflow-y:auto; padding:14px 18px; display:grid;
+  grid-template-columns:minmax(360px,5fr) minmax(420px,6fr); gap:0 22px; align-content:start}
+.bfCol{min-width:0; display:flex; flex-direction:column; gap:9px}
+.bfCol h4{font-size:11px; color:var(--muted); font-weight:600; margin:8px 0 0}
+.bfCol h4:first-child{margin-top:0}
+.bfCard{border:1px solid var(--line); border-left:3px solid var(--scnA); border-radius:9px;
+  padding:9px 12px; cursor:pointer; text-align:left; background:var(--surface)}
+.bfCard:hover{border-color:var(--edge-hi)}
+.bfCard.crit{border-left-color:var(--crit)} .bfCard.warn{border-left-color:var(--warn)}
+.bfCard.good{border-left-color:var(--good)}
+.bfCard .tag{font-size:10px; color:var(--muted); letter-spacing:1px}
+.bfCard .bt{font-size:12px; font-weight:600; margin:3px 0 2px}
+.bfCard .bb{font-size:11px; color:var(--muted); line-height:1.5}
+table.war{width:100%; border-collapse:collapse; font-size:11px; font-variant-numeric:tabular-nums}
+table.war th{color:var(--muted); font-weight:500; text-align:right; padding:3px 6px; border-bottom:1px solid var(--line)}
+table.war td{text-align:right; padding:3px 6px; border-bottom:1px solid var(--line)}
+table.war th:first-child, table.war td:first-child{text-align:left}
+table.war .mini{border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:10px; color:var(--muted)}
+table.war .mini:hover{border-color:var(--scnA); color:var(--scnA)}
+#bfWarCtl{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+/* 상세 분석 오버레이 — 왼쪽 KPI 레일(216px)과 하단 타임라인은 남겨둔다 (KPI 전환·Play 연동) */
+#ana{position:fixed; inset:46px 0 58px 216px; background:var(--page); z-index:40; display:none;
+  flex-direction:column; border-top:1px solid var(--line); border-left:1px solid var(--line)}
+#ana.open{display:flex}
+#anaHead{display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--surface)}
+#anaHead h3{font-size:13px}
+#anaHead .sub{font-size:10px; color:var(--muted); flex:1}
+#anaFilters{padding:8px 16px; border-bottom:1px solid var(--line); background:var(--surface);
+  display:flex; flex-direction:column; gap:5px}
+.fRow{display:flex; align-items:center; gap:5px; flex-wrap:wrap}
+.fRow .fLbl{font-size:10px; color:var(--muted); width:38px; flex:0 0 auto}
+.fchip{border:1px solid var(--line); border-radius:14px; padding:2px 9px; font-size:10px; color:var(--muted); background:var(--surface2)}
+.fchip:hover{border-color:var(--edge)}
+.fchip.on{color:var(--scnA); border-color:var(--scnA); background:rgba(121,184,255,.1)}
+.fchip:disabled{opacity:.35; cursor:default}
+#anaGrid{flex:1; display:grid; grid-template-columns:1fr 400px; min-height:0; overflow:hidden}
+/* min-height:0 + overflow:hidden — svg 높이 재측정이 그리드 행을 키우는 피드백 루프(Y축 드리프트) 차단 */
+#anaTrendBox{padding:10px 6px 6px 12px; min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; position:relative}
+#anaTrendBox svg{flex:1}
+#anaSide{border-left:1px solid var(--line); padding:10px 14px; overflow-y:auto; background:var(--surface)}
+#anaScan{display:flex; flex-direction:column; gap:4px; margin-top:4px}
+.scanRow{border:1px solid var(--line); border-radius:7px; padding:5px 9px; font-size:11px;
+  display:flex; justify-content:space-between; gap:8px; cursor:pointer; text-align:left; width:100%}
+.scanRow:hover{border-color:var(--edge-hi)}
+.scanRow .where{color:var(--ink)}
+.scanRow .delta{font-variant-numeric:tabular-nums; flex:0 0 auto}
+.zlg{display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--muted); margin-right:8px}
+.zlg i{width:14px; height:0; border-top:2px solid; display:inline-block}
+
+/* 씬 SVG 공통 */
+text{user-select:none}
+/* 라벨·파티클·재고 기둥이 노드 클릭·호버를 가로채지 않게 통과 */
+#Llabels, #Lparticles, #Lstacks{pointer-events:none}
+.nodeLbl{font-size:11px; font-weight:600; fill:var(--ink)}
+.nodeSub{font-size:10px; fill:var(--muted)}
+.badge{font-size:10px; fill:var(--muted)}
+.flowEdge{fill:none; stroke:var(--edge); stroke-width:1.2; opacity:.55}
+.flowEdge.hl{stroke:var(--edge-hi); opacity:1; stroke-width:2}
+.cmdEdge{fill:none; stroke:var(--cmd); stroke-width:1; stroke-dasharray:3 4; opacity:.4}
+.fbEdge{fill:none; stroke:var(--fb); stroke-width:1.2; stroke-dasharray:5 5; opacity:.55}
+/* 병목(케파 초과)=적 점멸, 재고 부족(DS<45) 출고 제약=황 점멸 */
+@keyframes jamPulse{0%,100%{opacity:.95}50%{opacity:.3}}
+.flowEdge.jam{stroke:var(--crit); stroke-width:2.4; animation:jamPulse 1.1s infinite}
+.flowEdge.starve{stroke:var(--warn); animation:jamPulse 1.7s infinite}
+.hitNode{cursor:pointer}
+/* 호버=밝기+하늘색 외곽선(확실한 피드백), 선택=파란 외곽선 유지 */
+.hitNode:hover{filter:brightness(1.4)}
+.hitNode:hover polygon,.hitNode:hover rect{stroke:var(--edge-hi); stroke-width:1}
+.hitNode.sel polygon{stroke:var(--scnA); stroke-width:1.3}
+@media (prefers-reduced-motion:reduce){ .particle{display:none}
+  .flowEdge.jam,.flowEdge.starve{animation:none} }
+</style>
+</head>
+<body>
+<header>
+  <h1>전략 시뮬레이션 트윈 <small>미국판매법인 SC-US · CEO 뷰</small></h1>
+  <button id="btnBrief" title="오늘의 3가지 · 결정 스코어보드 — 첫 화면">오늘의 브리핑</button>
+  <button id="btnAna" title="사양·지역 믹스 드릴다운">상세 분석</button>
+  <div id="presetBar"></div>
+</header>
+
+<div id="main">
+  <aside id="kpiRail">
+    <div id="kpiFilterBand" style="display:none"></div>
+    <div id="kpiTiles"></div>
+    <div id="railNote">타일 클릭 = 하단 차트 전환.<br>값은 커서 월 기준, Δ는 BP 대비.<br>상세 분석 필터 시 KPI도 슬라이스 값으로 전환 (BP는 상향식 생성이라 사양 필터에도 비교 가능).</div>
+  </aside>
+
+  <div id="center">
+    <div id="sceneWrap">
+      <svg id="scene"></svg>
+      <div id="nodeInfo"></div>
+      <div id="simWm">SIMULATED · 시나리오 생성 구간</div>
+      <div id="sceneHint">휠 줌 · 드래그 팬 · 노드 클릭=드릴 · 재고 기둥 높이=Days Supply (황&lt;45 · 녹 45–75 · 적&gt;75) · 회색 고스트=베이스라인</div>
+    </div>
+    <div id="chartBand">
+      <div id="mainChartBox">
+        <div class="bandTitle" id="mcTitleBar"><span id="mcTitle">판매량</span>
+          <span class="lgd actual"><i></i>실적</span><span class="lgd bp"><i></i>BP</span>
+          <span class="lgd scnA"><i></i>검토중</span><span id="lgdScn" style="display:inline-flex;gap:10px"></span>
+          <button id="yzHint" class="yreset" style="margin-left:auto;margin-right:8px">휠=Y줌 · 드래그=이동</button>
+        </div>
+        <svg id="mainChart" width="100%" height="200"></svg>
+        <div id="mcTip" class="tip"></div>
+      </div>
+      <div id="wfBox" style="position:relative">
+        <div class="bandTitle" id="wfTitleBar"><span id="wfTitle">판매량 워터폴 — 차종별 TOP5+기타</span> <span style="font-size:10px" id="wfUnit">(전월 대비 · 대)</span></div>
+        <svg id="wfChart" width="100%" height="200"></svg>
+      </div>
+    </div>
+  </div>
+
+  <aside id="leverPanel">
+    <h2>전략 레버 <small>변경 즉시 미래 재생성</small></h2>
+    <div id="levers"></div>
+    <div id="scnReg">
+      <input id="scnName" placeholder="시나리오 이름…" maxlength="24">
+      <button class="btn primary" id="btnRegScn">등록</button>
+    </div>
+    <div id="scnList"></div>
+    <button class="btn" id="btnWar" title="현재 레버·등록 시나리오·주변 변주·전략 전형을 한 번에 시뮬해 랭킹">⚔ AI 워게이밍</button>
+    <div id="impactList"></div>
+  </aside>
+</div>
+
+<footer>
+  <button id="playBtn" title="재생/일시정지">▶</button>
+  <button class="spd on" data-s="1">1×</button><button class="spd" data-s="2">2×</button><button class="spd" data-s="4">4×</button>
+  <div id="tlWrap"><input id="tl" type="range" min="0" max="47" value="31"><div id="nowTick"></div></div>
+  <div id="tlLabel"><b id="tlYm">2026-08</b><small id="tlMode">실적</small></div>
+</footer>
+
+<div id="ana">
+  <div id="anaHead">
+    <h3>상세 분석 — 사양·지역 믹스 드릴다운</h3>
+    <span class="sub">왼쪽 KPI 타일 클릭=그래프 지표 전환 · 하단 타임라인 Play 연동 · <span id="anaWinLbl">변화 비교: 최근 3개월 vs 이전 12개월</span></span>
+    <button class="xBtn" id="anaClose">✕</button>
+  </div>
+  <div id="anaFilters"></div>
+  <div id="anaGrid">
+    <div id="anaTrendBox">
+      <div class="bandTitle" id="anaTrendBar"><span id="anaTrendTitle">필터 슬라이스 월별 판매량 — 지역별</span><span id="anaZlg"></span>
+        <button id="anaYReset" class="yreset" style="margin-left:auto;margin-right:8px">휠=Y줌 · 드래그=이동</button></div>
+      <svg id="anaTrend"></svg>
+      <div id="anaTip" class="tip"></div>
+    </div>
+    <div id="anaSide">
+      <div id="anaBarsBox" style="position:relative; display:flex; flex-direction:column; min-height:0">
+        <div class="bandTitle" id="anaBarsBar"><span id="anaBarsT">지역별 최근 판매 변화율</span> — <span id="anaBarsF" style="color:var(--scnA)">전체</span></div>
+        <svg id="anaBars" width="370" height="200"></svg>
+      </div>
+      <div class="bandTitle" style="margin-top:10px">자동 탐지 TOP 6 — <span id="anaScanF" style="color:var(--scnA)">전체</span> · <span id="anaScanK" style="color:var(--scnA)">판매량</span> <span style="font-size:10px" id="anaScanNote">기준, 전국 대비 지역 괴리</span></div>
+      <div id="anaScan"></div>
+    </div>
+  </div>
+</div>
+
+<div id="brief">
+  <div id="bfHead">
+    <h3>오늘의 브리핑 <small id="bfDate"></small></h3>
+    <button class="xBtn" id="bfClose">✕</button>
+  </div>
+  <div id="bfBody">
+    <div class="bfCol">
+      <h4>오늘의 3가지 — 카드 클릭 = 해당 화면으로 이동</h4>
+      <div id="bfItems"></div>
+    </div>
+    <div class="bfCol">
+      <h4>결정 스코어보드 — 커밋 시나리오 대비 현 궤도</h4>
+      <div id="bfScore"></div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.6">대안 탐색은 우측 <b>전략 레버 패널의 AI 워게이밍</b>에서 — 현재 레버·등록 시나리오·주변 변주를 한 번에 시뮬해 랭킹합니다.</div>
+    </div>
+  </div>
+</div>
+
+<div id="war">
+  <div id="warHead">
+    <h3>AI 워게이밍 <small>현재 레버 · 등록 시나리오 · 레버 주변 변주 · 전략 전형 × 수요 충격 3종(−10%/기준/+10%)</small></h3>
+    <button class="xBtn" id="warClose">✕</button>
+  </div>
+  <div id="warBody">
+    <div id="warCtl">
+      <span style="font-size:11px;color:var(--muted)">목표함수:</span>
+      <button class="fchip on" data-obj="profit">이익 극대</button>
+      <button class="fchip" data-obj="sales">판매 극대</button>
+      <button class="fchip" data-obj="balance">균형 (이익·판매·CSI·DS)</button>
+      <button class="btn primary" id="warRun" style="margin-left:auto">실행</button>
+    </div>
+    <div id="warOut"><div class="scnEmpty">실행하면 후보 조합별 미래 16개월 효과와 강건성(충격 3종 중 베이스라인 이익을 지키는 수)을 랭킹합니다.
+      상위 조합은 [적용]으로 레버에 반영하거나 [등록]으로 시나리오 목록에 추가해 커밋·비교로 이어갈 수 있습니다.</div></div>
+  </div>
+</div>
+
+<div id="maxOverlay">
+  <div id="maxHead"><span id="maxTitle"></span><button class="btn" id="maxClose">축소 ⤡</button></div>
+  <div id="maxBody"></div>
+</div>
+
+<div id="drill">
+  <div id="drillHead"><h3 id="drillTitle"></h3><span class="sub" id="drillSub"></span>
+    <button class="xBtn" id="drillClose">✕</button></div>
+  <div id="drillBody"></div>
+</div>
+
+<script src="v7-data.js"></script>
+<script>
+'use strict';
+/* ═══════════════ PART A · 데이터 접근 + 시뮬레이션 엔진 (DOM 무관) ═══════════════ */
+const D = window.TWIN_DATA, M = D.meta;
+const MODELS = D.models, PLANTS = D.plants, ZONES = D.zones;
+const N = M.months.length, NOW = M.now, SEAS = M.seas;
+const MID = MODELS.map(m=>m.id);
+const fmt = n => Math.round(n).toLocaleString('en-US');
+const fmtM = n => (n>=0?'':'-') + '$' + Math.abs(n/1e6).toFixed(1) + 'M';
+const clamp = (x,a,b) => Math.max(a, Math.min(b,x));
+
+/* 미래 기본 인센티브/마케팅 (생성기와 동일식, 이벤트성 특수 프로그램 제외) */
+function baseInc(md, i){
+  let v = 1200 + 250*(1-SEAS[i%12]);
+  if(i%12>=10) v += 500;
+  if(md.ev) v += 300;
+  return Math.round(v/25)*25;
+}
+function baseMkt(md, i){ return 45*md.share*(0.9+0.2*SEAS[i%12]); }
+function growthOf(md, i){
+  let g = 1 + 0.055*Math.floor(i/12) + 0.002*(i%12);
+  if(md.ev) g += 0.04*Math.floor(i/12);
+  return g;
+}
+/* 사바나 EV 신공장 램프업 실효 케파 — 미래 시뮬 전용 가정 (배터리 셀 공급 계약 물량).
+   과거 월의 가동률 표시는 dim_plant의 명판 케파를 사용한다. */
+const RAMP_CAP = {'US-SV':5300};
+const plantCap = (pid, lv) => {
+  let c = RAMP_CAP[pid] ?? PLANTS.find(p=>p.id===pid).cap;
+  if(MODELS.some(m=>m.plant===pid && m.ev)) c *= 1 + lv.ev/100;   // EV 증산 레버: 사바나·국내1공장
+  return c;
+};
+
+/* 기본 레버 */
+const DEFAULT_LEVERS = { price:0, inc:0, mkt:0, dsT:60, ev:0 };
+let levers = {...DEFAULT_LEVERS};
+/* 등록된 시나리오: {id, name, levers, sim, color, visible} — 체크된 것은 모두 차트에 오버레이 */
+const SCN_COLORS = ['#eaa93e','#e87ba4','#4cc38a','#b18cff','#56c9d8','#f2725e'];
+let SCENARIOS = [], scnSeq = 1;
+let COMMIT = null;   // 커밋된 계획 시나리오 — 브리핑 스코어보드가 이 궤도 대비 이탈을 추적
+
+/* 실적 마지막 상태 스냅샷 */
+function lastState(){
+  const st = {stock:{}, ma3:{}, ad:{}};
+  for(const id of MID){
+    st.stock[id] = D.actual[NOW].models[id].stock;
+    const r3 = [NOW-2,NOW-1,NOW].map(i=>D.actual[i].models[id].retail);
+    st.ma3[id] = r3.slice();
+    let ad = D.mkt_base[id];
+    for(let i=0;i<=NOW;i++) ad = D.actual[i].models[id].mkt + M.adstock*ad;
+    st.ad[id] = ad;
+  }
+  st.csi = D.actual[NOW].csi;
+  return st;
+}
+
+/* 핵심: 미래 시뮬레이터 — 생성기(generate.py)와 동일 구조식 + 레버
+   shock: 수요 충격 배수 (워게이밍 강건성 평가용, 기본 1) */
+function simulate(lv, shock=1){
+  const st = lastState();
+  const out = []; // [h] = {i, models:{id:{retail,ws,stock,ds,inc,mkt,op,demand,capHit}}, csi, tot:{...}}
+  let csiPrev = st.csi;
+  for(let i=NOW+1; i<N; i++){
+    const mo = {i, ym:M.months[i], models:{}, capHit:[]};
+    // 1패스: 수요·소매·희망도매
+    for(const md of MODELS){
+      const id = md.id;
+      const inc = baseInc(md,i) + lv.inc;
+      /* 인센티브: 실거래가 경로, 브랜드 레벨 탄력성 -1.6 (히스토리와 동일)
+         MSRP 레버: 경쟁사 대비 상대가격 변화 → 모델 레벨 탄력성 -4.0 (BLP 1995, 대체효과 포함) */
+      const incF = Math.pow((md.msrp - inc)/(md.msrp - M.inc_ref), -M.price_elast);
+      const msrpF = Math.pow(1 + lv.price/100, -4.0);
+      /* 지속 인상 시 브랜드 고려도 침식 (누적 -0.3%p/월/가격1%) — 단기 이익·장기 점유율 트레이드오프 */
+      const erosionF = lv.price > 0 ? Math.max(0.3, 1 - 0.003*lv.price*(i-NOW)) : 1;
+      const priceF = incF * msrpF * erosionF;
+      const spend = baseMkt(md,i) * (1 + lv.mkt/100);
+      st.ad[id] = spend + M.adstock*st.ad[id];
+      const mktF = clamp(1 + 0.10*Math.log2(st.ad[id]/(D.mkt_base[id]*(1+M.adstock))), 0.85, 1.25);
+      const demand = M.us_base * shock * md.share * SEAS[i%12] * growthOf(md,i) * priceF * mktF;
+      const stock = st.stock[id];
+      const availF = Math.min(1, stock/Math.max(demand*0.9,1));
+      let retail = demand * (0.75 + 0.25*availF);
+      retail = Math.min(retail, stock*0.95);
+      const ma3 = st.ma3[id].reduce((a,b)=>a+b,0)/st.ma3[id].length;
+      const targetStock = ma3 * lv.dsT/30.4;
+      const desired = Math.max(0, demand + (targetStock - stock)*0.5);
+      mo.models[id] = {demand, retail, desired, inc, mkt:spend};
+    }
+    // 2패스: 공장 케파 클램프 (공장 합산 초과 시 비례 축소)
+    for(const p of PLANTS){
+      const ms = MODELS.filter(m=>m.plant===p.id);
+      if(!ms.length) continue;
+      const want = ms.reduce((a,m)=>a+mo.models[m.id].desired,0);
+      const cap = plantCap(p.id, lv) * 1.05;
+      const f = want>cap ? cap/want : 1;
+      if(f<1) mo.capHit.push(p.id);
+      for(const m of ms) mo.models[m.id].ws = mo.models[m.id].desired * f;
+    }
+    // 3패스: 재고·DS·손익
+    let totRetail=0, totWs=0, totStock=0, totOp=0, incW=0;
+    for(const md of MODELS){
+      const id = md.id, r = mo.models[id];
+      st.stock[id] = Math.max(0, st.stock[id] + r.ws - r.retail);
+      st.ma3[id].push(r.retail); if(st.ma3[id].length>3) st.ma3[id].shift();
+      r.stock = st.stock[id];
+      r.ds = r.stock/Math.max(r.retail/30.4,1);
+      // 가격 레버는 대당 변동마진에 그대로 얹힌다 (원가 불변 가정)
+      r.op = r.ws*(md.margin + md.msrp*lv.price/100) - r.retail*r.inc
+           - r.ws*D.freight[md.plant] - r.retail*120 - r.mkt*1e6;
+      totRetail+=r.retail; totWs+=r.ws; totStock+=r.stock; totOp+=r.op; incW+=r.inc*r.retail;
+    }
+    const ds = totStock/Math.max(totRetail/30.4,1);
+    const incAvg = incW/Math.max(totRetail,1);
+    let csiT = 88.5 - 0.0008*Math.max(0,incAvg-2200) - 0.02*Math.max(0,ds-80) - 0.05*Math.max(0,40-ds);
+    csiPrev = 0.8*csiPrev + 0.2*csiT;
+    mo.csi = csiPrev;
+    mo.tot = {retail:totRetail, ws:totWs, stock:totStock, op:totOp, ds, inc:incAvg};
+    out.push(mo);
+  }
+  return out;
+}
+
+/* KPI 시계열 (0..47): 실적 + 시뮬 결합 */
+function seriesOf(sim, key){
+  const s = [];
+  for(let i=0;i<=NOW;i++){
+    const a = D.actual[i]; let v;
+    if(key==='csi') v = a.csi;
+    else{
+      v = 0; let stock=0, retail=0;
+      for(const id of MID){ const m=a.models[id];
+        if(key==='retail') v+=m.retail; else if(key==='op') v+=m.op;
+        stock+=m.stock; retail+=m.retail; }
+      if(key==='ds') v = stock/Math.max(retail/30.4,1);
+    }
+    s.push(v);
+  }
+  for(const mo of sim) s.push(key==='csi'?mo.csi:mo.tot[key==='op'?'op':key]);
+  return s;
+}
+function bpSeries(key){
+  return D.bp.map((b,i)=>{
+    if(key==='csi') return 88.5;
+    if(key==='ds') return 60;
+    let v=0; for(const id of MID) v += b.models[id][key==='op'?'op':'retail'];
+    return v;
+  });
+}
+/* 팬차트 밴드 폭: 호라이즌 비례 */
+const bandPct = h => 0.03 + 0.006*h;
+
+/* 워터폴: 커서 월의 전월 대비(MoM) 변화를 KPI별 전문 브리지로 분해
+   판매량 = 차종별 기여 TOP5+기타 · 영업이익 = P&L 드라이버 워크
+   CSI = 요인 분해(평활식 항별 역산+잔차) · DS = 재고 흐름(순유입/판매속도) */
+function waterfall(key){
+  const c = Math.max(cursor,1), p = c-1;
+  const cur = monthView(c), prv = monthView(p);
+  const mLbl = i => M.months[i].slice(2);
+  const wz = focusZone ? (md => ZW[md.id][focusZone]) : (() => 1);   // 지역 포커스 시 존 가중
+  const bars = [];
+  if(key==='retail'){
+    let base=0, tot=0;
+    const deltas = MODELS.map(md=>{
+      const a=prv.models[md.id].retail*wz(md), b=cur.models[md.id].retail*wz(md);
+      base+=a; tot+=b;
+      return {name:md.name, v:b-a};
+    }).sort((x,y)=>Math.abs(y.v)-Math.abs(x.v));
+    bars.push({name:mLbl(p), v:base, type:'base'});
+    for(const d of deltas.slice(0,5)) bars.push({name:d.name, v:d.v, type:'delta'});
+    bars.push({name:'기타', v:deltas.slice(5).reduce((a,d)=>a+d.v,0), type:'delta'});
+    bars.push({name:mLbl(c), v:tot, type:'total'});
+  } else if(key==='op'){
+    // 항등 분해: Δ영업이익 = Δ볼륨마진 − Δ인센티브 − Δ마케팅 − Δ물류·판관 (+특수 프로그램 등 잔차)
+    const terms = (mv,i)=>{
+      let volm=0, incv=0, mktv=0, logi=0, tot=0;
+      for(const md of MODELS){ const m=mv.models[md.id], w=wz(md);
+        const mg = md.margin + (i>NOW ? md.msrp*levers.price/100 : 0);  // 시뮬 구간은 가격 레버가 마진에 가산
+        volm+=m.ws*mg*w; incv+=m.retail*m.inc*w; mktv+=m.mkt*1e6*w;
+        logi+=(m.ws*D.freight[md.plant]+m.retail*120)*w; tot+=m.op*w; }
+      return {volm,incv,mktv,logi,tot};
+    };
+    const a=terms(prv,p), b=terms(cur,c);
+    const parts=[['볼륨 마진', b.volm-a.volm], ['인센티브', -(b.incv-a.incv)],
+                 ['마케팅', -(b.mktv-a.mktv)], ['물류 판관비', -(b.logi-a.logi)]];
+    const resid=(b.tot-a.tot)-parts.reduce((s,x)=>s+x[1],0);
+    bars.push({name:mLbl(p), v:a.tot, type:'base'});
+    for(const [n,v] of parts) bars.push({name:n, v, type:'delta'});
+    bars.push({name:'특수 프로그램', v:resid, type:'delta'});
+    bars.push({name:mLbl(c), v:b.tot, type:'total'});
+  } else if(key==='csi'){
+    // csi_t = 0.8·csi_{t-1} + 0.2·(88.5 − 인센손상 − 과잉재고 − 인도지연) → 항별 기여, 실적 편차는 캠페인 등 잔차
+    let r=0,s=0,iw=0;
+    for(const md of MODELS){ const m=cur.models[md.id]; r+=m.retail; s+=m.stock; iw+=m.inc*m.retail; }
+    const ds=s/Math.max(r/30.4,1), inc=iw/Math.max(r,1);
+    const parts=[['기준 복원력', 0.2*(88.5-prv.csi)],
+                 ['인센 브랜드손상', -0.2*0.0008*Math.max(0,inc-2200)],
+                 ['과잉재고 경험', -0.2*0.02*Math.max(0,ds-80)],
+                 ['인도 지연', -0.2*0.05*Math.max(0,40-ds)]];
+    let csiP = prv.csi, csiC = cur.csi;
+    if(focusZone){   // 지역 CSI로 전환 — 브랜드 요인을 지역 민감도(Δ지역/Δ전국)로 스케일
+      csiP = sliceVal(p, focusZone, 'csi', emptyAF());
+      csiC = sliceVal(c, focusZone, 'csi', emptyAF());
+      const dN = cur.csi - prv.csi;
+      const ratio = Math.abs(dN)>1e-9 ? (csiC-csiP)/dN
+                  : (ZONES.find(z=>z.id===focusZone).ev_aff>1 ? 1.3 : 0.8);
+      for(const pt of parts) pt[1] *= ratio;
+    }
+    const resid=(csiC-csiP)-parts.reduce((x,y)=>x+y[1],0);
+    bars.push({name:mLbl(p), v:csiP, type:'base'});
+    for(const [n,v] of parts) bars.push({name:n, v, type:'delta'});
+    bars.push({name:'캠페인 등이벤트', v:resid, type:'delta'});
+    bars.push({name:mLbl(c), v:csiC, type:'total'});
+  } else {
+    // ΔDS 항등 분해: 재고 순증(도매−소매)/판매속도 + 전월재고×Δ(1/판매속도) (+실적 편차 잔차)
+    const agg=mv=>{ let r=0,s=0,w=0; for(const md of MODELS){const m=mv.models[md.id], k2=wz(md); r+=m.retail*k2; s+=m.stock*k2; w+=m.ws*k2;} return {r,s,w}; };
+    const a=agg(prv), b=agg(cur);
+    const rate=Math.max(b.r/30.4,1), rateP=Math.max(a.r/30.4,1);
+    const dsP=a.s/rateP, dsC=b.s/rate;
+    const parts=[['재고 순증', (b.w-b.r)/rate], ['판매속도 변화', a.s*(1/rate-1/rateP)]];
+    const resid=(dsC-dsP)-parts.reduce((x,y)=>x+y[1],0);
+    bars.push({name:mLbl(p), v:dsP, type:'base'});
+    for(const [n,v] of parts) bars.push({name:n, v, type:'delta'});
+    bars.push({name:'기타 조정', v:resid, type:'delta'});
+    bars.push({name:mLbl(c), v:dsC, type:'total'});
+  }
+  return bars;
+}
+/* ═══════════════ PART B · 아이소메트릭 씬 ═══════════════ */
+const TX=30, TY=15, OX=480, OY=86;
+const iso = (gx,gy,z=0) => [OX+(gx-gy)*TX, OY+(gx+gy)*TY-z];
+const P = pts => pts.map(p=>p.join(',')).join(' ');
+const svgNS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent){
+  const e = document.createElementNS(svgNS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  if(parent) parent.appendChild(e);
+  return e;
+}
+
+/* 씬 배치 (그리드 좌표) */
+const POS = {
+  'KR-1':[1,2.3], 'KR-2':[3.6,0.4], PYT:[3.4,3.4], PORT:[8.2,7.4],
+  'US-GA':[17,6.8], 'US-SV':[19,8.4], 'MX-MT':[11.5,10.6],
+  HQ:[12,0.7],
+  west:[9.8,4.6], central:[13.6,5.2], northeast:[18,1.6], southeast:[18.6,5.4], south:[14.4,8.6],
+  CUST:[21.6,4.4],
+};
+const ZONE_POS = {west:POS.west, central:POS.central, northeast:POS.northeast, southeast:POS.southeast, south:POS.south};
+function zw(md){
+  const raw = ZONES.map(z=> z.share * (md.ev ? z.ev_aff : 1));
+  const s = raw.reduce((a,b)=>a+b,0);
+  const o = {}; ZONES.forEach((z,i)=>o[z.id]=raw[i]/s); return o;
+}
+const ZW = Object.fromEntries(MODELS.map(m=>[m.id, zw(m)]));
+
+/* 3면 프리즘 */
+function prism(parent, gx, gy, w, d, h, fills, cls=''){
+  const g = el('g', {class:cls}, parent);
+  const A=iso(gx,gy,h), B=iso(gx+w,gy,h), C=iso(gx+w,gy+d,h), E=iso(gx,gy+d,h);
+  const B0=iso(gx+w,gy,0), C0=iso(gx+w,gy+d,0), E0=iso(gx,gy+d,0);
+  el('polygon',{points:P([E,C,C0,E0]), fill:fills[1]}, g);              // 좌면(정면-좌)
+  el('polygon',{points:P([B,C,C0,B0]), fill:fills[2]}, g);              // 우면
+  el('polygon',{points:P([A,B,C,E]), fill:fills[0], class:'iso-top-f'}, g); // 상면
+  return g;
+}
+function plate(parent, gx, gy, w, d, fill, stroke){
+  el('polygon',{points:P([iso(gx,gy),iso(gx+w,gy),iso(gx+w,gy+d),iso(gx,gy+d)]),
+    fill, stroke:stroke||'none', 'stroke-width':1, opacity:.9}, parent);
+}
+
+const scene = document.getElementById('scene');
+scene.setAttribute('viewBox','0 0 1240 660');
+const L = {};   // 레이어
+for(const k of ['ground','edges','nodes','stacks','particles','labels']) L[k]=el('g',{id:'L'+k},scene);
+
+/* 지면 */
+plate(L.ground, -0.6, -0.8, 6.4, 5.4, 'var(--land)', 'var(--line)');           // 한국
+plate(L.ground, 6.6, -0.6, 15.8, 12.2, 'var(--land)', 'var(--line)');          // 북미
+el('text',{x:iso(-0.2,4.6)[0], y:iso(-0.2,4.6)[1]+14, class:'nodeSub'},L.ground).textContent='한국 생산거점';
+el('text',{x:iso(7.2,11.4)[0], y:iso(7.2,11.4)[1]+16, class:'nodeSub'},L.ground).textContent='미국 시장';
+{ // 해상 밴드
+  const s = el('path',{d:`M${iso(4.4,4.4)} L${iso(6.4,-0.4)} L${iso(7.4,-0.4)} L${iso(5.6,5.6)} Z`,
+    fill:'var(--sea)', opacity:.8}, L.ground);
+}
+
+/* 노드 정의 → 프리즘 + 라벨 */
+const NODE_META = {}; // id → {x,y,labelEl,subEl}
+function addNode(id, title, kind){
+  const [gx,gy] = POS[id];
+  const g = el('g',{class:'hitNode','data-id':id}, L.nodes);
+  let anchor;
+  if(kind==='plant'){
+    prism(g, gx, gy, 1.7, 1.1, 26, ['var(--iso-top)','var(--iso-left)','var(--iso-right)']);
+    prism(g, gx+0.25, gy+0.2, 0.5, 0.4, 40, ['#44443f','#2e2e2b','#26261f']); // 굴뚝/타워
+    anchor = iso(gx+0.85, gy+0.55, 0);
+  }else if(kind==='port'){
+    prism(g, gx, gy, 1.5, 0.9, 14, ['#2d3a42','#232d34','#1d262b']);
+    el('rect',{x:iso(gx+0.4,gy+0.3,30)[0]-2, y:iso(gx+0.4,gy+0.3,30)[1], width:4, height:22, fill:'#3d5560'}, g); // 크레인
+    anchor = iso(gx+0.75, gy+0.45, 0);
+  }else if(kind==='hq'){
+    prism(g, gx, gy, 1.2, 1.2, 46, ['#3d4a5c','#2c3745','#232c38']);
+    anchor = iso(gx+0.6, gy+0.6, 0);
+  }else if(kind==='zone'){
+    plate(g, gx-0.2, gy-0.2, 1.9, 1.6, 'var(--surface2)', 'var(--edge)');
+    anchor = iso(gx+0.75, gy+0.6, 0);
+  }else if(kind==='cust'){
+    prism(g, gx, gy, 1.0, 1.0, 18, ['#2f3d33','#26312a','#202a23']);
+    anchor = iso(gx+0.5, gy+0.5, 0);
+  }
+  const lbl = el('text',{x:anchor[0], y:anchor[1]+26, 'text-anchor':'middle', class:'nodeLbl'}, L.labels);
+  lbl.textContent = title;
+  const sub = el('text',{x:anchor[0], y:anchor[1]+39, 'text-anchor':'middle', class:'nodeSub'}, L.labels);
+  NODE_META[id] = {anchor, lbl, sub, kind, gx, gy, g};
+  // 호버 시 라벨도 하이라이트 (노드 프리즘은 CSS brightness+외곽선)
+  g.addEventListener('pointerenter', ()=>{
+    lbl.dataset.pf = lbl.getAttribute('fill') || '';
+    lbl.setAttribute('fill', 'var(--edge-hi)');
+  });
+  g.addEventListener('pointerleave', ()=>{
+    if(lbl.dataset.pf) lbl.setAttribute('fill', lbl.dataset.pf); else lbl.removeAttribute('fill');
+  });
+  g.addEventListener('click', ev=>{
+    if(suppressClick) return;
+    if(kind==='zone'){   // 딜러 노드 = 지역 포커스 토글 → KPI·차트·워터폴이 지역 슬라이스로 전환
+      focusZone = focusZone===id ? null : id;
+      updateScene(cursor); renderKpis(); renderMainChart(); renderWaterfall();
+    } else if(focusZone){   // 비지역 노드(HQ·공장·항만·고객) 선택 = 전사 관점 → 지역 포커스 해제
+      focusZone = null;
+      updateScene(cursor); renderKpis(); renderMainChart(); renderWaterfall();
+    }
+    setSelNode(id);      // 선택 노드: 파란 외곽선 + 이름 하이라이트 + 상세 칩
+    openDrill(kind, id);
+  });
+  return g;
+}
+addNode('HQ','미국판매법인 HQ','hq');
+for(const p of PLANTS) addNode(p.id, p.name, 'plant');
+addNode('PYT','국내 수출항','port');
+addNode('PORT','서부 수입항','port');
+for(const z of ZONES) addNode(z.id, z.name+' 딜러', 'zone');
+addNode('CUST','고객 · CSI','cust');
+
+/* 재고 기둥 (지역별) + 고스트 베이스라인 */
+const STACKS = {};
+for(const z of ZONES){
+  const [gx,gy] = ZONE_POS[z.id];
+  const base = iso(gx+1.15, gy+0.35);
+  const ghost = el('polygon',{points:'', fill:'none', stroke:'var(--muted)',
+    'stroke-dasharray':'3 3', 'stroke-width':1, opacity:.55}, L.stacks);
+  const g = el('g',{}, L.stacks);
+  STACKS[z.id] = {base, g, ghost, gx:gx+1.15, gy:gy+0.35};
+}
+function drawStack(st, h, color, ghostH){
+  st.g.innerHTML='';
+  const {gx,gy} = st;
+  const w=0.55, d=0.45;
+  const A=iso(gx,gy,h), B=iso(gx+w,gy,h), C=iso(gx+w,gy+d,h), E=iso(gx,gy+d,h);
+  const B0=iso(gx+w,gy,0), C0=iso(gx+w,gy+d,0), E0=iso(gx,gy+d,0);
+  el('polygon',{points:P([E,C,C0,E0]), fill:color, opacity:.72}, st.g);
+  el('polygon',{points:P([B,C,C0,B0]), fill:color, opacity:.5}, st.g);
+  el('polygon',{points:P([A,B,C,E]), fill:color}, st.g);
+  const gA=iso(gx,gy,ghostH), gB=iso(gx+w,gy,ghostH), gC=iso(gx+w,gy+d,ghostH), gE=iso(gx,gy+d,ghostH);
+  st.ghost.setAttribute('points', P([gA,gB,gC,gE]));
+  st.ghost.style.display = Math.abs(ghostH-h)>2 ? '' : 'none';
+}
+const dsColor = ds => ds<45 ? 'var(--warn-mk)' : ds>75 ? 'var(--crit)' : 'var(--good-mk)';
+
+/* 흐름 엣지 */
+const FLOWS = []; // {path, len, vol, kind, from, to, el}
+function curve(a, b, sag=18){
+  const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2 - sag;
+  return `M${a[0]},${a[1]} Q${mx},${my} ${b[0]},${b[1]}`;
+}
+function addFlow(from, to, kind, sag, lead){
+  const a = NODE_META[from].anchor, b = NODE_META[to].anchor;
+  const cls = kind==='cmd'?'cmdEdge': kind==='fb'?'fbEdge':'flowEdge';
+  const p = el('path',{d:curve(a,b,sag ?? 18), class:cls, 'data-f':from, 'data-t':to}, L.edges);
+  const f = {from, to, kind, el:p, len:p.getTotalLength(), vol:0, leadDays:lead||0};
+  FLOWS.push(f); return f;
+}
+/* 물류: 한국 → 수출항 → 수입항 → 지역 / 미국·멕시코 공장 → 지역
+   leadDays = 실제 리드타임(일) — 파티클 통과 시간·운송중 재고 계산에 사용 */
+addFlow('KR-1','PYT','mat',10,2); addFlow('KR-2','PYT','mat',10,2);
+const SHIP = addFlow('PYT','PORT','mat',34,21);            // 해상 18일 + 항만 3일
+const ORIGIN_OF = {'KR-1':'PORT','KR-2':'PORT','US-GA':'US-GA','US-SV':'US-SV','MX-MT':'MX-MT'};
+const LEAD_O = {PORT:9, 'US-GA':3, 'US-SV':3, 'MX-MT':6};  // 철도 9d / 트럭·철도 3d / 국경 통관 6d
+const CORR = {}; // origin → zone → flow
+for(const o of ['PORT','US-GA','US-SV','MX-MT']){
+  CORR[o] = {};
+  for(const z of ZONES) CORR[o][z.id] = addFlow(o, z.id, 'mat', o==='PORT'?26:20, LEAD_O[o]);
+}
+const RETAIL_F = {};
+for(const z of ZONES) RETAIL_F[z.id] = addFlow(z.id, 'CUST', 'mat', 14, 2);
+addFlow('CUST','HQ','fb', 60, 30);                         // 피드백은 월 배치
+for(const pid of ['PYT','US-GA','US-SV','MX-MT']) addFlow('HQ', pid, 'cmd', 30);
+/* 레인 리드타임·운송중 재고는 항만 노드 선택 시 정보 칩(#nodeInfo)에 구간 분해로 표시 —
+   SVG 좌표 고정 라벨은 노드 텍스트와 겹쳐 사용하지 않는다 (엣지 호버 툴팁은 유지) */
+
+/* 줌·팬 (5px 클릭 판별) */
+let VB=[0,0,1240,660], suppressClick=false;
+const setVB = () => scene.setAttribute('viewBox', VB.join(' '));
+scene.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const k = e.deltaY<0 ? 0.85 : 1/0.85;
+  const r = scene.getBoundingClientRect();
+  const mx = VB[0] + (e.clientX-r.left)/r.width*VB[2];
+  const my = VB[1] + (e.clientY-r.top)/r.height*VB[3];
+  const w = clamp(VB[2]*k, 260, 2600), h = w*660/1240;
+  VB = [mx-(mx-VB[0])*w/VB[2], my-(my-VB[1])*h/VB[3], w, h];
+  setVB();
+},{passive:false});
+{
+  let pan=null;
+  scene.addEventListener('pointerdown', e=>{
+    pan={x:e.clientX, y:e.clientY, vb:VB.slice(), moved:false, pid:e.pointerId};
+    // 주의: 여기서 바로 setPointerCapture하면 click 타깃이 scene으로 재지정되어
+    // 노드 클릭이 죽는다 (Chrome 포인터 캡처) → 드래그 확정 후에만 캡처
+  });
+  scene.addEventListener('pointermove', e=>{
+    if(!pan) return;
+    const dx=e.clientX-pan.x, dy=e.clientY-pan.y;
+    if(!pan.moved && (Math.abs(dx)>5||Math.abs(dy)>5)){
+      pan.moved=true;
+      try{ scene.setPointerCapture(pan.pid); }catch(_){}
+    }
+    if(pan.moved){
+      scene.classList.add('panning');
+      const r = scene.getBoundingClientRect();
+      VB=[pan.vb[0]-dx/r.width*VB[2], pan.vb[1]-dy/r.height*VB[3], pan.vb[2], pan.vb[3]];
+      setVB();
+    }
+  });
+  scene.addEventListener('pointerup', e=>{
+    suppressClick = !!(pan && pan.moved);
+    pan=null; scene.classList.remove('panning');
+    setTimeout(()=>suppressClick=false, 60);
+  });
+}
+setVB();
+/* ═══════════════ PART C · 월 뷰 + 씬 업데이트 + 파티클 ═══════════════ */
+let SIM = null, BASE_SIM = null;
+let cursor = NOW;
+let focusZone = null;   // 씬에서 선택된 딜러 지역 — KPI·차트·워터폴이 이 지역 슬라이스로 전환
+let selNode = null;     // 클릭 선택된 노드 — 좌상단 정보 칩(#nodeInfo)에 요약 표시
+// 지역 포커스 해제 + 전사 관점 재렌더 — 빈 곳 클릭·ESC·브리핑/분석/워게이밍 진입에서 공통 사용
+function clearFocusZone(){
+  if(!focusZone) return;
+  focusZone = null;
+  updateScene(cursor); renderKpis(); renderMainChart(); renderWaterfall();
+}
+
+function monthView(i, sim){
+  if(i<=NOW){
+    const a = D.actual[i];
+    return {models:a.models, csi:a.csi, sim:false};
+  }
+  const mo = (sim||SIM)[i-NOW-1];
+  return {models:mo.models, csi:mo.csi, sim:true, capHit:mo.capHit};
+}
+function zoneAgg(mv, zid){
+  let stock=0, retail=0, ws=0, op=0;
+  for(const md of MODELS){
+    const m = mv.models[md.id], w = ZW[md.id][zid];
+    stock += m.stock*w; retail += m.retail*w; ws += m.ws*w; op += m.op*w;
+  }
+  return {stock, retail, ws, op, ds: stock/Math.max(retail/30.4,1)};
+}
+
+function updateScene(i){
+  const mv = monthView(i), bv = i<=NOW ? mv : monthView(i, BASE_SIM);
+  // 지역 스택 + 라벨 — 기둥 높이·숫자·색은 선택 KPI(mainKey) 기준, 고스트=베이스라인
+  const zv = (agg, zid, base) =>
+    mainKey==='retail' ? agg.retail : mainKey==='op' ? agg.op : mainKey==='ds' ? agg.ds
+    : sliceVal(i, zid, 'csi', emptyAF(), base ? BASE_SIM : undefined);
+  const zrows = ZONES.map(z=>{
+    const a = zoneAgg(mv, z.id), b = zoneAgg(bv, z.id);
+    return {z, a, v: zv(a, z.id, false), vb: zv(b, z.id, true)};
+  });
+  const zds = Object.fromEntries(zrows.map(r=>[r.z.id, r.a.ds]));   // 재고부족 정체 판정용
+  const zH = mainKey==='csi' ? (v => (v-80)/10*95)
+    : (mx => v => v/mx*95)(Math.max(1, ...zrows.flatMap(r=>[r.v, r.vb])));
+  const zColor = (v, vb) =>
+    mainKey==='ds' ? dsColor(v)
+    : mainKey==='csi' ? (v<84 ? 'var(--crit)' : v<86 ? 'var(--warn-mk)' : 'var(--good-mk)')
+    : v>=vb ? 'var(--good-mk)' : (vb>0 && v>=vb*0.85) ? 'var(--warn-mk)' : 'var(--crit)';
+  for(const r of zrows){
+    drawStack(STACKS[r.z.id], clamp(zH(r.v),4,95), zColor(r.v,r.vb), clamp(zH(r.vb),4,95));
+    NODE_META[r.z.id].sub.textContent =
+      mainKey==='retail' ? `판매 ${fmt(r.v)}대/월`
+      : mainKey==='op' ? `손익 ${fmtM(r.v)}/월`
+      : mainKey==='csi' ? `CSI ${r.v.toFixed(1)}`
+      : `재고 ${fmt(r.a.stock)} · DS ${Math.round(r.a.ds)}일`;
+    NODE_META[r.z.id].lbl.setAttribute('fill', focusZone===r.z.id ? 'var(--scnA)' : 'var(--ink)');
+    NODE_META[r.z.id].sub.setAttribute('fill', focusZone===r.z.id ? 'var(--scnA)' : 'var(--muted)');
+  }
+  document.getElementById('sceneHint').textContent =
+    `휠 줌 · 드래그 팬 · 노드 클릭=드릴 · 딜러 클릭=지역 포커스(차트·워터폴 연동, 재클릭 해제)` +
+    ` · 기둥=${KPIS.find(k=>k.key===mainKey).name}` +
+    (mainKey==='ds' ? ' (황<45 · 녹 45–75 · 적>75)' : ' (녹=베이스라인 이상)') +
+    ' · 회색 고스트=베이스라인 · 엣지 점멸: 적=케파 병목 · 황=재고<45일';
+  // 공장
+  for(const p of PLANTS){
+    const ms = MODELS.filter(m=>m.plant===p.id);
+    const prod = ms.reduce((s,m)=>s+mv.models[m.id].ws,0);
+    const cap = i>NOW ? plantCap(p.id, levers) : p.cap;
+    const util = prod/cap*100;
+    const meta = NODE_META[p.id];
+    meta.sub.textContent = `가동률 ${Math.round(util)}% · ${fmt(prod)}대`;
+    const hit = mv.capHit && mv.capHit.includes(p.id);
+    meta.sub.setAttribute('fill', hit ? 'var(--crit)' : util>96 ? 'var(--warn)' : 'var(--muted)');
+    meta.lbl.setAttribute('fill', hit ? 'var(--crit)' : 'var(--ink)');
+  }
+  // 항만·HQ·고객
+  const krWs = ['LUM','NOV'].reduce((s,id)=>s+mv.models[id].ws,0);
+  NODE_META.PYT.sub.textContent = `선적 ${fmt(krWs)}대/월`;
+  NODE_META.PORT.sub.textContent = `파이프라인 계 ${fmt(krWs*32/30.4)}대`;
+  const lvTxt = [];
+  if(levers.price) lvTxt.push(`가격${levers.price>0?'+':''}${levers.price}%`);
+  if(levers.inc) lvTxt.push(`인센${levers.inc>0?'+':''}$${levers.inc}`);
+  if(levers.mkt) lvTxt.push(`마케팅${levers.mkt>0?'+':''}${levers.mkt}%`);
+  if(levers.dsT!==60) lvTxt.push(`DS ${levers.dsT}일`);
+  if(levers.ev) lvTxt.push(`EV+${levers.ev}%`);
+  NODE_META.HQ.sub.textContent = lvTxt.length? lvTxt.join(' · ') : '기본 전략 (레버 무변경)';
+  NODE_META.HQ.sub.setAttribute('fill', lvTxt.length? 'var(--scnA)' : 'var(--muted)');
+  NODE_META.CUST.sub.textContent = `CSI ${mv.csi.toFixed(1)}`;
+  NODE_META.CUST.sub.setAttribute('fill', mv.csi<86 ? 'var(--warn)' : 'var(--muted)');
+  // 흐름 볼륨 → 두께·파티클 수
+  const setVol = (f, vol, tip) => {
+    f.vol = vol;
+    f.el.setAttribute('stroke-width', clamp(0.8 + vol/3800, 0.8, 4.2).toFixed(1));
+    f.el.querySelector('title')?.remove();
+    const t = el('title',{},f.el);
+    t.textContent = tip + (f.leadDays>=3 ? ` · 리드 ${f.leadDays}일 · 운송중 ≈${fmt(vol*f.leadDays/30.4)}대` : '');
+  };
+  setVol(FLOWS[0], mv.models.LUM.ws, `국내 1공장 → 수출항 · ${fmt(mv.models.LUM.ws)}대/월 (Lumen EV)`);
+  setVol(FLOWS[1], mv.models.NOV.ws, `국내 2공장 → 수출항 · ${fmt(mv.models.NOV.ws)}대/월 (Nova)`);
+  setVol(SHIP, krWs, `해상 운송 18일 + 항만 3일 · ${fmt(krWs)}대/월`);
+  const originModels = {PORT:['LUM','NOV'], 'US-GA':['TRN','VST'], 'US-SV':['AUR'], 'MX-MT':['MRD']};
+  for(const o in CORR){
+    for(const z of ZONES){
+      const vol = originModels[o].reduce((s,id)=>s+mv.models[id].ws*ZW[id][z.id],0);
+      setVol(CORR[o][z.id], vol, `${o==='PORT'?'수입항':o} → ${z.name} · ${fmt(vol)}대/월`);
+    }
+  }
+  for(const z of ZONES){
+    const a = zoneAgg(mv, z.id);
+    setVol(RETAIL_F[z.id], a.retail, `${z.name} 소매 판매 · ${fmt(a.retail)}대/월`);
+  }
+  // 병목·정체: 케파 초과 공장의 출하 엣지=적 점멸+컨보이, DS<45 지역의 소매 엣지=황 점멸
+  for(const f of FLOWS){
+    if(f.kind!=='mat') continue;
+    f.jam = !!(mv.capHit && mv.capHit.includes(f.from));
+    f.starve = f.to==='CUST' && zds[f.from] < 45;
+    f.el.classList.toggle('jam', f.jam);
+    f.el.classList.toggle('starve', !f.jam && f.starve);
+  }
+  document.getElementById('simWm').classList.toggle('on', i>NOW);
+  if(selNode && NODE_META[selNode]){
+    NODE_META[selNode].lbl.setAttribute('fill','var(--scnA)');   // 선택 노드 이름 하이라이트 유지
+    renderNodeInfo();                                            // 칩은 커서 월을 따라 갱신
+  }
+}
+
+/* 빈 영역 클릭 = 선택 해제 (노드 클릭은 노드 핸들러가 처리, 드래그 직후 클릭은 무시) */
+scene.addEventListener('click', e=>{
+  if(suppressClick) return;
+  if(e.target.closest && e.target.closest('.hitNode')) return;
+  if(selNode){
+    setSelNode(null);
+    closeDrill();
+  }
+  clearFocusZone();   // 지역 포커스도 함께 해제 — KPI·차트·워터폴을 전사 관점으로 복원 (ESC와 동일)
+});
+
+/* 선택 상태 전환 — 외곽선(sel 클래스) + 이름 라벨 색 + 상세 칩 */
+function setSelNode(id){
+  if(selNode && NODE_META[selNode]) NODE_META[selNode].lbl.removeAttribute('fill');
+  selNode = id;
+  for(const k in NODE_META) NODE_META[k].g.classList.toggle('sel', k===id);
+  if(id){ NODE_META[id].lbl.setAttribute('fill','var(--scnA)'); renderNodeInfo(); }
+  else document.getElementById('nodeInfo').classList.remove('on');
+}
+
+/* 선택 노드 정보 칩 — 노드별 핵심 수치 + 1 depth 인사이트 분해 */
+const ZONE_STATES = {   // 지역 내 State 판매 가중 (프로토타입 가상 상수)
+  west:[['CA',.46],['WA',.15],['AZ',.12],['CO',.10],['OR',.09],['NV',.08]],
+  central:[['IL',.24],['OH',.20],['MI',.16],['MN',.14],['MO',.14],['WI',.12]],
+  northeast:[['NY',.30],['NJ',.18],['PA',.17],['MA',.15],['CT',.10],['MD',.10]],
+  southeast:[['FL',.34],['GA',.22],['NC',.16],['VA',.14],['SC',.08],['TN',.06]],
+  south:[['TX',.42],['LA',.15],['AL',.13],['OK',.12],['AR',.10],['MS',.08]],
+};
+function niRows(rows, unit, f=fmt){
+  const mx = Math.max(1, ...rows.map(r=>r[1]));
+  return rows.map(([n,v])=>
+    `<div class="niRow"><span title="${n}">${n}</span><div class="bar"><i style="width:${clamp(v/mx*100,2,100).toFixed(0)}%"></i></div><b>${f(v)}${unit}</b></div>`).join('');
+}
+function renderNodeInfo(){
+  const box = document.getElementById('nodeInfo');
+  if(!selNode || !NODE_META[selNode]){ box.classList.remove('on'); return; }
+  const id = selNode, kind = NODE_META[id].kind;
+  const mv = monthView(cursor);
+  const krWs = ['LUM','NOV'].reduce((s,m)=>s+mv.models[m].ws,0);
+  const x = `<span class="nx" title="닫기">✕</span>`;
+  let h = '';
+  if(kind==='zone'){
+    const z = ZONES.find(z=>z.id===id), a = zoneAgg(mv, id);
+    const csi = sliceVal(cursor, id, 'csi', emptyAF());
+    const bpR = bpZone(cursor, id, 'retail');
+    const dR = bpR ? (a.retail-bpR)/bpR*100 : 0;
+    h = `<b>${z.name} 딜러</b> · ${z.dealers}개점 ${x}<br>
+      판매 ${fmt(a.retail)}대/월 <span class="${dR>=0?'up':'dn'}">(${dR>=0?'+':''}${dR.toFixed(1)}% vs BP)</span> · 손익 ${fmtM(a.op)}/월<br>
+      재고 ${fmt(a.stock)}대 · DS ${Math.round(a.ds)}일 · CSI ${csi.toFixed(1)}
+      <div class="niH">State별 판매</div>` +
+      niRows(ZONE_STATES[id].map(([n,w])=>[n, a.retail*w]), '대');
+  } else if(kind==='plant'){
+    const p = PLANTS.find(p=>p.id===id), ms = MODELS.filter(m=>m.plant===id);
+    const prod = ms.reduce((s,m)=>s+mv.models[m.id].ws,0);
+    const cap = cursor>NOW ? plantCap(id, levers) : p.cap;
+    const hit = mv.capHit && mv.capHit.includes(id);
+    h = `<b>${p.name}</b> ${x}<br>
+      생산 ${fmt(prod)}대/월 · 가동률 <span style="color:${hit?'var(--crit)':prod/cap>0.96?'var(--warn)':'var(--good)'}">${Math.round(prod/cap*100)}%${hit?' · 케파 병목':''}</span><br>
+      실효 케파 ${fmt(cap)}대/월${RAMP_CAP[id]?' (램프업)':''} · ${p.ship} · 리드 ${p.lead_m}개월
+      <div class="niH">차종별 생산</div>` +
+      niRows(ms.map(m=>[m.name, mv.models[m.id].ws]), '대');
+  } else if(kind==='port' && id==='PYT'){
+    h = `<b>국내 수출항</b> ${x}<br>선적 ${fmt(krWs)}대/월 · 선박 800대/척 · 월 ${Math.ceil(krWs/800)}회
+      <div class="niH">물류 파이프라인 — 구간별 운송중 재고</div>` +
+      niRows([['공장→항 2d', krWs*2/30.4], ['해상 18d', krWs*18/30.4],
+              ['항만 3d', krWs*3/30.4], ['철도 9d', krWs*9/30.4]], '대') +
+      `<div class="niRow"><span>파이프라인 계</span><div class="bar"></div><b>${fmt(krWs*32/30.4)}대</b></div>`;
+  } else if(kind==='port'){
+    h = `<b>서부 수입항</b> ${x}<br>하역 ${fmt(krWs)}대/월 · 내륙 철도 9일 · 운송중 ${fmt(krWs*9/30.4)}대
+      <div class="niH">지역별 철도 배분</div>` +
+      niRows(ZONES.map(z=>[z.name, ['LUM','NOV'].reduce((s,m)=>s+mv.models[m].ws*ZW[m][z.id],0)]), '대');
+  } else if(kind==='hq'){
+    const chg = LEVER_DEFS.filter(d=>levers[d.k]!==DEFAULT_LEVERS[d.k]).map(d=>`${d.name} ${d.f(levers[d.k])}`);
+    h = `<b>미국판매법인 HQ</b> ${x}<br>레버: ${chg.length ? chg.join(' · ') : '기본 전략 (무변경)'}<br>
+      등록 시나리오 ${SCENARIOS.length}개${COMMIT ? ` · ★커밋: ${COMMIT.name}` : ' · 커밋 없음'}
+      <div class="niH">이달 KPI vs BP</div>` +
+      KPIS.map(k=>{
+        const v = kpiValue(k.key, cursor), bp = bpValue(k.key, cursor);
+        const d = k.key==='csi'||k.key==='ds' ? v-bp : (v-bp)/Math.abs(bp)*100;
+        const good = k.key==='ds' ? Math.abs(v-60)<=Math.abs(bp-60) : d>=0;
+        const dTxt = k.key==='csi' ? (d>=0?'+':'')+d.toFixed(1)+'pt' : k.key==='ds' ? (d>=0?'+':'')+d.toFixed(0)+'일' : (d>=0?'+':'')+d.toFixed(1)+'%';
+        return `<div class="niRow"><span>${k.name}</span><div class="bar"></div><b>${k.f(v)}</b><span class="${good?'up':'dn'}" style="width:52px;text-align:right">${dTxt}</span></div>`;
+      }).join('');
+  } else {
+    const ci = D.csi_internal[Math.min(cursor, NOW)];
+    const acts = D.csi_actions.filter(a=>Object.keys(a.months).some(y=>y<=M.months[Math.min(cursor,NOW)])).length;
+    h = `<b>고객 · CSI</b> ${x}<br>외부 공시 CSI ${mv.csi.toFixed(1)} · 내부지수 ${ci.total}/100 (${ci.ym}) · 개선활동 ${acts}건
+      <div class="niH">내부지수 구성 (100점)</div>` +
+      niRows([['품질·클레임', ci.quality], ['커넥티드·OTA', ci.connected],
+              ['서비스 예약', ci.service], ['인도 경험', ci.delivery]], '') +
+      `<div class="niH">지역별 CSI</div>` +
+      niRows(ZONES.map(z=>[z.name, sliceVal(cursor, z.id, 'csi', emptyAF())]), '', v=>v.toFixed(1));
+  }
+  h += `<div class="niH" style="border:none;opacity:.7">${M.months[cursor]} ${cursor>NOW?'시뮬':'실적'} · 상세 = 우측 드릴 패널</div>`;
+  box.innerHTML = h;
+  box.classList.add('on');
+  box.querySelector('.nx').onclick = ()=>setSelNode(null);
+}
+
+/* 파티클 (위상 파라메트릭 — 파티클별 상태 없음) */
+const MAXP = 6;
+for(const f of FLOWS){
+  if(f.kind==='cmd') continue;
+  f.parts = [];
+  f.fill0 = f.kind==='fb' ? 'var(--fb)' : (f.to==='CUST' ? 'var(--good)' : '#7fa6cc');
+  for(let k=0;k<MAXP;k++)
+    f.parts.push(el('circle',{r: f===SHIP?3.4:2.1, fill:f.fill0, class:'particle', opacity:0}, L.particles));
+}
+let rafOn = true;
+function tickParticles(t){
+  for(const f of FLOWS){
+    if(!f.parts) continue;
+    const n = f.kind==='fb' ? 2 : f.vol>0 ? clamp(Math.round(f.vol/2200)+1, 1, MAXP) : 0;
+    // 통과 시간 ∝ 실제 리드타임 (400ms/일) — 해상 8.4s ≫ 철도 3.6s > 국경 2.4s > 트럭 1.6s
+    let dur = f.leadDays ? clamp(f.leadDays*400, 1600, 12000) : 3200;
+    if(f.jam) dur *= 1.9;                       // 병목: 1.9배 감속
+    const spread = f.jam ? 0.14 : 1;            // 병목: 등간격 대신 컨보이(뭉침)
+    const fill = f.jam ? 'var(--crit)' : f.starve ? 'var(--warn)' : f.fill0;
+    for(let k=0;k<MAXP;k++){
+      const c = f.parts[k];
+      if(k>=n){ c.setAttribute('opacity',0); continue; }
+      const ph = ((t/dur) + (k/n)*spread) % 1;
+      const pt = f.el.getPointAtLength(ph*f.len);
+      c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y);
+      c.setAttribute('fill', fill);
+      c.setAttribute('opacity', .85);
+    }
+  }
+  if(rafOn) requestAnimationFrame(tickParticles);
+}
+document.addEventListener('visibilitychange', ()=>{
+  const was = rafOn; rafOn = !document.hidden;
+  if(rafOn && !was) requestAnimationFrame(tickParticles);
+});
+requestAnimationFrame(tickParticles);
+/* ═══════════════ PART D · KPI 타일 + 차트 ═══════════════ */
+const KPIS = [
+  {key:'retail', name:'판매량',      f:v=>fmt(v)+'대'},
+  {key:'op',     name:'영업이익',    f:v=>(v<0?'-':'')+'$'+Math.abs(v/1e6).toFixed(0)+'M'},
+  {key:'csi',    name:'고객만족도',  f:v=>v.toFixed(1)},
+  {key:'ds',     name:'Days Supply', f:v=>Math.round(v)+'일'},
+];
+let mainKey = 'retail';
+const kpiBox = document.getElementById('kpiTiles');
+
+function kpiValue(key, i, sim){
+  const mv = monthView(i, sim);
+  if(key==='csi') return mv.csi;
+  let retail=0, stock=0, op=0;
+  for(const id of MID){ const m=mv.models[id]; retail+=m.retail; stock+=m.stock; op+=m.op; }
+  if(key==='retail') return retail;
+  if(key==='op') return op;
+  return stock/Math.max(retail/30.4,1);
+}
+function bpValue(key, i){
+  if(key==='csi') return 88.5;
+  if(key==='ds') return 60;
+  let v=0; for(const id of MID) v += D.bp[i].models[id][key==='op'?'op':'retail'];
+  return v;
+}
+function bpZone(i, zid, key){   // 지역 포커스용 BP 슬라이스 (계획 믹스 = ZW 가중)
+  if(key==='csi') return 88.5;
+  if(key==='ds') return 60;
+  let v=0; for(const md of MODELS) v += D.bp[i].models[md.id][key==='op'?'op':'retail'] * ZW[md.id][zid];
+  return v;
+}
+function spark(series, w=178, h=26){
+  const mn=Math.min(...series), mx=Math.max(...series), sp=mx-mn||1;
+  const x=i=>i/(series.length-1)*w, y=v=>h-2-(v-mn)/sp*(h-4);
+  let past='', fut='';
+  series.forEach((v,i)=>{
+    const pt=`${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+    if(i<=NOW) past+=(past?' L':'M')+pt;
+    if(i>=NOW) fut+=(fut?' L':'M')+pt;
+  });
+  const nx=x(NOW).toFixed(1);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <line x1="${nx}" y1="0" x2="${nx}" y2="${h}" stroke="var(--line)"/>
+    <path d="${past}" fill="none" stroke="var(--actual)" stroke-width="1.4"/>
+    <path d="${fut}" fill="none" stroke="var(--scnA)" stroke-width="1.4" stroke-dasharray="3 3"/></svg>`;
+}
+const anaOpen = ()=>document.getElementById('ana').classList.contains('open');
+const anyFilter = ()=>Object.values(AF).some(a=>a.length);
+function renderKpis(){
+  // 상세 분석 필터가 활성이면 KPI도 슬라이스 값 + 상향식 BP 슬라이스 대비로 전환
+  const filtered = anaOpen() && anyFilter();
+  const fz = !filtered && focusZone ? focusZone : null;   // 상세 분석 필터가 우선
+  const band = document.getElementById('kpiFilterBand');
+  band.style.display = (filtered || fz) ? '' : 'none';
+  if(filtered) band.textContent = '필터 적용: ' + filterSummary();
+  else if(fz) band.textContent = '지역 포커스: ' + ZONES.find(z=>z.id===fz).name + ' 딜러 (노드 재클릭=해제)';
+  kpiBox.innerHTML='';
+  for(const k of KPIS){
+    const v = filtered ? natSlice(cursor, k.key) : fz ? sliceVal(cursor, fz, k.key, emptyAF()) : kpiValue(k.key, cursor);
+    const bp = filtered ? bpSliceNat(cursor, k.key) : fz ? bpZone(cursor, fz, k.key) : bpValue(k.key, cursor);
+    const d = k.key==='csi'||k.key==='ds' ? v-bp : (v-bp)/Math.abs(bp)*100;
+    const good = k.key==='ds' ? Math.abs(v-60)<Math.abs(bp-60)+0.001 : d>=0;
+    const dTxt = k.key==='csi' ? (d>=0?'+':'-')+Math.abs(d).toFixed(1)+'pt'
+               : k.key==='ds' ? (d>=0?'+':'-')+Math.abs(d).toFixed(0)+'일'
+               : (d>=0?'+':'-')+Math.abs(d).toFixed(1)+'%';
+    const series = filtered ? Array.from({length:N}, (_,i)=>natSlice(i, k.key))
+      : fz ? Array.from({length:N}, (_,i)=>sliceVal(i, fz, k.key, emptyAF()))
+      : seriesOf(SIM, k.key);
+    const tile = document.createElement('div');
+    tile.className = 'kpi'+(mainKey===k.key?' sel':'');
+    tile.innerHTML = `<div class="t"><span>${k.name}</span><span>${cursor>NOW?'시뮬':'실적'}${filtered?'·필터':fz?'·'+ZONES.find(z=>z.id===fz).name:''}</span></div>
+      <div class="v">${k.f(v)}</div>
+      <div class="d"><span class="${good?'up':'dn'}">${dTxt}</span> <span class="vs">vs BP</span></div>
+      ${spark(series)}`;
+    tile.onclick = ()=>{
+      mainKey=k.key;
+      updateScene(cursor);   // 씬의 지역 기둥·라벨도 선택 지표로 전환
+      renderKpis(); renderMainChart(); renderWaterfall();
+      if(document.getElementById('ana').classList.contains('open')){ anaYz=null; refreshScan(); renderAna(); }
+    };
+    kpiBox.appendChild(tile);
+  }
+}
+
+/* 메인 차트 */
+const mc = document.getElementById('mainChart');
+const yz = {};            // 지표(×지역 포커스)별 Y축 줌 도메인 [lo,hi]
+const yzk = () => mainKey + (focusZone||'');
+let mcDom = null;         // 마지막 렌더의 Y 도메인 (휠 핸들러용)
+function renderMainChart(){
+  const box = document.getElementById('mainChartBox');
+  const W = Math.max(box.clientWidth-14, 300);
+  const H = box.closest('#maxOverlay') ? Math.max(box.clientHeight-40, 200) : 200;   // 확장 시 세로도 채움
+  mc.setAttribute('viewBox',`0 0 ${W} ${H}`); mc.setAttribute('width',W); mc.setAttribute('height',H);
+  mc.innerHTML='';
+  const fz = focusZone;
+  document.getElementById('mcTitle').textContent = KPIS.find(k=>k.key===mainKey).name
+    + (fz ? ` — ${ZONES.find(z=>z.id===fz).name} 딜러` : '');
+  const padL=46, padR=8, padT=8, padB=18;
+  const zs = sim => Array.from({length:N}, (_,i)=>sliceVal(i, fz, mainKey, emptyAF(), sim));
+  const scn = fz ? zs() : seriesOf(SIM, mainKey);
+  const bp = fz ? Array.from({length:N}, (_,i)=>bpZone(i, fz, mainKey)) : bpSeries(mainKey);
+  const visScn = SCENARIOS.filter(s=>s.visible).map(s=>({...s, series: fz ? zs(s.sim) : seriesOf(s.sim, mainKey)}));
+  let lo=Infinity, hi=-Infinity;
+  const eat = s=>s.forEach(v=>{ lo=Math.min(lo,v); hi=Math.max(hi,v); });
+  eat(scn); eat(bp); visScn.forEach(s=>eat(s.series.slice(NOW)));
+  for(let i=NOW+1;i<N;i++){ const b=bandPct(i-NOW); lo=Math.min(lo,scn[i]*(1-b)); hi=Math.max(hi,scn[i]*(1+b)); }
+  const sp=hi-lo||1; lo-=sp*0.06; hi+=sp*0.06;
+  if(yz[yzk()]) [lo,hi]=yz[yzk()];
+  mcDom = {lo, hi, padL, padR, padT, padB, W, H};
+  mcCache = {scn, bp, visScn};
+  const X=i=>padL+i/(N-1)*(W-padL-padR), Y=v=>padT+(1-(v-lo)/(hi-lo))*(H-padT-padB);
+  // 플롯 영역 클립 (Y줌 시 라인이 축 밖으로 나가지 않게)
+  const defs = el('defs',{},mc);
+  const cp = el('clipPath',{id:'mcClip'},defs);
+  el('rect',{x:padL, y:padT, width:W-padL-padR, height:H-padT-padB},cp);
+  // 미래 워시 + NOW 라인
+  el('rect',{x:X(NOW), y:padT, width:X(N-1)-X(NOW), height:H-padT-padB, fill:'rgba(121,184,255,.04)'}, mc);
+  el('line',{x1:X(NOW), y1:padT, x2:X(NOW), y2:H-padB, stroke:'var(--crit)', 'stroke-width':1, opacity:.7}, mc);
+  el('text',{x:X(NOW)+3, y:padT+9, class:'badge', fill:'var(--crit)'}, mc).textContent='NOW';
+  // 그리드 + y축
+  for(let g=0; g<=3; g++){
+    const v = lo + (hi-lo)*g/3, y = Y(v);
+    el('line',{x1:padL, y1:y, x2:W-padR, y2:y, stroke:'var(--line)', 'stroke-width':.6}, mc);
+    el('text',{x:padL-5, y:y+3, 'text-anchor':'end', class:'badge'}, mc).textContent =
+      mainKey==='op' ? '$'+(v/1e6).toFixed(0)+'M' : mainKey==='retail' ? (v/1000).toFixed(0)+'k' : v.toFixed(0);
+  }
+  for(let i=0;i<N;i+=6)
+    el('text',{x:X(i), y:H-5, 'text-anchor':'middle', class:'badge'}, mc).textContent = M.months[i];
+  // 팬 밴드 (검토중 시나리오 불확실성) + 라인 — 클립 그룹 안에
+  const plot = el('g',{'clip-path':'url(#mcClip)'}, mc);
+  let up='', dn=[];
+  for(let i=NOW;i<N;i++){
+    const b=i===NOW?0:bandPct(i-NOW);
+    up+=(up?' L':'M')+X(i).toFixed(1)+','+Y(scn[i]*(1+b)).toFixed(1);
+    dn.push(X(i).toFixed(1)+','+Y(scn[i]*(1-b)).toFixed(1));
+  }
+  el('path',{d:up+' L'+dn.reverse().join(' L')+' Z', fill:'var(--scnA)', opacity:.12}, plot);
+  const line = (s, a, b, attrs) => {
+    let d=''; for(let i=a;i<=b;i++) d+=(d?' L':'M')+X(i).toFixed(1)+','+Y(s[i]).toFixed(1);
+    el('path',{d, fill:'none', ...attrs}, plot);
+  };
+  line(bp, 0, N-1, {stroke:'var(--bp)','stroke-width':1});
+  line(scn, 0, NOW, {stroke:'var(--actual)','stroke-width':2});
+  for(const s of visScn)
+    line(s.series, NOW, N-1, {stroke:s.color,'stroke-width':1.5,'stroke-dasharray':'5 4'});
+  line(scn, NOW, N-1, {stroke:'var(--scnA)','stroke-width':1.8,'stroke-dasharray':'5 4'});
+  // 범례 (등록 시나리오)
+  document.getElementById('lgdScn').innerHTML = visScn.map(s=>
+    `<span class="lgd"><i style="border-color:${s.color};border-top-style:dashed"></i>${s.name}</span>`).join('');
+  // Y줌/팬 상태 표시 (버튼 = 초기화)
+  const yzBtn = document.getElementById('yzHint');
+  yzBtn.textContent = yz[yzk()] ? 'Y축 초기화 ↺' : '휠=Y줌 · 드래그=이동 · 클릭=이동';
+  yzBtn.classList.toggle('on', !!yz[yzk()]);
+  // 커서
+  el('line',{x1:X(cursor), y1:padT, x2:X(cursor), y2:H-padB, stroke:'var(--edge-hi)', 'stroke-width':1, opacity:.8}, mc);
+  el('circle',{cx:X(cursor), cy:Y(scn[cursor]), r:3, fill:'var(--edge-hi)'}, plot);
+  mc.style.cursor='crosshair';
+}
+let mcCache = null;
+document.getElementById('yzHint').onclick = ()=>{ delete yz[yzk()]; renderMainChart(); };
+
+/* 메인 차트 상호작용: 휠=Y줌 · 세로 드래그=Y팬 · 클릭=월 이동 · 호버=툴팁 */
+const tipShow = (tip, box, e, html) => {
+  tip.innerHTML = html;
+  tip.style.display = 'block';
+  const br = box.getBoundingClientRect();
+  let x = e.clientX - br.left + 16, y = e.clientY - br.top + 8;
+  if(x + tip.offsetWidth > br.width - 8) x = e.clientX - br.left - tip.offsetWidth - 12;
+  if(y + tip.offsetHeight > br.height - 4) y = br.height - tip.offsetHeight - 4;
+  tip.style.left = x+'px'; tip.style.top = Math.max(2,y)+'px';
+};
+const tipHide = tip => { tip.style.display='none'; };
+function chartHoverIdx(svg, dom, e){
+  const r = svg.getBoundingClientRect();
+  const x = (e.clientX - r.left)/r.width * dom.W;
+  return clamp(Math.round((x-dom.padL)/(dom.W-dom.padL-dom.padR)*(N-1)), 0, N-1);
+}
+function hoverLine(svg, dom, i, id){
+  svg.querySelector('#'+id)?.remove();
+  const X = dom.padL + i/(N-1)*(dom.W-dom.padL-dom.padR);
+  el('line',{id, x1:X, x2:X, y1:dom.padT, y2:dom.H-dom.padB,
+    stroke:'var(--edge)', 'stroke-width':1, 'stroke-dasharray':'2 3'}, svg);
+}
+{
+  const box = document.getElementById('mainChartBox');
+  const tip = document.getElementById('mcTip');
+  let pan = null;
+  mc.addEventListener('pointerdown', e=>{
+    if(!mcDom) return;
+    pan = {x:e.clientX, y:e.clientY, dom:[mcDom.lo, mcDom.hi], moved:false};
+    mc.setPointerCapture(e.pointerId);
+  });
+  mc.addEventListener('pointermove', e=>{
+    if(!mcDom) return;
+    if(pan){
+      const dy = e.clientY - pan.y;
+      if(Math.abs(dy)>4 || Math.abs(e.clientX-pan.x)>4) pan.moved = true;
+      if(pan.moved){
+        tipHide(tip);
+        const span = pan.dom[1]-pan.dom[0];
+        const dv = dy/(mcDom.H-mcDom.padT-mcDom.padB)*span;
+        yz[yzk()] = [pan.dom[0]+dv, pan.dom[1]+dv];
+        renderMainChart();
+      }
+      return;
+    }
+    const i = chartHoverIdx(mc, mcDom, e);
+    hoverLine(mc, mcDom, i, 'mcHv');
+    const kdef = KPIS.find(k=>k.key===mainKey);
+    const rows = [
+      {c:'var(--actual)', n:i<=NOW?'실적':'검토중 시나리오', v:mcCache.scn[i]},
+      {c:'var(--bp)', n:'BP 계획', v:mcCache.bp[i]},
+      ...(i>NOW ? mcCache.visScn.map(s=>({c:s.color, n:s.name, v:s.series[i]})) : []),
+    ];
+    tipShow(tip, box, e, `<div class="th">${M.months[i]} · ${kdef.name}${i>NOW?' (시뮬)':''}</div>` +
+      rows.map(r=>`<div class="tr"><i style="background:${r.c}"></i>${r.n}<span class="tv">${kdef.f(r.v)}</span></div>`).join(''));
+  });
+  mc.addEventListener('pointerup', e=>{
+    if(pan && !pan.moved && mcDom) seek(chartHoverIdx(mc, mcDom, e));   // 클릭=월 이동
+    pan = null;
+  });
+  mc.addEventListener('mouseleave', ()=>{ tipHide(tip); mc.querySelector('#mcHv')?.remove(); });
+  mc.addEventListener('wheel', e=>{
+    e.preventDefault();
+    if(!mcDom) return;
+    tipHide(tip);
+    const {lo,hi,padT,padB,H} = mcDom;
+    const frac = clamp(1-(e.offsetY-padT)/(H-padT-padB), 0, 1);
+    const v = lo + frac*(hi-lo);
+    const k = e.deltaY<0 ? 0.8 : 1.25;
+    yz[yzk()] = [v-(v-lo)*k, v+(hi-v)*k];
+    renderMainChart();
+  },{passive:false});
+}
+
+/* 워터폴 — 선택 KPI(mainKey)의 전월 대비 변화 분해 */
+const wf = document.getElementById('wfChart');
+const WF_UNIT = {retail:'대', op:'$M', csi:'pt', ds:'일'};
+const WF_SUB  = {retail:'차종별 TOP5+기타', op:'P&L 드라이버', csi:'요인 분해', ds:'재고 흐름'};
+function wfNum(key, v, delta){
+  const a = Math.abs(v);
+  if(key==='op')     return delta && a<9.95e6 ? (v/1e6).toFixed(1) : (v/1e6).toFixed(0);
+  if(key==='retail') return a>=9950 ? (v/1000).toFixed(1)+'k' : fmt(v);
+  if(key==='csi')    return delta ? v.toFixed(2) : v.toFixed(1);
+  return v.toFixed(1);
+}
+function renderWaterfall(){
+  const key = mainKey;
+  const bars = waterfall(key);
+  const c = Math.max(cursor,1);
+  document.getElementById('wfTitle').textContent =
+    `${KPIS.find(k=>k.key===key).name} 워터폴 — ${WF_SUB[key]}`;
+  document.getElementById('wfUnit').textContent =
+    `(${M.months[c-1]}→${M.months[c]}${focusZone ? ' · '+ZONES.find(z=>z.id===focusZone).name+' 딜러' : ''} · ${WF_UNIT[key]})`;
+  const wbox = document.getElementById('wfBox');
+  const inMax = !!wbox.closest('#maxOverlay');
+  const W = inMax ? Math.max(wbox.clientWidth-24, 320) : 320;
+  const H = inMax ? Math.max(wbox.clientHeight-46, 200) : 200;
+  const padB=30, padT=16;
+  wf.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  wf.setAttribute('width', inMax ? W : '100%'); wf.setAttribute('height', H);
+  wf.innerHTML='';
+  let run=0; const pos=[], levels=[];
+  for(const b of bars){
+    if(b.type==='base'){ pos.push([b.v,b.v]); run=b.v; levels.push(b.v); }
+    else if(b.type==='delta'){ pos.push([run, run+b.v]); run+=b.v; levels.push(run); }
+    else { pos.push([b.v,b.v]); levels.push(b.v); }
+  }
+  /* 전월 레벨 대비 작은 델타가 보이도록 값 범위(레벨 min~max)로 줌 — 0 기준 아님 */
+  let lo=Math.min(...levels), hi=Math.max(...levels);
+  const sp=hi-lo||Math.abs(hi)||1; lo-=sp*0.12; hi+=sp*0.1;
+  const Y=v=>padT+(1-(v-lo)/(hi-lo))*(H-padT-padB);
+  const bw=(W-16)/bars.length;
+  bars.forEach((b,k)=>{
+    const isLvl = b.type!=='delta';
+    const [a,c]=pos[k];
+    const yTop = isLvl ? Y(b.v) : Y(clamp(Math.max(a,c),lo,hi));
+    const yBot = isLvl ? H-padB : Y(clamp(Math.min(a,c),lo,hi));   // 레벨 바(전월/당월)는 바닥부터
+    const h=Math.max(yBot-yTop,1.5);
+    const goodDelta = key==='ds' ? b.v<=0 : b.v>=0;   // DS는 감소가 개선
+    const fill = isLvl ? (b.type==='base'?'var(--bp)':'var(--scnA)')
+               : goodDelta ? 'var(--good-mk)' : 'var(--crit)';
+    el('rect',{x:8+k*bw+3, y:yTop, width:bw-6, height:h, rx:2, fill, opacity:b.type==='delta'?.95:.85}, wf);
+    if(k<bars.length-1 && b.type!=='total')
+      el('line',{x1:8+k*bw+3, y1:Y(clamp(pos[k][1],lo,hi)), x2:8+(k+1)*bw+bw-3, y2:Y(clamp(pos[k][1],lo,hi)),
+        stroke:'var(--edge)', 'stroke-width':.6, 'stroke-dasharray':'2 2'}, wf);
+    const vt = b.type==='delta' ? (b.v>=0?'+':'-')+wfNum(key,Math.abs(b.v),true) : wfNum(key,b.v,false);
+    el('text',{x:8+k*bw+bw/2, y:yTop-3, 'text-anchor':'middle', class:'badge',
+      fill:b.type==='delta'?(goodDelta?'var(--good)':'var(--crit)'):'var(--ink)'}, wf).textContent=vt;
+    const nm = el('text',{x:8+k*bw+bw/2, y:H-18, 'text-anchor':'middle', class:'badge'}, wf);
+    b.name.split(' ').forEach((wd,li)=>{
+      el('tspan',{x:8+k*bw+bw/2, dy:li?10:0}, nm).textContent=wd;
+    });
+  });
+}
+
+/* 레버 패널 임팩트 요약 */
+function renderImpact(){
+  const box = document.getElementById('impactList');
+  const cum = (sim,key) => sim.reduce((a,m)=>a+m.tot[key],0);
+  const rows = [
+    ['미래 16개월 판매', cum(SIM,'retail')-cum(BASE_SIM,'retail'), 'qty'],
+    ['미래 16개월 영업이익', cum(SIM,'op')-cum(BASE_SIM,'op'), 'usd'],
+    ['2027-12 CSI', SIM[SIM.length-1].csi - BASE_SIM[BASE_SIM.length-1].csi, 'pt'],
+    ['2027-12 DS', SIM[SIM.length-1].tot.ds - BASE_SIM[BASE_SIM.length-1].tot.ds, 'day'],
+  ];
+  box.innerHTML = '<div class="row" style="font-size:10px;color:var(--muted)">시나리오 효과 (베이스라인 대비)</div>' +
+    rows.map(([n,v,u])=>{
+      const good = u==='day' ? Math.abs(v)<0.5 || v<0 : v>=0;
+      const t = u==='qty'? (v>=0?'+':'-')+fmt(Math.abs(v))+'대'
+            : u==='usd'? (v>=0?'+':'-')+'$'+Math.abs(v/1e6).toFixed(0)+'M'
+            : (v>=0?'+':'-')+Math.abs(v).toFixed(1)+(u==='pt'?'pt':'일');
+      return `<div class="row"><span>${n}</span><b class="${Math.abs(v)<1e-6?'':(good?'up':'dn')}">${t}</b></div>`;
+    }).join('');
+}
+/* ═══════════════ PART E · 레버 UI + 프리셋 + A/B ═══════════════ */
+const LEVER_DEFS = [
+  {k:'price', name:'가격 조정',     min:-5,  max:8,    step:0.5, f:v=>(v>0?'+':'')+v+'%',      note:'MSRP 일괄 · 경쟁 대비 상대가격, 탄력성 -4.0'},
+  {k:'inc',   name:'인센티브 증감', min:-800,max:1800, step:100, f:v=>(v>0?'+':'')+'$'+v+'/대', note:'기본 프로그램 대비 · $2,200 초과 시 브랜드 손상→CSI↓'},
+  {k:'mkt',   name:'마케팅 지출',   min:-50, max:100,  step:5,   f:v=>(v>0?'+':'')+v+'%',      note:'adstock 이월 0.5 · 로그 체감 (2배≠2배 효과)'},
+  {k:'dsT',   name:'목표 재고 DS',  min:40,  max:80,   step:5,   f:v=>v+'일',                   note:'주문·생산이 자동 연동 (재고 수렴 계수 0.5)'},
+  {k:'ev',    name:'EV 공장 증산',  min:0,   max:50,   step:5,   f:v=>'+'+v+'%',                note:'EV 라인 확장 — 사바나(램프업 5,300/월)·국내1공장'},
+];
+const leverBox = document.getElementById('levers');
+function buildLevers(){
+  leverBox.innerHTML='';
+  for(const d of LEVER_DEFS){
+    const div = document.createElement('div');
+    div.className='lever';
+    div.innerHTML = `<div class="lt"><span>${d.name}</span><b id="lv_${d.k}"></b></div>
+      <input type="range" min="${d.min}" max="${d.max}" step="${d.step}" id="sl_${d.k}">
+      <div class="lvNote">${d.note}</div>`;
+    leverBox.appendChild(div);
+    const sl = div.querySelector('input');
+    sl.value = levers[d.k];
+    sl.addEventListener('input', ()=>{ levers[d.k] = +sl.value; activePreset=null; recompute(); });
+  }
+  syncLeverUI();
+}
+function syncLeverUI(){
+  for(const d of LEVER_DEFS){
+    document.getElementById('sl_'+d.k).value = levers[d.k];
+    const b = document.getElementById('lv_'+d.k);
+    b.textContent = d.f(levers[d.k]);
+    b.className = levers[d.k]!==DEFAULT_LEVERS[d.k] ? 'chg' : '';
+  }
+}
+const PRESETS = [
+  {id:'S1', name:'S1 가격 +3%',        lv:{price:3}},
+  {id:'S2', name:'S2 인센티브 +$800',  lv:{inc:800}},
+  {id:'S3', name:'S3 마케팅 +50%',     lv:{mkt:50}},
+  {id:'S4', name:'S4 EV 증산 +30%',    lv:{ev:30, dsT:65}},
+  {id:'S5', name:'S5 수익성 긴축',     lv:{inc:-400, mkt:-30}},
+];
+let activePreset = null;
+const presetBar = document.getElementById('presetBar');
+for(const p of PRESETS){
+  const b = document.createElement('button');
+  b.className='preset'; b.textContent=p.name; b.title='전략 카드 — 레버 조합 프리셋';
+  b.onclick = ()=>{
+    activePreset = activePreset===p.id ? null : p.id;
+    levers = activePreset ? {...DEFAULT_LEVERS, ...p.lv} : {...DEFAULT_LEVERS};
+    syncLeverUI(); recompute();
+  };
+  presetBar.appendChild(b);
+}
+function syncPresetUI(){
+  [...presetBar.children].forEach((b,i)=>b.classList.toggle('on', PRESETS[i].id===activePreset));
+}
+/* 시나리오 등록·표시·삭제 */
+function registerScenario(){
+  const inp = document.getElementById('scnName');
+  const name = inp.value.trim() ||
+    (activePreset ? PRESETS.find(p=>p.id===activePreset).name : '시나리오 '+scnSeq);
+  SCENARIOS.push({ id:'sc'+(scnSeq++), name, levers:{...levers},
+                   sim:simulate(levers), color:SCN_COLORS[(scnSeq-2)%SCN_COLORS.length], visible:true });
+  inp.value='';
+  renderScnList(); renderMainChart();
+}
+document.getElementById('btnRegScn').onclick = registerScenario;
+document.getElementById('scnName').addEventListener('keydown', e=>{ if(e.key==='Enter') registerScenario(); });
+function renderScnList(){
+  const box = document.getElementById('scnList');
+  if(!SCENARIOS.length){
+    box.innerHTML = '<div class="scnEmpty">레버를 조정한 뒤 등록하면 시나리오가 차트에 함께 표시됩니다.</div>';
+    return;
+  }
+  box.innerHTML='';
+  for(const s of SCENARIOS){
+    const row = document.createElement('div');
+    row.className = 'scnRow'+(s.visible?'':' off');
+    row.innerHTML = `<span class="dot" style="background:${s.color}"></span><span class="nm" title="${s.name}">${s.name}</span>
+      <button data-a="cmt" title="계획으로 커밋 — 브리핑 스코어보드가 이 궤도 대비 이탈을 추적" style="color:${COMMIT===s?'var(--scnB)':'var(--muted)'}">${COMMIT===s?'★커밋':'☆커밋'}</button>
+      <button data-a="vis" title="차트 표시 토글">${s.visible?'◉ 표시':'○ 숨김'}</button>
+      <button data-a="load" title="레버 불러오기">적용</button>
+      <button data-a="del" title="목록에서 삭제" style="color:var(--crit)">삭제</button>`;
+    row.querySelector('[data-a=cmt]').onclick = ()=>{ COMMIT = COMMIT===s ? null : s; renderScnList(); renderBriefScore(); };
+    row.querySelector('[data-a=vis]').onclick = ()=>{ s.visible=!s.visible; renderScnList(); renderMainChart(); };
+    row.querySelector('[data-a=load]').onclick = ()=>{ levers={...s.levers}; activePreset=null; syncLeverUI(); recompute(); };
+    row.querySelector('[data-a=del]').onclick = ()=>{
+      if(COMMIT===s){ COMMIT=null; renderBriefScore(); }
+      SCENARIOS = SCENARIOS.filter(x=>x!==s); renderScnList(); renderMainChart();
+    };
+    box.appendChild(row);
+  }
+}
+
+/* ═══════════════ PART F · 드릴 패널 + VIN ═══════════════ */
+const drill = document.getElementById('drill');
+let drillCtx = null;   // 열려 있는 드릴의 대상 {kind,id} — Play/커서 이동 시 재렌더링용
+function closeDrill(){ drill.classList.remove('open'); drillCtx = null; }
+document.getElementById('drillClose').onclick = closeDrill;
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape') return;
+  closeDrill();
+  if(selNode) setSelNode(null);
+  clearFocusZone();
+});
+const mulberry32 = s => () => { s|=0; s=s+0x6D2B79F5|0; let t=Math.imul(s^s>>>15,1|s);
+  t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; };
+function makeVin(md, i, k){
+  const p = PLANTS.find(p=>p.id===md.plant);
+  const rnd = mulberry32(M.seed + i*97 + k*13 + md.id.charCodeAt(0));
+  const yc = 'RSTV'[Math.floor(i/12)];
+  let vds=''; for(let j=0;j<4;j++) vds += 'ABCDEFGHJKLMNPRSTUVWXYZ'[Math.floor(rnd()*23)];
+  return `${p.wmi}${md.id[0]}${vds}${yc}${p.id[0]}${String(100000+Math.floor(rnd()*899999))}`;
+}
+function dstr(i, day){
+  const mm = clamp(i, 0, N-1);
+  return `${M.months[mm]}-${String(clamp(Math.round(day),1,28)).padStart(2,'0')}`;
+}
+function vinChain(md, i, zoneName, k){
+  const rnd = mulberry32(M.seed + i*31 + k*7);
+  const kr = md.plant.startsWith('KR'), mx = md.plant==='MX-MT';
+  const lead = kr?2 : mx?1 : 0;
+  const ev = [];
+  const push = (name, mi, d) => ev.push([name, dstr(mi, d)]);
+  push('ORDERED (월 주문 확정)', i-lead-1, 5+rnd()*6);
+  push(`IN_PRODUCTION · ${PLANTS.find(p=>p.id===md.plant).name}`, i-lead, 3+rnd()*8);
+  push('PLANT_STOCK (공장 출하 대기)', i-lead, 12+rnd()*6);
+  if(kr){
+    push('국내 수출항 선적', i-lead, 19+rnd()*4);
+    push('해상 운송 (18일)', i-lead, 23);
+    push('PORT_YARD · 서부 수입항', i-1, 12+rnd()*5);
+    push('내륙 철도 (9일)', i-1, 18);
+  } else if(mx){
+    push('철도 출발 · 국경 통관', i-1, 15+rnd()*6);
+  } else {
+    push('트럭·철도 상차', i, 2+rnd()*3);
+  }
+  push(`DEALER_ARRIVAL (=WHOLESALE) · ${zoneName}`, i, 5+rnd()*4);
+  push('RETAIL_SALE ★', i, 12+rnd()*12);
+  if(rnd()<0.38) push('SERVICE_EVENT (정기점검)', i+2, 5+rnd()*20);
+  return ev;
+}
+function miniTrend(fn, opts={}){
+  // fn(i) → 값. 24개월(과거 12 + 미래 12) 미니 차트
+  const a = Math.max(0, cursor-12), b = Math.min(N-1, Math.max(cursor+12, NOW+4));
+  const W=380, H=90, padL=6, padB=14;
+  const vals=[]; for(let i=a;i<=b;i++) vals.push(fn(i));
+  const lo=Math.min(...vals), hi=Math.max(...vals), sp=hi-lo||1;
+  const X=i=>padL+(i-a)/(b-a)*(W-2*padL), Y=v=>4+(1-(v-lo)/sp)*(H-4-padB);
+  let past='', fut='';
+  for(let i=a;i<=b;i++){
+    const pt=`${X(i).toFixed(1)},${Y(fn(i)).toFixed(1)}`;
+    if(i<=NOW) past+=(past?' L':'M')+pt;
+    if(i>=NOW) fut+=(fut?' L':'M')+pt;
+  }
+  const parts = [`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%">`];
+  if(NOW>=a&&NOW<=b) parts.push(`<line x1="${X(NOW)}" y1="0" x2="${X(NOW)}" y2="${H-padB}" stroke="var(--crit)" stroke-width="1" opacity=".6"/>`);
+  parts.push(`<line x1="${X(cursor)}" y1="0" x2="${X(cursor)}" y2="${H-padB}" stroke="var(--edge-hi)" stroke-width="1" opacity=".8"/>`);
+  parts.push(`<path d="${past}" fill="none" stroke="var(--actual)" stroke-width="1.6"/>`);
+  parts.push(`<path d="${fut}" fill="none" stroke="var(--scnA)" stroke-width="1.6" stroke-dasharray="4 3"/>`);
+  parts.push(`<text x="${padL}" y="${H-3}" class="badge" fill="var(--muted)" font-size="10">${M.months[a]}</text>`);
+  parts.push(`<text x="${W-padL}" y="${H-3}" text-anchor="end" class="badge" fill="var(--muted)" font-size="10">${M.months[b]}</text>`);
+  parts.push('</svg>');
+  return parts.join('');
+}
+/* 특이점 카드 목록 HTML */
+function insHtml(items){
+  if(!items.length) return `<div class="insList"><div class="ins">특이점 없음 — 전월과 유사한 흐름입니다.</div></div>`;
+  return `<div class="insList">` + items.map(i=>`<div class="ins ${i.tone||''}">${i.t}</div>`).join('') + `</div>`;
+}
+function openDrill(kind, id){
+  drillCtx = {kind, id};
+  const body = document.getElementById('drillBody');
+  const title = document.getElementById('drillTitle');
+  const sub = document.getElementById('drillSub');
+  const mv = monthView(cursor);
+  const mvP = monthView(Math.max(cursor-1, 0));   // 전월 (특이점 비교용)
+  sub.textContent = `${M.months[cursor]} · ${cursor>NOW?'시뮬레이션':'실적'}`;
+  let html='';
+  if(kind==='zone'){
+    const z = ZONES.find(z=>z.id===id);
+    title.textContent = `${z.name} 딜러 네트워크 (${z.dealers}개점)`;
+    // 차종별 지역 슬라이스: 이달·전월·DS·vs BP
+    const rows = MODELS.map(md=>{
+      const w = ZW[md.id][id], m = mv.models[md.id];
+      const rC = m.retail*w, rP = mvP.models[md.id].retail*w;
+      const ds = m.stock/Math.max(m.retail/30.4,1);
+      const bp = D.bp[cursor].models[md.id].retail*w;
+      return {md, rC, rP, d: rP>0?(rC-rP)/rP:0, ds, vb: bp>0?(rC-bp)/bp:0};
+    });
+    const totC = rows.reduce((s,r)=>s+r.rC,0), totP = rows.reduce((s,r)=>s+r.rP,0);
+    const avgD = totP>0 ? (totC-totP)/totP : 0;
+    const ins = [];
+    const up = [...rows].sort((a,b)=>b.d-a.d)[0], dn = [...rows].sort((a,b)=>a.d-b.d)[0];
+    if(up.d - avgD > 0.05) ins.push({tone:'good', t:`<b>${up.md.name}</b> 판매 ${deltaFmt('retail',up.d)} — 지역 전체(${deltaFmt('retail',avgD)}) 대비 급증. 재고 배정 확대 검토.`});
+    if(avgD - dn.d > 0.05) ins.push({tone:'crit', t:`<b>${dn.md.name}</b> 판매 ${deltaFmt('retail',dn.d)} — 지역 전체(${deltaFmt('retail',avgD)}) 대비 부진. 사양 믹스·인센티브 점검.`});
+    for(const r of rows) if(r.ds>75) ins.push({tone:'warn', t:`<b>${r.md.name}</b> DS ${Math.round(r.ds)}일 — 과잉재고, 딜러 플로어플랜 부담.`});
+    for(const r of rows) if(r.ds<45) ins.push({tone:'warn', t:`<b>${r.md.name}</b> DS ${Math.round(r.ds)}일 — 재고 부족, 판매 기회손실 위험.`});
+    const wb = [...rows].sort((a,b)=>a.vb-b.vb)[0];
+    if(wb.vb < -0.08) ins.push({tone:'crit', t:`<b>${wb.md.name}</b> BP 대비 ${deltaFmt('retail',wb.vb)} 미달 — 이 지역 계획 리스크 1순위.`});
+    html += `<h4>이달의 특이점 — 차종별, ${M.months[cursor]} vs 전월</h4>` + insHtml(ins.slice(0,5));
+    html += `<h4>지역 소매 추이 (실선=실적 · 대시=시나리오)</h4>${miniTrend(i=>zoneAgg(monthView(i),id).retail)}`;
+    html += `<h4>차종별 현황 — 행 클릭 시 VIN 샘플</h4><table class="dt"><tr><th>차종</th><th>소매</th><th>Δ전월</th><th>DS</th><th>vs BP</th></tr>`;
+    for(const r of rows){
+      html += `<tr class="clickable" data-vin="${r.md.id}"><td>${r.md.name}</td><td>${fmt(r.rC)}</td>
+        <td style="color:${r.d>=0?'var(--good)':'var(--crit)'}">${deltaFmt('retail',r.d)}</td>
+        <td style="color:${r.ds<45?'var(--warn)':r.ds>75?'var(--crit)':'var(--good)'}">${Math.round(r.ds)}일</td>
+        <td style="color:${r.vb>=0?'var(--good)':'var(--crit)'}">${deltaFmt('retail',r.vb)}</td></tr>`;
+    }
+    html += `</table><div id="vinArea"></div>`;
+  } else if(kind==='plant'){
+    const p = PLANTS.find(p=>p.id===id);
+    const ms = MODELS.filter(m=>m.plant===id);
+    title.textContent = `${p.name} (${p.id})`;
+    const prod = ms.reduce((s,m)=>s+mv.models[m.id].ws,0);
+    const prodP = ms.reduce((s,m)=>s+mvP.models[m.id].ws,0);
+    const cap = cursor>NOW ? plantCap(id, levers) : p.cap;
+    const capPrev = cursor-1>NOW ? plantCap(id, levers) : p.cap;
+    const hit = mv.capHit && mv.capHit.includes(id);
+    // 특이점: 병목(현재·임박) · 가동률 급변 · 차종별 생산 급변
+    const ins = [];
+    if(hit) ins.push({tone:'crit', t:`<b>케파 초과</b> — 생산요청이 케파를 넘어 비례 축소 중. EV 증산 레버·배분 조정 필요.`});
+    else{
+      for(let hh=1; hh<=Math.min(6, N-1-NOW); hh++)
+        if(SIM[hh-1].capHit.includes(id)){ ins.push({tone:'crit', t:`<b>${SIM[hh-1].ym}부터 케파 병목 예상</b> (현 궤도) — 선제 증산·배분 조정 검토.`}); break; }
+    }
+    const uC = prod/cap*100, uP = prodP/capPrev*100;
+    if(Math.abs(uC-uP)>=8) ins.push({tone: uC>uP?'warn':'good',
+      t:`가동률 ${Math.round(uP)}% → <b>${Math.round(uC)}%</b> (전월 대비 ${uC>uP?'+':''}${Math.round(uC-uP)}pt)`});
+    for(const m of ms){
+      const wc = mv.models[m.id].ws, wp = mvP.models[m.id].ws;
+      const d = wp>0 ? (wc-wp)/wp : 0;
+      if(Math.abs(d)>=0.12) ins.push({tone: d>=0?'good':'warn',
+        t:`<b>${m.name}</b> 생산 ${deltaFmt('retail',d)} (${fmt(wp)} → ${fmt(wc)}대) — 주문 연동 변화.`});
+    }
+    html += `<h4>이달의 특이점 — ${M.months[cursor]} vs 전월</h4>` + insHtml(ins.slice(0,4));
+    html += `<h4>생산 추이</h4>${miniTrend(i=>{ const v=monthView(i); return ms.reduce((s,m)=>s+v.models[m.id].ws,0); })}`;
+    html += `<h4>차종별 생산 — 전월 대비</h4><table class="dt"><tr><th>차종</th><th>생산</th><th>Δ전월</th><th>비중</th></tr>` +
+      ms.map(m=>{
+        const wc = mv.models[m.id].ws, wp = mvP.models[m.id].ws, d = wp>0?(wc-wp)/wp:0;
+        return `<tr><td>${m.name}</td><td>${fmt(wc)}</td>
+          <td style="color:${d>=0?'var(--good)':'var(--crit)'}">${deltaFmt('retail',d)}</td>
+          <td>${Math.round(wc/Math.max(prod,1)*100)}%</td></tr>`;
+      }).join('') + `</table>`;
+    html += `<table class="dt"><tr><th>항목</th><th>값</th></tr>
+      <tr><td>이달 생산 (도매 기준)</td><td>${fmt(prod)}대</td></tr>
+      <tr><td>실효 케파</td><td>${fmt(cap)}대/월${RAMP_CAP[id]?' <span class="tagEst">램프업</span>':''}</td></tr>
+      <tr><td>가동률</td><td style="color:${hit?'var(--crit)':'inherit'}">${Math.round(prod/cap*100)}%${hit?' · 케파 초과 → 비례 축소':''}</td></tr>
+      <tr><td>운송</td><td>${p.ship} · 리드 ${p.lead_m}개월 · 배치 ${p.batch}대</td></tr>
+      <tr><td>생산 차종</td><td>${ms.map(m=>m.name).join(', ')}</td></tr></table>`;
+    if(hit) html += `<h4 style="color:var(--crit)">⚠ 병목: 수요가 케파를 초과 — EV 증산 레버 또는 배분 조정 필요</h4>`;
+  } else if(kind==='port'){
+    title.textContent = id==='PYT' ? '국내 수출항' : '서부 수입항';
+    const krWs = ['LUM','NOV'].reduce((s,mid)=>s+mv.models[mid].ws,0);
+    const krWsP = ['LUM','NOV'].reduce((s,mid)=>s+mvP.models[mid].ws,0);
+    const dSh = krWsP>0 ? (krWs-krWsP)/krWsP : 0;
+    const ins = [];
+    if(Math.abs(dSh)>=0.08){
+      const dPipe = (krWs-krWsP)*32/30.4;
+      ins.push({tone: dSh>0?'warn':'good',
+        t:`선적 <b>${deltaFmt('retail',dSh)}</b> (${fmt(krWsP)} → ${fmt(krWs)}대/월) — 파이프라인 재고 ${dPipe>=0?'+':''}${fmt(dPipe)}대, 운전자본 ${dSh>0?'증가':'감소'}.`});
+    }
+    for(const mid of ['LUM','NOV']){
+      const wc = mv.models[mid].ws, wp = mvP.models[mid].ws, d = wp>0?(wc-wp)/wp:0;
+      if(Math.abs(d)>=0.15) ins.push({tone: d>=0?'good':'warn',
+        t:`<b>${MODELS.find(m=>m.id===mid).name}</b> 선적 ${deltaFmt('retail',d)} — 해상 레인 믹스 변화.`});
+    }
+    html += `<h4>이달의 특이점 — ${M.months[cursor]} vs 전월</h4>` + insHtml(ins.slice(0,3));
+    html += `<h4>해상 파이프라인</h4><table class="dt"><tr><th>항목</th><th>값</th></tr>
+      <tr><td>월 선적/하역</td><td>${fmt(krWs)}대</td></tr>
+      <tr><td>운송중 재고 (리틀의 법칙)</td><td>${fmt(krWs*32/30.4)}대</td></tr>
+      <tr><td>루트</td><td>공장→수출항 2d → 해상 18d → 수입항 3d → 철도 9d</td></tr>
+      <tr><td>선박 배치</td><td>800대/척 · 월 ${Math.ceil(krWs/800)}회</td></tr></table>
+      <h4>선적 추이</h4>${miniTrend(i=>{const v=monthView(i);return ['LUM','NOV'].reduce((s,mid)=>s+v.models[mid].ws,0);})}`;
+  } else if(kind==='hq'){
+    title.textContent = '미국판매법인 HQ — 전략 상태';
+    html += `<h4>현재 레버</h4><table class="dt"><tr><th>레버</th><th>설정</th></tr>` +
+      LEVER_DEFS.map(d=>`<tr><td>${d.name}</td><td style="color:${levers[d.k]!==DEFAULT_LEVERS[d.k]?'var(--scnA)':'inherit'}">${d.f(levers[d.k])}</td></tr>`).join('') +
+      `</table><h4>동작 원리</h4><div style="font-size:11px;color:var(--muted);line-height:1.7">
+      레버 변경 → 수요모델(가격탄력 -1.6 · adstock 0.5 · 로그 체감) → 소매·재고 → 주문·생산(케파 클램프) →
+      손익·CSI가 <b style="color:var(--ink)">전 구간 즉시 재생성</b>됩니다. 우측 하단 워터폴은 커서 월의 전월 대비 변화를 KPI별 요인으로 분해합니다.
+      과거를 생성한 모델과 동일한 구조식이므로 실적 구간과 이어집니다 (docs/v7-strategy-scenarios.md).</div>`;
+  } else if(kind==='cust'){
+    title.textContent = '고객 · CSI 피드백 루프';
+    // 특이점: 외부 CSI 급변 + 내부지수 구성요소 전월 대비 변화
+    {
+      const ins = [];
+      const dCsi = mv.csi - mvP.csi;
+      if(Math.abs(dCsi)>=0.5) ins.push({tone: dCsi>=0?'good':'crit',
+        t:`외부 CSI <b>${mvP.csi.toFixed(1)} → ${mv.csi.toFixed(1)}</b> (${dCsi>=0?'+':''}${dCsi.toFixed(1)}pt) — ${dCsi<0?'하락 원인 워터폴(CSI 뷰)에서 분해 확인.':'회복 궤도.'}`});
+      const cc = D.csi_internal[Math.min(cursor,NOW)], cp = D.csi_internal[Math.max(Math.min(cursor,NOW)-1,0)];
+      const COMPN = {quality:'품질·클레임', connected:'커넥티드·OTA', service:'서비스 예약', delivery:'인도 경험'};
+      for(const k in COMPN){
+        const d = cc[k]-cp[k];
+        if(Math.abs(d)>=2) ins.push({tone: d>=0?'good':'crit',
+          t:`내부지수 <b>${COMPN[k]}</b> ${cp[k]} → ${cc[k]} (${d>=0?'+':''}${d}) — ${d<0?'해당 원장 드릴 필요.':'개선 활동 효과 반영.'}`});
+      }
+      html += `<h4>이달의 특이점 — ${M.months[cursor]} vs 전월</h4>` + insHtml(ins.slice(0,4));
+    }
+    html += `<h4>외부 공시 CSI 추이 (외부기관 서베이)</h4>${miniTrend(i=>monthView(i).csi)}`;
+    // 내부 고객만족도 지수 — 회사가 내부 데이터로 직접 관리하는 100점 지수
+    const ci = D.csi_internal[Math.min(cursor, NOW)];
+    const COMP = [['quality','품질 · 클레임률'], ['connected','커넥티드 · OTA'],
+                  ['service','서비스 예약 지연'], ['delivery','인도 경험 · 가용성']];
+    html += `<h4>내부 고객만족도 지수 (회사 관리 · 100점) — ${ci.ym}${cursor>NOW?' <span class="tagEst">실적 최신</span>':''}</h4>
+      <div style="display:flex;align-items:baseline;gap:10px;margin:2px 0 8px">
+        <span style="font-size:24px;font-weight:700">${ci.total}</span>
+        <span style="font-size:11px;color:var(--muted)">외부 CSI ${monthView(Math.min(cursor,NOW)).csi.toFixed(1)} — 내부지수가 선행, 외부 공시는 지연 반영</span></div>`;
+    for(const [k, name] of COMP){
+      const v = ci[k];
+      html += `<div style="display:flex;align-items:center;gap:8px;font-size:11px;margin:3px 0">
+        <span style="width:120px;color:var(--muted)">${name}</span>
+        <div style="flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden">
+          <div style="width:${clamp(v,0,100)}%;height:100%;background:${v<80?'var(--crit)':v<90?'var(--warn-mk)':'var(--good-mk)'}"></div></div>
+        <b style="width:36px;text-align:right;font-variant-numeric:tabular-nums">${v}</b></div>`;
+    }
+    // 개선 활동 원장: 프로젝트 → 대상 VIN → 적용 → 클레임 소멸 → 계산식으로 점수 회복
+    html += `<h4>개선 활동 → 지수 반영 (VIN 연계)</h4>`;
+    let anyAct = false;
+    for(const a of D.csi_actions){
+      const yms = Object.keys(a.months).filter(y=>y<=M.months[Math.min(cursor,NOW)]).sort();
+      if(!yms.length) continue;
+      anyAct = true;
+      const st = a.months[yms[yms.length-1]];
+      const mdName = MODELS.find(m=>m.id===a.model).name;
+      html += `<div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:5px 0;font-size:11px">
+        <div style="display:flex;justify-content:space-between"><b>${a.name}</b><span style="color:var(--muted)">${a.project_id}</span></div>
+        <div style="color:var(--muted);margin-top:3px">${mdName} · 대상 ${fmt(a.target)}대 중 <b style="color:var(--ink)">${fmt(st.applied)}대 적용</b>
+          · 클레임 ${a.claim0} → <b style="color:var(--good)">${st.claim}</b>/1000대</div>
+        <div style="color:var(--muted)">적용 VIN에서 클레임 미재발 → 계산식에 의해 구성요소 점수 회복</div></div>`;
+    }
+    if(!anyAct) html += `<div style="font-size:11px;color:var(--muted)">현재 월 기준 진행 중인 개선 활동 없음 (2026-03 FSC · 2026-06 OTA 참고)</div>`;
+    // 미래(시뮬) 구간의 외부 CSI 구성
+    const s = cursor>NOW ? SIM[cursor-NOW-1] : null;
+    if(s){
+      const inc = s.tot.inc, ds = s.tot.ds;
+      html += `<h4>시뮬 구간 외부 CSI 구성 (${M.months[cursor]})</h4><table class="dt"><tr><th>구성요소</th><th>값</th></tr>
+        <tr><td>기준치</td><td>88.5</td></tr>
+        <tr><td>인센티브 손상 (>$2,200)</td><td>-${(0.0008*Math.max(0,inc-2200)).toFixed(2)}pt</td></tr>
+        <tr><td>과잉재고 (DS>80)</td><td>-${(0.02*Math.max(0,ds-80)).toFixed(2)}pt</td></tr>
+        <tr><td>재고부족 (DS<40 → 인도 지연)</td><td>-${(0.05*Math.max(0,40-ds)).toFixed(2)}pt</td></tr></table>`;
+    }
+    html += `<div style="font-size:11px;color:var(--muted);margin-top:8px">고객 데이터는 점선 피드백 루프를 타고 HQ의 익월 Input으로 재적재됩니다.</div>`;
+  }
+  body.innerHTML = html;
+  body.querySelectorAll('tr[data-vin]').forEach(tr=>{
+    tr.addEventListener('click', ()=>{
+      const md = MODELS.find(m=>m.id===tr.dataset.vin);
+      const z = ZONES.find(z=>z.id===id);
+      const area = document.getElementById('vinArea');
+      let vh = `<h4>${md.name} VIN 샘플 8건 · ${M.months[cursor]} 소매분 ${cursor>NOW?'<span class="tagEst">SIMULATED</span>':''}</h4><table class="dt"><tr><th>VIN</th><th>트림</th><th></th></tr>`;
+      for(let k=0;k<8;k++){
+        const trim = D.trims[md.id][k%3];
+        vh += `<tr class="clickable" data-ch="${k}"><td style="font-family:monospace">${makeVin(md,cursor,k)}</td><td>${trim}</td><td>체인 ↗</td></tr>`;
+      }
+      vh += '</table><div id="chainArea"></div>';
+      area.innerHTML = vh;
+      area.querySelectorAll('tr[data-ch]').forEach(tr2=>{
+        tr2.addEventListener('click', ()=>{
+          const ev = vinChain(md, cursor, z.name, +tr2.dataset.ch);
+          document.getElementById('chainArea').innerHTML =
+            `<h4>VIN 이벤트 체인 (집계→VIN 추적)</h4><div class="vinChain">` +
+            ev.map(([n,d])=>`<div class="ev"><span class="d">${d}</span><span>${n}</span></div>`).join('') + '</div>';
+        });
+      });
+    });
+  });
+  drill.classList.add('open');
+}
+
+/* ═══════════════ PART G · 타임라인 + 재생 + 초기화 ═══════════════ */
+const tl = document.getElementById('tl');
+let playing=null, speed=1;
+function seek(i){
+  cursor = clamp(i,0,N-1);
+  tl.value = cursor;
+  document.getElementById('tlYm').textContent = M.months[cursor];
+  document.getElementById('tlMode').textContent = cursor>NOW ? '시뮬레이션 (시나리오)' : '실적';
+  updateScene(cursor);
+  renderKpis();
+  renderMainChart();
+  renderWaterfall();   // 전월 대비 브리지 — 커서 이동 시 재계산
+  if(document.getElementById('ana').classList.contains('open')){  // Play 연동 — 우측 패널도 커서 윈도우로 재계산
+    renderAnaTrend(); renderAnaBars(); refreshScan();
+  }
+  if(drillCtx && drill.classList.contains('open'))   // 드릴 패널도 커서 월 기준으로 재렌더링
+    openDrill(drillCtx.kind, drillCtx.id);
+}
+tl.addEventListener('input', ()=>seek(+tl.value));
+document.getElementById('playBtn').onclick = togglePlay;
+function togglePlay(){
+  const btn = document.getElementById('playBtn');
+  if(playing){ clearInterval(playing); playing=null; btn.textContent='▶'; return; }
+  if(cursor>=N-1) seek(0);
+  btn.textContent='⏸';
+  playing = setInterval(()=>{
+    if(cursor>=N-1){ togglePlay(); return; }
+    seek(cursor+1);
+  }, 800/speed);
+}
+document.querySelectorAll('.spd').forEach(b=>b.onclick=()=>{
+  speed = +b.dataset.s;
+  document.querySelectorAll('.spd').forEach(x=>x.classList.toggle('on',x===b));
+  if(playing){ clearInterval(playing); playing=null; togglePlay(); }
+});
+{ // NOW 틱 위치
+  const w = document.getElementById('tlWrap');
+  const place = ()=>{ document.getElementById('nowTick').style.left = `calc(${NOW/(N-1)*100}% )`; };
+  place(); addEventListener('resize', place);
+}
+
+/* ── 패널 확장/축소: 그래프 박스를 오버레이로 이동 후 재렌더, 축소 시 원위치 복귀 ── */
+const MAXV = {box:null, ph:null, rerender:null};
+function closeMax(){
+  if(!MAXV.box) return;
+  MAXV.box.classList.remove('maxed');
+  MAXV.ph.parentNode.replaceChild(MAXV.box, MAXV.ph);
+  document.getElementById('maxOverlay').classList.remove('open');
+  const r = MAXV.rerender;
+  MAXV.box = MAXV.ph = MAXV.rerender = null;
+  r && r();
+}
+function openMax(box, title, rerender){
+  if(MAXV.box === box){ closeMax(); return; }   // 같은 패널 ⛶ 재클릭 = 축소
+  if(MAXV.box) closeMax();
+  MAXV.box = box; MAXV.rerender = rerender;
+  MAXV.ph = document.createElement('div');
+  box.parentNode.insertBefore(MAXV.ph, box);
+  document.getElementById('maxBody').appendChild(box);
+  box.classList.add('maxed');
+  document.getElementById('maxTitle').textContent = title;
+  document.getElementById('maxOverlay').classList.add('open');
+  rerender && rerender();
+}
+function addMaxBtn(boxId, hostId, label, rerender){
+  const box = document.getElementById(boxId);
+  const btn = document.createElement('button');
+  btn.className = 'maxBtn' + (hostId ? '' : ' abs');
+  btn.textContent = '⛶'; btn.title = '확장/축소 — 오른쪽 전체로 크게 보기';
+  (hostId ? document.getElementById(hostId) : box).appendChild(btn);
+  btn.onclick = e => { e.stopPropagation(); openMax(box, label(), rerender); };
+}
+document.getElementById('maxClose').onclick = closeMax;
+document.addEventListener('keydown', e => {   // ESC는 최상위 레이어(확장)부터 닫는다
+  if(e.key==='Escape' && MAXV.box){ e.stopImmediatePropagation(); closeMax(); }
+}, true);
+addMaxBtn('sceneWrap', null, ()=>'시뮬레이션 씬 — 확대 보기', null);
+addMaxBtn('mainChartBox', 'mcTitleBar', ()=>document.getElementById('mcTitle').textContent+' — 월별 추이', renderMainChart);
+addMaxBtn('wfBox', 'wfTitleBar', ()=>document.getElementById('wfTitle').textContent, renderWaterfall);
+addMaxBtn('anaTrendBox', 'anaTrendBar', ()=>document.getElementById('anaTrendTitle').textContent, renderAnaTrend);
+addMaxBtn('anaBarsBox', 'anaBarsBar', ()=>document.getElementById('anaBarsT').textContent, renderAnaBars);
+
+function recompute(){
+  SIM = simulate(levers);
+  syncLeverUI(); syncPresetUI();
+  updateScene(cursor);
+  renderKpis(); renderMainChart(); renderWaterfall(); renderImpact();
+  if(document.getElementById('ana').classList.contains('open')) renderAna();
+  if(document.getElementById('brief').classList.contains('open')){ renderBriefItems(); renderBriefScore(); }
+}
+addEventListener('resize', ()=>{ renderMainChart(); if(MAXV.box && MAXV.rerender) MAXV.rerender(); });
+
+/* ═══════════════ PART H · 판매 원인 분석 (사양×지역 드릴다운) ═══════════════ */
+const AT = D.attrs;
+const ZONE_COLOR = {west:'#79b8ff', central:'#4cc38a', south:'#eaa93e', northeast:'#e87ba4', southeast:'#b18cff'};
+/* 사양 믹스 — 생성기(generate.py)와 동일식 (결정적, 무노이즈) */
+function mixMy(i){
+  const y = 2024+Math.floor(i/12), ns = AT.my_next[i%12], o = {};
+  if(ns<1) o[y]=1-ns;
+  if(ns>0) o[y+1]=ns;
+  return o;
+}
+function mixEngine(md,i){
+  const p = AT.eng_p;
+  const s2 = md.ev ? Math.min(p.ev_max, p.ev_base+p.ev_slope*i)
+                   : Math.min(p.ice_max, p.ice_base+p.ice_slope*i);
+  return [1-s2, s2];
+}
+function mixDrive(md,zid,i){
+  let awd = Math.min(.95, Math.max(.05, AT.drive_awd[md.id]*AT.zone_awd_aff[zid]));
+  let fwd = 1-awd;
+  for(const a of AT.anomalies)
+    if(a.type==='drive' && a.model===md.id && a.zones.includes(zid) && i>=a.start){
+      const t = Math.min(1,(i-a.start+1)/a.ramp);
+      fwd *= 1-(1-a.fwd_factor)*t;
+    }
+  const s = awd+fwd;
+  return {AWD:awd/s, FWD:fwd/s};
+}
+function mixColor(md,zid,i){
+  const w = AT.color_w.slice();
+  for(const a of AT.anomalies)
+    if(a.type==='color' && (a.ev_only?md.ev:true) && a.zones.includes(zid) && i>=a.start){
+      const t = Math.min(1,(i-a.start+1)/a.ramp);
+      w[a.from_idx] -= a.shift*t;
+      w[a.to_idx]  += a.shift*t;
+    }
+  const s = w.reduce((x,y)=>x+y,0);
+  return w.map(x=>x/s);
+}
+/* 필터 슬라이스 판매량 (월 i, 지역 zid) — 각 카테고리 다중 선택(배열), 빈 배열=전체 */
+const emptyAF = () => ({model:[], my:[], trim:[], engine:[], drive:[], color:[]});
+let AF = emptyAF();
+let anaFocusZone = null;
+/* 사양 볼륨 계수 fv + 마진 계수 fm (트림 가격계수 반영) — financials_pnl_attr 생성식과 동일 */
+function sliceFactors(md, zid, i, F, plan=false){
+  let fv = ZW[md.id][zid], tm = 1;
+  if(F.my.length){ const mm = mixMy(i); fv *= F.my.reduce((a,y)=>a+(mm[y]||0), 0); }
+  if(F.trim.length){
+    const tw = F.trim.reduce((a,t)=>a+D.trim_w[t], 0);
+    tm = F.trim.reduce((a,t)=>a+D.trim_w[t]*D.trim_pf[t], 0) / D.npf / tw;
+    fv *= tw;
+  }
+  if(F.engine.length){ const em = mixEngine(md,i); fv *= F.engine.reduce((a,x)=>a+em[x], 0); }
+  if(F.drive.length){ const dm = mixDrive(md,zid,i,plan); fv *= F.drive.reduce((a,d)=>a+dm[d], 0); }
+  if(F.color.length){ const cm = mixColor(md,zid,i,plan); fv *= F.color.reduce((a,c)=>a+cm[c], 0); }
+  return {fv, fm: fv*tm};
+}
+function sliceVal(i, zid, key, F=AF, sim){   // sim: 등록 시나리오 오버레이용 (기본=현재 SIM)
+  const mv = monthView(i, sim);
+  const z = ZONES.find(z=>z.id===zid);
+  if(key==='csi'){
+    // 서베이는 VIN 연계 → 차종 필터 정확 반영. 캠페인 딥은 AUR 오너 집중 (사양별 차이는 없음)
+    const dip = 88.5 - mv.csi, zf = z.ev_aff>1 ? 1.3 : 0.8;
+    let wr=0, wmf=0;
+    for(const md of MODELS){
+      if(F.model.length && !F.model.includes(md.id)) continue;
+      const rr = mv.models[md.id].retail * ZW[md.id][zid];
+      wr += rr; wmf += rr * (AT.csi_mf[md.id] ?? AT.csi_mf.default);
+    }
+    return 88.5 - dip*zf*(wr ? wmf/wr : 1);
+  }
+  let retail=0, stock=0, op=0;
+  for(const md of MODELS){
+    if(F.model.length && !F.model.includes(md.id)) continue;
+    const {fv, fm} = sliceFactors(md, zid, i, F);
+    const m = mv.models[md.id];
+    retail += m.retail*fv; stock += m.stock*fv;
+    // VIN 단위 손익의 사양 집계: 마진 항은 fm, 비용 항(=마진−손익)은 fv — 정밀(합계=모델 손익)
+    const M = m.ws * md.margin;
+    op += M*fm - (M - m.op)*fv;
+  }
+  if(key==='op') return op;
+  if(key==='ds') return stock/Math.max(retail/30.4, 1);
+  return retail;
+}
+/* 전국(전 지역 합) 슬라이스 KPI + 상향식 BP 슬라이스 */
+function natSlice(i, key, F=AF){
+  if(key==='csi'){
+    let wr=0, wv=0;
+    for(const z of ZONES){
+      const r = sliceVal(i, z.id, 'retail', F);
+      wr += r; wv += r * sliceVal(i, z.id, 'csi', F);
+    }
+    return wr ? wv/wr : 88.5;
+  }
+  if(key==='ds'){
+    let retail=0, stock=0;
+    for(const z of ZONES){
+      const r = sliceVal(i, z.id, 'retail', F);
+      retail += r;
+      stock += sliceVal(i, z.id, 'ds', F) * r / 30.4;   // 존 재고 = DS × 판매속도
+    }
+    return stock / Math.max(retail/30.4, 1);
+  }
+  let s=0; for(const z of ZONES) s += sliceVal(i, z.id, key, F);
+  return s;
+}
+function bpSliceNat(i, key, F=AF){
+  if(key==='csi') return 88.5;
+  if(key==='ds') return 60;
+  let retail=0, op=0;
+  for(const md of MODELS){
+    if(F.model.length && !F.model.includes(md.id)) continue;
+    const b = D.bp[i].models[md.id];
+    const M = b.ws * md.margin, costs = M - b.op;
+    for(const z of ZONES){
+      const {fv, fm} = sliceFactors(md, z.id, i, F, true);   // plan=이상 징후 미반영 믹스
+      retail += b.retail*fv;
+      op += M*fm - costs*fv;
+    }
+  }
+  return key==='op' ? op : retail;
+}
+const anaAxisF = (key, v) =>
+  key==='op' ? (v<0?'-':'')+'$'+Math.abs(v/1e6).toFixed(1)+'M'
+  : key==='ds' ? Math.round(v)+'일'
+  : key==='csi' ? v.toFixed(1)
+  : fmt(v);
+/* 현재 필터 요약 라벨 */
+function filterSummary(){
+  const parts = [];
+  if(AF.model.length) parts.push(AF.model.map(id=>MODELS.find(m=>m.id===id).name).join('+'));
+  if(AF.my.length) parts.push(AF.my.map(y=>'MY'+y).join('+'));
+  if(AF.trim.length) parts.push(AF.trim.map(t=>trimLabel(t)).join('+'));
+  if(AF.engine.length) parts.push(AF.engine.map(x=>engineLabel(x)).join('+'));
+  if(AF.drive.length) parts.push(AF.drive.join('+'));
+  if(AF.color.length) parts.push(AF.color.map(c=>AT.colors[c]).join('+'));
+  return parts.length ? parts.join(' · ') : '전체';
+}
+const trimLabel = ti => AF.model.length===1 ? D.trims[AF.model[0]][ti] : ['Core급','볼륨','상위'][ti];
+const engineLabel = ei => AF.model.length===1 ? AT.engines[AF.model[0]][ei] : ['기본 PT','상위 PT'][ei];
+const avgSlice = (a,b,zid,F,key='retail') => { let s=0; for(let i=a;i<=b;i++) s+=sliceVal(i,zid,key,F); return s/(b-a+1); };
+/* CSI(pt)·DS(일)는 %가 아닌 절대차로, 판매·손익은 변화율로 비교 */
+const isAbsDelta = key => key==='csi' || key==='ds';
+/* 변화 비교 윈도우 — 타임라인 커서 연동: 커서 월 기준 최근 3개월 vs 이전 12개월
+   (커서가 미래면 시뮬 값 기준, 초기 14개월은 데이터 부족으로 월 14에 고정) */
+function deltaWin(){
+  const c = clamp(cursor, 14, N-1);
+  return {r0:c-2, r1:c, p0:c-14, p1:c-3};
+}
+function zoneDelta(zid,F,key='retail'){
+  const w = deltaWin();
+  const rec = avgSlice(w.r0, w.r1, zid, F, key), pri = avgSlice(w.p0, w.p1, zid, F, key);
+  return {rec, pri, d: isAbsDelta(key) ? rec-pri : (pri!==0 ? (rec-pri)/Math.abs(pri) : 0)};
+}
+function natDelta(F,key='retail'){
+  if(isAbsDelta(key)){
+    const w = deltaWin();
+    const avg=(a,b)=>{ let s=0; for(let i=a;i<=b;i++) s+=natSlice(i,key,F); return s/(b-a+1); };
+    const rec=avg(w.r0,w.r1), pri=avg(w.p0,w.p1);
+    return {rec, pri, d: rec-pri};
+  }
+  let rec=0, pri=0;
+  for(const z of ZONES){ const r=zoneDelta(z.id,F,key); rec+=r.rec; pri+=r.pri; }
+  return {rec, pri, d: pri!==0 ? (rec-pri)/Math.abs(pri) : 0};
+}
+const deltaFmt = (key,v,pctDec=1) =>
+  key==='csi' ? (v>=0?'+':'-')+Math.abs(v).toFixed(1)+'pt'
+  : key==='ds' ? (v>=0?'+':'-')+Math.abs(v).toFixed(0)+'일'
+  : (v>=0?'+':'')+(v*100).toFixed(pctDec)+'%';
+
+/* 필터 UI — 카테고리별 다중 선택 (칩 토글, '전체'=선택 해제) */
+function buildAnaFilters(){
+  const box = document.getElementById('anaFilters');
+  const row = (lbl, key, opts, cast) => {
+    const cur = AF[key];
+    const chips = [`<button class="fchip${cur.length===0?' on':''}" data-v="">전체</button>`]
+      .concat(opts.map(o=>`<button class="fchip${cur.includes(cast(o.v))?' on':''}" data-v="${o.v}">${o.t}</button>`));
+    const div = document.createElement('div');
+    div.className='fRow';
+    div.innerHTML = `<span class="fLbl">${lbl}</span>` + chips.join('');
+    div.querySelectorAll('.fchip').forEach(b=>b.onclick = ()=>{
+      if(b.dataset.v===''){ AF[key]=[]; }
+      else{
+        const v = cast(b.dataset.v);
+        AF[key] = AF[key].includes(v) ? AF[key].filter(x=>x!==v) : [...AF[key], v];
+        if(key==='model'){ AF.trim=[]; AF.engine=[]; }   // 차종 변경 시 종속 필터 초기화
+      }
+      anaYz=null; anaFocusZone=null;
+      buildAnaFilters(); refreshScan(); renderAna(); renderKpis();
+    });
+    box.appendChild(div);
+  };
+  box.innerHTML='';
+  row('차종', 'model', MODELS.map(m=>({v:m.id, t:m.name})), v=>v);
+  row('MY', 'my', [2024,2025,2026,2027,2028].map(y=>({v:y, t:'MY'+y})), v=>+v);
+  row('트림', 'trim', [0,1,2].map(ti=>({v:ti, t:trimLabel(ti)})), v=>+v);
+  row('엔진', 'engine', [0,1].map(ei=>({v:ei, t:engineLabel(ei)})), v=>+v);
+  row('구동', 'drive', [{v:'AWD',t:'AWD'},{v:'FWD',t:'FWD'}], v=>v);
+  row('색상', 'color', AT.colors.map((c,ci)=>({v:ci, t:c})), v=>+v);
+}
+
+/* 지역별 트렌드 차트 (Y줌·팬·툴팁 지원) */
+let anaYz = null, anaDom = null, anaSeries = null;
+function renderAnaTrend(){
+  const svg = document.getElementById('anaTrend');
+  const box = document.getElementById('anaTrendBox');
+  const W = Math.max(box.clientWidth-16, 400), H = Math.max(box.clientHeight-34, 220);
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.setAttribute('width',W); svg.setAttribute('height',H);
+  svg.innerHTML='';
+  const padL=48, padR=10, padT=10, padB=20;
+  const kdef = KPIS.find(k=>k.key===mainKey);
+  document.getElementById('anaTrendTitle').textContent =
+    `필터 슬라이스 월별 ${kdef.name} — 지역별` + (mainKey==='csi' ? ' (사양 필터 미적용 근사)' : '');
+  const series = {};
+  let lo=Infinity, hi=-Infinity;
+  for(const z of ZONES){
+    const s=[]; for(let i=0;i<N;i++){ const v=sliceVal(i,z.id,mainKey); s.push(v); lo=Math.min(lo,v); hi=Math.max(hi,v); }
+    series[z.id]=s;
+  }
+  const sp=hi-lo||1;
+  lo = mainKey==='retail' ? Math.max(0, lo-sp*0.06) : lo-sp*0.06;   // 손익은 음수 가능
+  hi += sp*0.06;
+  if(anaYz) [lo,hi]=anaYz;
+  anaDom = {lo,hi,padL,padR,padT,padB,W,H};
+  anaSeries = series;
+  const yrBtn = document.getElementById('anaYReset');
+  yrBtn.textContent = anaYz ? 'Y축 초기화 ↺' : '휠=Y줌 · 드래그=이동';
+  yrBtn.classList.toggle('on', !!anaYz);
+  const X=i=>padL+i/(N-1)*(W-padL-padR), Y=v=>padT+(1-(v-lo)/(hi-lo))*(H-padT-padB);
+  const defs=el('defs',{},svg), cp=el('clipPath',{id:'anaClip'},defs);
+  el('rect',{x:padL,y:padT,width:W-padL-padR,height:H-padT-padB},cp);
+  el('rect',{x:X(NOW), y:padT, width:X(N-1)-X(NOW), height:H-padT-padB, fill:'rgba(121,184,255,.04)'}, svg);
+  for(let g=0;g<=4;g++){
+    const v=lo+(hi-lo)*g/4, y=Y(v);
+    el('line',{x1:padL,y1:y,x2:W-padR,y2:y,stroke:'var(--line)','stroke-width':.6},svg);
+    el('text',{x:padL-5,y:y+3,'text-anchor':'end',class:'badge'},svg).textContent=anaAxisF(mainKey,v);
+  }
+  for(let i=0;i<N;i+=3)   // 3개월 간격 눈금선
+    el('line',{x1:X(i),y1:H-padB,x2:X(i),y2:H-padB+4,stroke:'var(--edge)','stroke-width':.8},svg);
+  for(let i=0;i<N;i+=6)
+    el('text',{x:X(i),y:H-5,'text-anchor':'middle',class:'badge'},svg).textContent=M.months[i];
+  el('text',{x:X(N-1),y:H-5,'text-anchor':'end',class:'badge'},svg).textContent=M.months[N-1];
+  el('line',{x1:X(NOW),y1:padT,x2:X(NOW),y2:H-padB,stroke:'var(--crit)','stroke-width':1,opacity:.7},svg);
+  el('text',{x:X(NOW)+3,y:padT+9,class:'badge',fill:'var(--crit)'},svg).textContent='NOW';
+  // 재생 커서 (메인 타임라인과 동일 x축 — Play 시 함께 이동)
+  el('line',{x1:X(cursor),y1:padT,x2:X(cursor),y2:H-padB,stroke:'var(--edge-hi)','stroke-width':1,opacity:.85},svg);
+  el('text',{x:X(cursor)+3,y:H-padB-4,class:'badge',fill:'var(--edge-hi)'},svg).textContent=M.months[cursor];
+  const plot=el('g',{'clip-path':'url(#anaClip)'},svg);
+  for(const z of ZONES){
+    const s=series[z.id], wdt = anaFocusZone===z.id?3:1.6, op = anaFocusZone&&anaFocusZone!==z.id?0.35:1;
+    const seg=(a,b,dash)=>{ let d=''; for(let i=a;i<=b;i++) d+=(d?' L':'M')+X(i).toFixed(1)+','+Y(s[i]).toFixed(1);
+      el('path',{d,fill:'none',stroke:ZONE_COLOR[z.id],'stroke-width':wdt,opacity:op,...(dash?{'stroke-dasharray':'5 4'}:{})},plot); };
+    seg(0,NOW,false); seg(NOW,N-1,true);
+  }
+  document.getElementById('anaZlg').innerHTML = ZONES.map(z=>
+    `<span class="zlg"><i style="border-color:${ZONE_COLOR[z.id]}"></i>${z.name}</span>`).join('');
+}
+{
+  const at = document.getElementById('anaTrend');
+  const box = document.getElementById('anaTrendBox');
+  const tip = document.getElementById('anaTip');
+  let pan = null;
+  document.getElementById('anaYReset').onclick = ()=>{ anaYz=null; renderAnaTrend(); };
+  at.addEventListener('pointerdown', e=>{
+    if(!anaDom) return;
+    pan = {y:e.clientY, dom:[anaDom.lo, anaDom.hi], moved:false};
+    at.setPointerCapture(e.pointerId);
+  });
+  at.addEventListener('pointermove', e=>{
+    if(!anaDom || !anaSeries) return;
+    if(pan){
+      const dy = e.clientY - pan.y;
+      if(Math.abs(dy)>4) pan.moved = true;
+      if(pan.moved){
+        tipHide(tip);
+        const span = pan.dom[1]-pan.dom[0];
+        anaYz = [pan.dom[0]+dy/(anaDom.H-anaDom.padT-anaDom.padB)*span,
+                 pan.dom[1]+dy/(anaDom.H-anaDom.padT-anaDom.padB)*span];
+        renderAnaTrend();
+      }
+      return;
+    }
+    const i = chartHoverIdx(at, anaDom, e);
+    hoverLine(at, anaDom, i, 'anaHv');
+    const rows = ZONES.map(z=>({c:ZONE_COLOR[z.id], n:z.name, v:anaSeries[z.id][i]}))
+      .sort((a,b)=>b.v-a.v);
+    const kdef = KPIS.find(k=>k.key===mainKey);
+    tipShow(tip, box, e, `<div class="th">${M.months[i]} · ${kdef.name} · ${filterSummary()}${i>NOW?' (시뮬)':''}</div>` +
+      rows.map(r=>`<div class="tr"><i style="background:${r.c}"></i>${r.n}<span class="tv">${anaAxisF(mainKey,r.v)}${mainKey==='retail'?'대':''}</span></div>`).join(''));
+  });
+  at.addEventListener('pointerup', ()=>{ pan=null; });
+  at.addEventListener('mouseleave', ()=>{ tipHide(tip); at.querySelector('#anaHv')?.remove(); });
+  at.addEventListener('wheel', e=>{
+    e.preventDefault();
+    if(!anaDom) return;
+    tipHide(tip);
+    const {lo,hi,padT,padB,H}=anaDom;
+    const frac = clamp(1-(e.offsetY-padT)/(H-padT-padB),0,1);
+    const v = lo+frac*(hi-lo), k = e.deltaY<0?0.8:1.25;
+    anaYz=[v-(v-lo)*k, v+(hi-v)*k];
+    renderAnaTrend();
+  },{passive:false});
+}
+
+/* 지역별 최근 변화 다이버징 바 — 선택 KPI(mainKey) 기준 */
+function renderAnaBars(){
+  const svg = document.getElementById('anaBars');
+  const key = mainKey, kdef = KPIS.find(k=>k.key===key);
+  const bbox = document.getElementById('anaBarsBox');
+  const inMax = !!bbox.closest('#maxOverlay');
+  const W = inMax ? Math.max(bbox.clientWidth-20, 370) : 370;
+  const H = inMax ? Math.max(bbox.clientHeight-36, 200) : 200;
+  const padL=86, padR=44, axB=H-44;   // axB=축 하단 (아래로 눈금·전국 라벨 2줄)
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  svg.innerHTML='';
+  document.getElementById('anaBarsT').textContent =
+    `지역별 최근 ${kdef.name} ${isAbsDelta(key)?'변화':'변화율'}`;
+  document.getElementById('anaBarsF').textContent = filterSummary();
+  const w = deltaWin();
+  document.getElementById('anaWinLbl').textContent =
+    `변화 비교(커서 연동): ${M.months[w.r0]}~${M.months[w.r1]} vs 이전 12개월(${M.months[w.p0]}~${M.months[w.p1]})`;
+  const nat = natDelta(AF, key);
+  const rows = ZONES.map(z=>({z, ...zoneDelta(z.id,AF,key)}));
+  const minExt = key==='ds' ? 3 : key==='csi' ? 0.4 : 0.12;
+  const badTh  = key==='ds' ? 4 : key==='csi' ? 0.3 : 0.03;   // 전국 대비 악화 판정 임계
+  const ext = Math.max(minExt, ...rows.map(r=>Math.abs(r.d)), Math.abs(nat.d))*1.15;
+  const X=v=>padL+(v+ext)/(2*ext)*(W-padL-padR);
+  const bh=(axB-10)/rows.length;
+  // X축 수치 눈금 (nice step: 1/2/5×10^k)
+  const nice = x => { const p=Math.pow(10,Math.floor(Math.log10(x))); const m=x/p;
+    return (m>=5?5:m>=2?2:1)*p; };
+  const tickF = v => key==='csi' ? parseFloat(v.toFixed(1))+'pt'
+    : key==='ds' ? parseFloat(v.toFixed(1))+'일'
+    : parseFloat((v*100).toFixed(1))+'%';
+  const t = nice(ext);
+  for(const v of [-t, -t/2, 0, t/2, t]){
+    el('line',{x1:X(v),y1:4,x2:X(v),y2:axB,stroke:'var(--line)','stroke-width':.6},svg);
+    el('text',{x:X(v),y:axB+12,'text-anchor':'middle',class:'badge'},svg).textContent=tickF(v);
+  }
+  el('line',{x1:X(0),y1:4,x2:X(0),y2:axB,stroke:'var(--edge)','stroke-width':1},svg);
+  el('line',{x1:X(nat.d),y1:4,x2:X(nat.d),y2:axB,stroke:'var(--muted)','stroke-width':1,'stroke-dasharray':'3 3'},svg);
+  el('text',{x:X(nat.d),y:H-16,'text-anchor':'middle',class:'badge'},svg).textContent=`전국 ${deltaFmt(key,nat.d)}`;
+  rows.forEach((r,k)=>{
+    const y=6+k*bh, hgt=bh-9;
+    el('text',{x:padL-6,y:y+hgt/2+4,'text-anchor':'end',class:'badge',
+      fill:anaFocusZone===r.z.id?'var(--ink)':'var(--muted)'},svg).textContent=r.z.name;
+    const x0=Math.min(X(0),X(r.d));
+    // DS는 증가가 악화(과잉재고 방향) — 색 판정을 반전
+    const worse = key==='ds' ? r.d - nat.d : nat.d - r.d;
+    const isGood = key==='ds' ? r.d<=0 : r.d>=0;
+    el('rect',{x:x0,y,width:Math.max(Math.abs(X(r.d)-X(0)),1.2),height:hgt,rx:2,
+      fill:worse>badTh ? 'var(--crit)' : isGood ? 'var(--good-mk)' : 'var(--warn-mk)'},svg);
+    // 음수 라벨은 바 내부(0선 쪽 반대편)에 그려 지역명과 겹치지 않게 한다
+    el('text',{x:r.d>=0?X(r.d)+4:X(r.d)+3,y:y+hgt/2+4,'text-anchor':'start',class:'badge',
+      fill:'var(--ink)'},svg).textContent=deltaFmt(key,r.d);
+  });
+}
+
+/* 자동 탐지: 현재 필터를 기준(base)으로, 아직 고정되지 않은 카테고리를 스캔해
+   전국 대비 지역 괴리가 큰 사양×지역 조합을 찾는다. 지표는 선택 KPI(mainKey).
+   CSI는 사양 계수에 불변 → 차종×지역 단위. DS는 지역에도 불변(fv 상쇄) →
+   차종별 DS 변화를 전체 DS 변화와 비교한다. */
+function anaScan(key=mainKey, base=AF){
+  const models = base.model.length ? MODELS.filter(m=>base.model.includes(m.id)) : MODELS;
+  const cands = [];
+  if(key==='ds'){
+    const ref = natDelta({...emptyAF(), ...structuredClone(base)}, key);
+    for(const md of models){
+      const F = {...emptyAF(), ...structuredClone(base), model:[md.id]};
+      const r = natDelta(F, key);
+      const vol = natDelta(F, 'retail').rec;
+      if(vol<60) continue;
+      cands.push({zid:null, zone:'전국', mid:md.id, model:md.name, dim:'model', v:md.id,
+                  label:'전 사양', dz:r.d, dn:ref.d, gap:r.d-ref.d, vol});
+    }
+    cands.sort((a,b)=>Math.abs(b.gap)*Math.sqrt(b.vol)-Math.abs(a.gap)*Math.sqrt(a.vol));
+    return cands.slice(0,6);
+  }
+  for(const md of models){
+    const dims = [];
+    if(!isAbsDelta(key)){
+      if(!base.drive.length) dims.push(...['AWD','FWD'].map(v=>({dim:'drive', v, label:v})));
+      if(!base.engine.length) dims.push(...[0,1].map(v=>({dim:'engine', v, label:AT.engines[md.id][v]})));
+      if(!base.color.length) dims.push(...AT.colors.map((c,ci)=>({dim:'color', v:ci, label:c})));
+    }
+    if(!dims.length) dims.push({dim:'model', v:md.id, label:isAbsDelta(key)?'전 사양':'선택 사양'});
+    for(const dm of dims){
+      const F = {...emptyAF(), ...structuredClone(base), model:[md.id]};
+      if(dm.dim!=='model') F[dm.dim] = [dm.v];
+      const nat = natDelta(F, key);
+      for(const z of ZONES){
+        const r = zoneDelta(z.id, F, key);
+        const vol = key==='retail' ? r.rec : avgSlice(NOW-2, NOW, z.id, F, 'retail');
+        if(vol<60) continue;   // 판매 볼륨이 너무 작은 슬라이스는 노이즈로 제외
+        cands.push({zid:z.id, zone:z.name, mid:md.id, model:md.name, dim:dm.dim, v:dm.v,
+                    label:dm.label, dz:r.d, dn:nat.d, gap:r.d-nat.d, vol});
+      }
+    }
+  }
+  cands.sort((a,b)=>Math.abs(b.gap)*Math.sqrt(b.vol)-Math.abs(a.gap)*Math.sqrt(a.vol));
+  const out=[], seen=new Set();
+  for(const c of cands){
+    const key=c.model+'|'+c.label;
+    if(seen.has(key)) continue;
+    seen.add(key); out.push(c);
+    if(out.length>=6) break;
+  }
+  return out;
+}
+let anaScanCache=null;
+function refreshScan(){
+  const key = mainKey;
+  anaScanCache = anaScan();
+  document.getElementById('anaScanF').textContent = filterSummary();
+  document.getElementById('anaScanK').textContent = KPIS.find(k=>k.key===key).name;
+  document.getElementById('anaScanNote').textContent =
+    key==='ds' ? '기준, 전체 대비 차종 괴리' : '기준, 전국 대비 지역 괴리';
+  const box=document.getElementById('anaScan');
+  box.innerHTML = anaScanCache.length ? '' :
+    '<div class="scnEmpty">현재 필터 기준으로 탐지된 유의미한 괴리가 없습니다.</div>';
+  const [lblA, lblB] = key==='ds' ? ['차종','전체'] : ['지역','전국'];
+  for(const c of anaScanCache){
+    const b=document.createElement('button');
+    b.className='scanRow';
+    const bad = key==='ds' ? c.gap>0 : c.gap<0;   // DS는 전국 대비 증가가 악화
+    b.innerHTML=`<span class="where">${c.zone} · ${c.model} · ${c.label}</span>
+      <span class="delta ${bad?'dn':'up'}">${lblA} ${deltaFmt(key,c.dz,0)} / ${lblB} ${deltaFmt(key,c.dn,0)}</span>`;
+    b.onclick=()=>{
+      AF.model=[c.mid]; AF[c.dim]=[c.v];         // 탐지 조합을 필터에 반영
+      anaFocusZone=c.zid; anaYz=null;
+      buildAnaFilters(); refreshScan(); renderAna(); renderKpis();
+    };
+    box.appendChild(b);
+  }
+}
+function renderAna(){ renderAnaTrend(); renderAnaBars(); }
+document.getElementById('btnAna').onclick = ()=>{
+  // 재클릭 = 닫기 (브리핑 버튼과 동일한 토글 동작)
+  if(document.getElementById('ana').classList.contains('open')){ closeAna(); return; }
+  if(MAXV.box) closeMax();   // 확대 보기(z60)가 분석(z40)을 가리지 않게 먼저 축소
+  closeBrief(); closeWar();  // 브리핑·워게이밍(z50)도 분석(z40)보다 위라 함께 닫는다
+  closeDrill(); if(selNode) setSelNode(null);   // 드릴 패널(z70)은 최상위라 반드시 닫고 선택 해제
+  clearFocusZone();                             // 지역 포커스 필터 해제 — 분석은 자체 필터로 시작
+  document.getElementById('ana').classList.add('open');
+  document.getElementById('btnAna').classList.add('on');
+  buildAnaFilters(); refreshScan(); renderAna(); renderKpis();
+};
+function closeAna(){
+  // 분석 내부 패널이 확장 중이면 먼저 원위치로
+  if(MAXV.box && (MAXV.box.id==='anaTrendBox' || MAXV.box.id==='anaBarsBox')) closeMax();
+  document.getElementById('ana').classList.remove('open');
+  document.getElementById('btnAna').classList.remove('on');
+  renderKpis();   // 분석을 닫으면 KPI는 전사 값으로 복귀
+}
+document.getElementById('anaClose').onclick = closeAna;
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeAna(); });
+
+/* ═══════════════ PART I · 오늘의 브리핑 (CEO 1-DAU: 푸시 3가지 + 스코어보드 + 워게이밍) ═══════════════ */
+function openBrief(){
+  if(MAXV.box) closeMax();   // 확대 보기(z60)가 브리핑(z50)을 가리지 않게 먼저 축소
+  closeWar();                // 워게이밍은 같은 z50이지만 DOM상 뒤라 브리핑을 덮는다
+  closeDrill(); if(selNode) setSelNode(null);   // 드릴 패널(z70)은 최상위라 반드시 닫고 선택 해제
+  clearFocusZone();                             // 지역 포커스 필터 해제 — 브리핑·KPI 레일을 전사 관점으로
+  document.getElementById('brief').classList.add('open');
+  document.getElementById('btnBrief').classList.add('on');
+  document.getElementById('bfDate').textContent = M.months[NOW]+' 실적 마감 기준 · 3분 판단용';
+  renderBriefItems(); renderBriefScore();
+}
+function closeBrief(){
+  document.getElementById('brief').classList.remove('open');
+  document.getElementById('btnBrief').classList.remove('on');
+}
+// 버튼 = 토글: 닫혀 있으면 첫 화면(브리핑)으로, 열려 있으면 기본 화면으로
+document.getElementById('btnBrief').onclick = ()=>{
+  document.getElementById('brief').classList.contains('open') ? closeBrief() : openBrief();
+};
+document.getElementById('bfClose').onclick = closeBrief;
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeBrief(); closeWar(); } });
+
+/* 오늘의 3가지 — 우선순위: 공급 병목 > 수요 괴리 > 재고 이상 > BP 갭 */
+function briefItems(){
+  const items = [];
+  for(let h=1; h<=N-1-NOW; h++){                       // ① 케파 병목 조기 경보
+    const mo = SIM[h-1];
+    if(mo.capHit.length){
+      let unmet=0; for(const id of MID){ const m=mo.models[id]; unmet += Math.max(0, m.desired-m.ws); }
+      items.push({tag:'공급 리스크', tone:'crit',
+        title:`${mo.ym} ${mo.capHit.join('·')} 케파 병목 진입 (D+${h}개월)`,
+        body:`현 궤도 유지 시 생산요청이 케파를 초과합니다. 해당 월 미충족 도매 ≈ ${fmt(unmet)}대 — EV 증산·배분 조정 검토. 클릭=해당 월 공장 드릴.`,
+        act:()=>{ closeBrief(); seek(NOW+h); openDrill('plant', mo.capHit[0]); }});
+      break;
+    }
+  }
+  const sc = anaScan('retail', emptyAF())[0];          // ② 지역×사양 수요 괴리 TOP1
+  if(sc) items.push({tag:'수요 이상', tone: sc.gap<0?'crit':'good',
+    title:`${sc.zone} · ${sc.model} · ${sc.label} — 지역 ${deltaFmt('retail',sc.dz,0)} vs 전국 ${deltaFmt('retail',sc.dn,0)}`,
+    body:`최근 3개월 판매가 전국 추세와 ${(Math.abs(sc.gap)*100).toFixed(0)}%p 괴리 (볼륨 가중 1위). 클릭=상세 분석에서 원인 드릴.`,
+    act:()=>{ closeBrief();
+      AF = emptyAF(); AF.model=[sc.mid]; if(sc.dim!=='model') AF[sc.dim]=[sc.v];
+      anaFocusZone = sc.zid; anaYz = null;
+      document.getElementById('ana').classList.add('open');
+      document.getElementById('btnAna').classList.add('on');
+      buildAnaFilters(); refreshScan(); renderAna(); renderKpis(); }});
+  for(let h=1; h<=N-1-NOW; h++){                       // ③ DS 이상 구간 진입
+    const ds = SIM[h-1].tot.ds;
+    if(ds>75 || ds<45){
+      items.push({tag:'재고 리스크', tone:'warn',
+        title:`${SIM[h-1].ym} 전사 DS ${Math.round(ds)}일 — ${ds>75?'과잉':'부족'} 구간 진입`,
+        body:'재고정책(목표 DS) 레버 점검 필요. 클릭=DS 지표로 전환 + 해당 월 이동.',
+        act:()=>{ closeBrief(); mainKey='ds'; seek(NOW+h); }});
+      break;
+    }
+  }
+  const cumOp = SIM.reduce((a,m)=>a+m.tot.op,0);       // ④ BP 궤도 갭
+  const bpOp = D.bp.slice(NOW+1).reduce((a,b)=>a+MID.reduce((x,id)=>x+b.models[id].op,0),0);
+  const gap = cumOp - bpOp;
+  items.push({tag:'계획 대비', tone: gap>=0?'good':'warn',
+    title:`미래 16개월 영업이익 — BP ${gap>=0?'+':'-'}$${Math.abs(gap/1e6).toFixed(0)}M ${gap>=0?'상회':'하회'} 궤도`,
+    body: gap>=0 ? '현 궤도는 BP를 상회합니다. 클릭=영업이익 뷰에서 원천 분해 확인.'
+                 : '현 레버 유지 시 BP 미달. 클릭=AI 워게이밍에서 만회 조합 탐색.',
+    act: gap>=0
+      ? ()=>{ closeBrief(); mainKey='op'; updateScene(cursor); renderKpis(); renderMainChart(); renderWaterfall(); }
+      : ()=>{ closeBrief(); openWar(); }});
+  return items.slice(0,3);
+}
+function renderBriefItems(){
+  const box = document.getElementById('bfItems');
+  box.innerHTML='';
+  for(const it of briefItems()){
+    const b = document.createElement('button');
+    b.className = 'bfCard '+it.tone;
+    b.innerHTML = `<div class="tag">${it.tag}</div><div class="bt">${it.title}</div><div class="bb">${it.body}</div>`;
+    b.onclick = it.act;
+    box.appendChild(b);
+  }
+}
+/* 결정 스코어보드 — 커밋 계획 밴드 대비 현 궤도의 월별 판정 */
+function renderBriefScore(){
+  const box = document.getElementById('bfScore');
+  if(!box) return;
+  if(!COMMIT){
+    box.innerHTML = '<div class="scnEmpty">레버 조정 → 시나리오 등록 → <b>☆커밋</b>을 누르면, 매일 현 궤도가 커밋 계획 밴드 안에 있는지 KPI별로 추적합니다.</div>';
+    return;
+  }
+  const H = N-1-NOW;
+  let rows='';
+  for(const k of KPIS){
+    let inb=0, cur=0, com=0;
+    for(let h=1; h<=H; h++){
+      cur = kpiValue(k.key, NOW+h);
+      com = kpiValue(k.key, NOW+h, COMMIT.sim);
+      const tol = k.key==='csi' ? 0.3+0.05*h : k.key==='ds' ? 4+0.4*h : Math.abs(com)*bandPct(h);
+      if(Math.abs(cur-com) <= tol) inb++;
+    }
+    const col = inb===H ? 'var(--good)' : inb>=H*0.8 ? 'var(--warn)' : 'var(--crit)';
+    const d = cur - com;
+    const dTxt = k.key==='op' ? '$'+Math.abs(d/1e6).toFixed(0)+'M'
+               : k.key==='retail' ? fmt(Math.abs(d))+'대' : Math.abs(d).toFixed(1);
+    rows += `<tr><td>${k.name}</td><td style="color:${col}">${inb}/${H}</td>
+      <td>${k.f(cur)}</td><td>${k.f(com)}</td>
+      <td style="color:${(k.key==='ds' ? d<=0 : d>=0)?'var(--good)':'var(--crit)'}">${d>=0?'+':'-'}${dTxt}</td></tr>`;
+  }
+  box.innerHTML = `<div style="font-size:11px;margin-bottom:4px">커밋: <b style="color:${COMMIT.color}">${COMMIT.name}</b> · 미래 ${H}개월 궤도 판정 (허용 밴드 = 호라이즌 비례 불확실성)</div>
+    <table class="war"><tr><th>KPI</th><th>궤도 내</th><th>현 궤도 27-12</th><th>커밋 27-12</th><th>Δ</th></tr>${rows}</table>
+    <div style="font-size:10px;color:var(--muted);margin-top:4px">레버를 바꿔 검토하면 이 표가 커밋 대비 이탈을 즉시 반영합니다.</div>`;
+}
+/* ═══ AI 워게이밍 — 전략 레버·시나리오 연계 (레버 패널 ⚔ 버튼에서 진입) ═══
+   후보 = 베이스라인 + 현재 검토안(레버) + 등록 시나리오 + 현재 레버 주변 변주 + 전략 전형 */
+const ARCHETYPES = [
+  {name:'수익 패키지', lv:{price:3, inc:-200, mkt:-10}},
+  {name:'성장 패키지', lv:{inc:600, mkt:40, ev:30, dsT:65}},
+  {name:'긴축 패키지', lv:{inc:-400, mkt:-30, dsT:50}},
+  {name:'균형 패키지', lv:{price:1, inc:200, mkt:20, ev:20}},
+  {name:'공세 패키지', lv:{inc:800, mkt:50}},
+  {name:'EV 올인', lv:{ev:50, mkt:30, dsT:65}},
+  {name:'방어 패키지', lv:{price:-1, inc:400}},
+  {name:'프리미엄 전환', lv:{price:4, mkt:40}},
+  {name:'점유율 우선', lv:{price:-2}},
+  {name:'린 재고', lv:{dsT:50}},
+];
+function warCandidates(){
+  const cands = [];
+  const push = (name, lv) => {
+    const full = {...DEFAULT_LEVERS, ...lv};
+    if(cands.some(c=>JSON.stringify(c.lv)===JSON.stringify(full))) return;
+    cands.push({name, lv:full});
+  };
+  push('베이스라인 (무변경)', {});
+  if(JSON.stringify(levers)!==JSON.stringify(DEFAULT_LEVERS)) push('▶ 현재 검토안', {...levers});
+  for(const s of SCENARIOS) push('등록: '+s.name, {...s.levers});
+  // 현재 레버 주변 변주 — 검토안의 이웃 조합을 자동 생성
+  const steps = {price:[-2,-1,1,2], inc:[-400,400,800], mkt:[-20,20,40], dsT:[-10,10], ev:[15,30]};
+  for(const k in steps){
+    const d = LEVER_DEFS.find(x=>x.k===k);
+    for(const dv of steps[k]){
+      const v = clamp(levers[k]+dv, d.min, d.max);
+      if(v===levers[k]) continue;
+      push(`변주: ${d.name} ${d.f(v)}`, {...levers, [k]:v});
+    }
+  }
+  for(const c of ARCHETYPES) push('전형: '+c.name, c.lv);
+  return cands.slice(0, 32);
+}
+function openWar(){
+  if(MAXV.box) closeMax();   // 확대 보기(z60)가 워게이밍(z50)을 가리지 않게 먼저 축소
+  closeDrill(); if(selNode) setSelNode(null);   // 드릴 패널(z70)은 최상위라 반드시 닫고 선택 해제
+  clearFocusZone();                             // 지역 포커스 필터 해제 — 워게이밍은 전사 관점 기준
+  document.getElementById('war').classList.add('open');
+  runWargame();   // 진입 즉시 현재 레버·시나리오 기준으로 실행
+}
+function closeWar(){ document.getElementById('war').classList.remove('open'); }
+document.getElementById('btnWar').onclick = openWar;
+document.getElementById('warClose').onclick = closeWar;
+let warObj = 'profit';
+document.querySelectorAll('#warCtl .fchip').forEach(b=>b.onclick=()=>{
+  warObj = b.dataset.obj;
+  document.querySelectorAll('#warCtl .fchip').forEach(x=>x.classList.toggle('on', x===b));
+  runWargame();
+});
+document.getElementById('warRun').onclick = runWargame;
+function runWargame(){
+  const t0 = performance.now();
+  const cands = warCandidates();
+  const shocks = [0.9, 1, 1.1];
+  const cum = (sim,k)=>sim.reduce((a,m)=>a+m.tot[k],0);
+  const baseS = {}; for(const s of shocks) baseS[s] = simulate(DEFAULT_LEVERS, s);
+  const rows = cands.map(c=>{
+    const sims = {}; for(const s of shocks) sims[s] = simulate(c.lv, s);
+    const s1 = sims[1];
+    const dOp = cum(s1,'op')-cum(baseS[1],'op');
+    const dRt = cum(s1,'retail')-cum(baseS[1],'retail');
+    const csi = s1[s1.length-1].csi, ds = s1[s1.length-1].tot.ds;
+    // 강건성: 수요 −10%/기준/+10% 각각에서 같은 충격의 베이스라인 이익을 지키는가
+    const rob = shocks.filter(s=>cum(sims[s],'op') >= cum(baseS[s],'op')-1e6).length;
+    return {c, dOp, dRt, csi, ds, rob};
+  });
+  const norm = arr => { const mn=Math.min(...arr), mx=Math.max(...arr), sp=mx-mn||1; return v=>(v-mn)/sp; };
+  const zo = norm(rows.map(r=>r.dOp)), zr = norm(rows.map(r=>r.dRt));
+  for(const r of rows)
+    r.score = warObj==='profit' ? r.dOp : warObj==='sales' ? r.dRt
+      : zo(r.dOp) + zr(r.dRt) + 0.4*clamp((r.csi-87.5)/1.5,-1,1) - 0.4*Math.abs(r.ds-60)/15 + 0.2*r.rob/3;
+  rows.sort((a,b)=>b.score-a.score);
+  const objName = {profit:'이익 극대', sales:'판매 극대', balance:'균형'}[warObj];
+  const lvTxt = c => LEVER_DEFS.filter(d=>c.lv[d.k]!==DEFAULT_LEVERS[d.k]).map(d=>`${d.name} ${d.f(c.lv[d.k])}`).join(' · ') || '무변경';
+  let html = `<div style="font-size:10px;color:var(--muted)">${cands.length}개 후보 × 충격 3종 = ${cands.length*3+3}회 시뮬 · ${Math.round(performance.now()-t0)}ms · 목표 ${objName} · Δ=베이스라인 대비 미래 16개월 누적 · 행 호버=레버 구성</div>
+    <table class="war"><tr><th>#</th><th>후보 (현재안 ▶ · 등록 · 변주 · 전형)</th><th>Δ이익</th><th>Δ판매</th><th>CSI</th><th>DS</th><th>강건성</th><th></th></tr>`;
+  const top = rows.slice(0, 12);
+  top.forEach((r,i)=>{
+    html += `<tr title="${lvTxt(r.c)}"><td>${i+1}</td><td>${r.c.name}</td>
+      <td style="color:${r.dOp>=0?'var(--good)':'var(--crit)'}">${r.dOp>=0?'+':'-'}$${Math.abs(r.dOp/1e6).toFixed(0)}M</td>
+      <td style="color:${r.dRt>=0?'var(--good)':'var(--crit)'}">${r.dRt>=0?'+':'-'}${fmt(Math.abs(r.dRt))}</td>
+      <td>${r.csi.toFixed(1)}</td><td>${r.ds.toFixed(0)}일</td>
+      <td style="color:${r.rob===3?'var(--good)':r.rob===2?'var(--warn)':'var(--crit)'}">${r.rob}/3</td>
+      <td><button class="mini" data-i="${i}" data-a="apply" title="레버에 즉시 적용">적용</button> <button class="mini" data-i="${i}" data-a="reg" title="시나리오로 등록 (차트 오버레이·커밋 가능)">등록</button></td></tr>`;
+  });
+  const box = document.getElementById('warOut');
+  box.innerHTML = html + '</table>';
+  box.querySelectorAll('button.mini').forEach(b=>b.onclick=()=>{
+    const r = top[+b.dataset.i];
+    if(b.dataset.a==='apply'){
+      levers = {...r.c.lv}; activePreset=null; syncLeverUI(); recompute(); closeWar();
+    } else {
+      SCENARIOS.push({id:'sc'+(scnSeq++), name:r.c.name.replace(/^(등록|변주|전형): /,''), levers:{...r.c.lv},
+        sim:simulate(r.c.lv), color:SCN_COLORS[(scnSeq-2)%SCN_COLORS.length], visible:true});
+      renderScnList(); renderMainChart();
+      b.textContent='✓'; b.disabled=true;
+    }
+  });
+}
+
+/* init */
+BASE_SIM = simulate(DEFAULT_LEVERS);
+SIM = BASE_SIM;
+buildLevers();
+renderScnList();
+recompute();
+seek(NOW);
+openBrief();   // 첫 화면 = 오늘의 브리핑 (CEO 1-DAU)
+</script>
+</body>
+</html>

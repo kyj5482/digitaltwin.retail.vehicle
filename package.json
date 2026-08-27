@@ -1,0 +1,14 @@
+{
+  "name": "digitaltwin-retail-vehicle",
+  "private": true,
+  "description": "미국판매법인 디지털 트윈 프로토타입 — 정적 서버(server.js) + prototypes/",
+  "scripts": {
+    "start": "node server.js",
+    "test": "bash prototypes/tests/run-tests.sh"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1",
+    "maplibre-gl": "^6.6.0",
+    "h3-js": "^4.3.0"
+  }
+}

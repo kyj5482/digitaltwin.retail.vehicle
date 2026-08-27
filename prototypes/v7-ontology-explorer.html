@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V7 온톨로지 탐색기 — 미국판매법인 비즈니스 온톨로지</title>
+<!--
+  온톨로지 탐색기 — 데이터가 어떤 객체·관계·액션으로 구성되는지 그 자체를 보여주는 화면.
+  (Palantir 비행기 온톨로지 스타일: 타입 그래프 → 인스턴스 → 링크 순회 → 수명주기)
+  정의: v7-ontology.js (시멘틱 레이어 선언) / 표본 인스턴스: v7-ontology-instances.js
+  시각화: Cytoscape.js 3.30 (vendor/, ⭐11k) — 타입 그래프 줌/팬/하이라이트
+-->
+<style>
+:root{
+  /* 중립(크롬) 토큰 — v8 전략 트윈과 동일 팔레트 (임베드 시 이질감 없이 이어지도록 통일) */
+  --bg:#161614; --panel:#1e1e1c; --panel2:#262623; --panel3:#2e2e2b;
+  --border:#33332f; --text:#f0efec; --muted:#a3a199; --dim:#8f8d85;
+  --edge:#6e6e67; --edge-hi:#79b8ff;
+  /* 그룹 마크색 — 다크 표면 검증 통과(validate_palette, 인접쌍) · 열 분리+라벨 병행 */
+  --g-org:#3987e5; --g-product:#d95926; --g-plan:#199e70; --g-logistics:#c98500;
+  --g-commerce:#d55181; --g-care:#008300; --g-quality:#9085e9;
+  /* 상태 배지 (항상 텍스트 라벨 동반) */
+  --st-bound:#0ca30c; --st-planned:#fab219; --st-derived:#79b8ff;
+  --pass:#0ca30c; --hold:#fab219; --safety:#d03b3b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);
+  font:13px/1.45 "Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;   /* v8과 동일 글꼴 스택 */
+  display:flex;flex-direction:column;overflow:hidden}
+button{font-family:inherit}
+
+/* ── 헤더 ── */
+header{display:flex;align-items:center;gap:18px;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--panel);flex:none}
+header h1{font-size:15px;font-weight:600}
+header .sub{font-size:11.5px;color:var(--muted)}
+.tabs{display:flex;gap:4px;margin-left:12px}
+.tabs button{background:none;border:1px solid transparent;color:var(--muted);font-size:12.5px;padding:6px 14px;border-radius:6px;cursor:pointer}
+.tabs button:hover{color:var(--text);background:var(--panel2)}
+.tabs button.on{color:var(--text);background:var(--panel3);border-color:var(--border);font-weight:600}
+.stats{margin-left:auto;display:flex;gap:14px;font-size:11.5px;color:var(--muted)}
+.stats b{color:var(--text);font-weight:600}
+
+/* ── 공통 ── */
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;border:1px solid;letter-spacing:.03em;vertical-align:1px}
+.badge.bound{color:var(--st-bound);border-color:var(--st-bound)}
+.badge.planned{color:var(--st-planned);border-color:var(--st-planned)}
+.badge.derived{color:var(--st-derived);border-color:var(--st-derived)}
+.gdot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.mono{font-family:ui-monospace,Menlo,monospace}
+.muted{color:var(--muted)}
+main{flex:1;display:none;min-height:0}
+main.on{display:flex}
+
+/* ── 탭1: 그래프 ── */
+#cy{flex:1;min-width:0}
+.side{width:400px;flex:none;border-left:1px solid var(--border);background:var(--panel);overflow-y:auto;padding:16px}
+/* ── 정보 패널 접기 — 온톨로지 정보가 차지하는 가로 면적을 줄여 관계 뷰를 넓게 ── */
+#sideToggle{flex:none;width:16px;border:none;border-left:1px solid var(--border);background:var(--panel);
+  color:var(--muted);cursor:pointer;font-size:10px;padding:0}
+#sideToggle:hover{color:var(--edge-hi);background:var(--panel2)}
+body.sideMin #sidePanel{display:none}
+.side h2{font-size:14px;font-weight:600;margin-bottom:2px}
+.side .en{font-size:11px;color:var(--muted);margin-bottom:8px}
+.side p.desc{font-size:12px;color:var(--muted);line-height:1.65;margin:8px 0 12px}
+.card{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+.card h3{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
+.kv{display:grid;grid-template-columns:88px 1fr;gap:3px 10px;font-size:11.5px}
+.kv .k{color:var(--muted)}
+table.props{width:100%;border-collapse:collapse;font-size:11.5px}
+table.props th{text-align:left;color:var(--muted);font-weight:600;font-size:10.5px;padding:3px 6px;border-bottom:1px solid var(--border)}
+table.props td{padding:3.5px 6px;border-bottom:1px solid var(--panel3);vertical-align:top}
+table.props tr:last-child td{border-bottom:none}
+.role{font-size:9px;font-weight:700;padding:0 5px;border-radius:7px;border:1px solid var(--border);color:var(--muted)}
+.role.key{color:var(--edge-hi);border-color:var(--edge-hi)}
+.role.measure{color:var(--g-plan);border-color:var(--g-plan)}
+.role.status{color:var(--st-planned);border-color:var(--st-planned)}
+.linkrow{display:flex;align-items:baseline;gap:7px;font-size:11.5px;padding:3px 0;border-bottom:1px solid var(--panel3);cursor:pointer}
+.linkrow:last-child{border-bottom:none}
+.linkrow:hover .lname{color:var(--edge-hi)}
+.linkrow .lname{font-weight:600}
+.linkrow .dir{color:var(--muted);font-size:10px}
+.actrow{padding:6px 0;border-bottom:1px solid var(--panel3);font-size:11.5px}
+.actrow:last-child{border-bottom:none}
+.actrow b{font-weight:600}
+.actrow .fx{color:var(--muted);font-size:11px;margin-top:2px;line-height:1.5}
+.btn{display:inline-block;background:var(--panel3);border:1px solid var(--border);color:var(--text);
+  font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;margin-top:4px}
+.btn:hover{border-color:var(--edge-hi);color:var(--edge-hi)}
+.btn.twinBtn{border-color:var(--st-derived);color:var(--st-derived);font-size:11px;padding:4px 10px;margin-top:6px}
+.btn.twinBtn:hover{background:var(--panel2)}
+.hint{font-size:11px;color:var(--dim);line-height:1.7}
+
+/* ── 탭2: 객체 탐색 ── */
+.col-types{width:230px;flex:none;border-right:1px solid var(--border);background:var(--panel);overflow-y:auto;padding:10px 0}
+.col-types .grp{font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.05em;padding:10px 14px 4px}
+.trow{display:flex;align-items:center;gap:4px;padding:5px 14px;cursor:pointer;font-size:12px}
+.trow:hover{background:var(--panel2)}
+.trow.on{background:var(--panel3);font-weight:600}
+.trow .cnt{margin-left:auto;color:var(--muted);font-size:11px}
+.col-list{width:330px;flex:none;border-right:1px solid var(--border);background:var(--bg);display:flex;flex-direction:column}
+.col-list .lhead{padding:12px 14px 8px;border-bottom:1px solid var(--border);flex:none}
+.col-list .lhead h2{font-size:13.5px;font-weight:600}
+.col-list .lhead .n{color:var(--muted);font-size:11.5px}
+.col-list input{width:100%;margin-top:8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);font-size:12px;padding:6px 10px;outline:none}
+.col-list input:focus{border-color:var(--edge-hi)}
+.ilist{flex:1;overflow-y:auto}
+.irow{padding:8px 14px;border-bottom:1px solid var(--panel2);cursor:pointer}
+.irow:hover{background:var(--panel)}
+.irow.on{background:var(--panel2)}
+.irow .t{font-size:12.5px;font-weight:600}
+.irow .s{font-size:11px;color:var(--muted);margin-top:1px}
+.col-obj{flex:1;min-width:0;overflow-y:auto;padding:16px 20px;background:var(--bg)}
+.crumbs{font-size:11.5px;color:var(--muted);margin-bottom:10px;min-height:16px}
+.crumbs a{color:var(--edge-hi);cursor:pointer;text-decoration:none}
+.objtitle{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.objtitle h2{font-size:16px;font-weight:600}
+.typechip{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:10px;border:1.5px solid;cursor:pointer}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{font-size:11.5px;padding:3px 10px;border-radius:12px;border:1px solid var(--border);background:var(--panel2);cursor:pointer}
+.chip:hover{border-color:var(--edge-hi);color:var(--edge-hi)}
+.chip .cty{color:var(--muted);font-size:10px;margin-right:5px}
+.section{margin-top:16px}
+.section h3{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
+
+/* 수명주기 스트립 */
+.lifecycle{display:flex;align-items:flex-start;gap:0;margin:10px 0 4px;overflow-x:auto;padding-bottom:6px}
+.lstate{min-width:96px;text-align:center;position:relative}
+.lstate .box{border:1.5px solid var(--border);border-radius:7px;padding:7px 6px;font-size:11px;color:var(--dim);background:var(--panel)}
+.lstate.done .box{border-color:var(--g-plan);color:var(--text)}
+.lstate.now .box{border-color:var(--edge-hi);color:var(--text);background:var(--panel3);font-weight:700;box-shadow:0 0 0 3px rgba(121,184,255,.15)}
+.lgate{width:78px;flex:none;text-align:center;padding-top:5px}
+.lgate .g{font-size:9px;font-weight:700;border:1px solid var(--border);border-radius:8px;padding:1px 6px;color:var(--muted);display:inline-block}
+.lgate.pass .g{color:var(--pass);border-color:var(--pass)}
+.lgate.hold .g{color:var(--hold);border-color:var(--hold)}
+.lgate .arr{color:var(--edge);font-size:12px;line-height:1;margin-top:3px}
+.lgate .gn{font-size:9px;color:var(--dim);margin-top:2px;line-height:1.3}
+
+/* ── 탭3: 액션·수명주기 ── */
+.actions-wrap{flex:1;overflow-y:auto;padding:20px 26px}
+.actions-wrap h2{font-size:14px;font-weight:600;margin:4px 0 10px}
+.actions-wrap .lead{font-size:12px;color:var(--muted);line-height:1.7;max-width:920px;margin-bottom:14px}
+#lifecycleSvg{background:var(--panel);border:1px solid var(--border);border-radius:10px;display:block;max-width:1180px;width:100%}
+.stagegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;max-width:1180px;margin-top:8px}
+.stagecard{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.stagecard h3{font-size:12px;font-weight:700;margin-bottom:8px;display:flex;align-items:center}
+.extguide{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--edge-hi);border-radius:10px;
+  padding:14px 18px;max-width:1180px;margin:18px 0 8px;font-size:12px;line-height:1.9;color:var(--muted)}
+.extguide b{color:var(--text)}
+
+/* ── 그래프 툴바 (레이아웃 전환) ── */
+#viewG{position:relative}
+.cytools{position:absolute;top:12px;left:12px;z-index:5;display:flex;gap:4px;
+  background:rgba(30,30,28,.88);border:1px solid var(--border);border-radius:8px;padding:4px}
+.cytools button{background:none;border:1px solid transparent;color:var(--muted);font-size:11.5px;padding:4px 11px;border-radius:5px;cursor:pointer}
+.cytools button:hover{color:var(--text)}
+.cytools button.on{color:var(--text);background:var(--panel3);border-color:var(--border);font-weight:600}
+.cytools #btnFocus{color:var(--edge-hi);border-color:var(--edge-hi);font-weight:600}
+.cytools .kbd{font-size:9px;border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--dim);margin-left:4px;vertical-align:1px}
+.cytools #focusCrumb{font-size:11.5px;color:var(--muted);padding:4px 8px;align-self:center;max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cytools #twinClock{font-size:11.5px;color:var(--muted);padding:4px 10px;align-self:center;border-left:1px solid var(--border);font-family:ui-monospace,monospace}
+
+/* ── 탭4: 데이터 파이프라인 ── */
+#pipelineSvg{background:var(--panel);border:1px solid var(--border);border-radius:10px;display:block;max-width:1180px;width:100%}
+table.bind{width:100%;max-width:1180px;border-collapse:collapse;font-size:11.5px;background:var(--panel);border:1px solid var(--border)}
+table.bind th{text-align:left;color:var(--muted);font-weight:600;font-size:10.5px;padding:7px 10px;border-bottom:1px solid var(--border);background:var(--panel2)}
+table.bind td{padding:6px 10px;border-bottom:1px solid var(--panel3);vertical-align:top}
+table.bind tr:last-child td{border-bottom:none}
+table.bind tr:hover td{background:var(--panel2)}
+.wave{display:flex;align-items:baseline;gap:12px;max-width:1180px;padding:8px 0;border-bottom:1px solid var(--panel3)}
+.wave:last-child{border-bottom:none}
+.wave .wno{flex:none;font-size:10.5px;font-weight:700;color:var(--edge-hi);border:1px solid var(--edge-hi);border-radius:9px;padding:1px 9px;white-space:nowrap}
+pre.code{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;
+  font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.75;color:var(--text);max-width:1180px;overflow-x:auto}
+pre.code .c{color:var(--dim)}
+pre.code .k{color:var(--edge-hi)}
+/* 개요(설명문) 접기 — 기본 접힘, 클릭 시에만 펼침 */
+.introDesc{margin:10px 0}
+.introDesc summary{cursor:pointer;color:var(--muted);font-size:12px;padding:5px 0;list-style-position:inside}
+.introDesc summary:hover{color:var(--edge-hi)}
+.introDesc[open] summary{color:var(--text)}
+/* ── 임베드 모드 (트윈 오버레이 안) — 탐색기 크롬 숨김, 관계 뷰만 노출 ── */
+body.embed header{display:none}
+/* ── 디지털 트윈 데이터 뷰 — 관계 뷰 영역 전체를 덮는 오버레이 (Y축 = 관계 뷰와 동일) ── */
+#graphCol{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+#graphCol #cy{flex:1;min-height:0}
+/* z 6 = 그래프 툴바(.cytools z5)보다 위 — 열려 있는 동안 관계 뷰 컨트롤을 완전히 대체 */
+#twinPanel{display:none;position:absolute;inset:0;z-index:6;border-top:2px solid var(--st-derived);background:var(--bg);flex-direction:column}
+#twinPanel.on{display:flex}
+.twHead{display:flex;align-items:center;gap:12px;padding:7px 14px;border-bottom:1px solid var(--border);background:var(--panel);font-size:12px;flex:none}
+.twHead b{color:var(--st-derived)}
+.twHead select{background:var(--panel2);border:1px solid var(--border);color:var(--text);font-size:11.5px;padding:4px 8px;border-radius:6px;max-width:380px}
+.twHead .kbd2{font-size:9px;border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--dim)}
+#twBody{flex:1;position:relative;min-height:0}
+/* maplibre-gl.css(.maplibregl-map{position:relative})가 나중에 로드돼도 이기도록 ID 셀렉터로 명시 */
+#twBody .twView{position:absolute !important;inset:0;display:none}
+#twBody .twView.on{display:block}
+#dtcBoard{overflow-y:auto;padding:14px 18px}
+/* ── 데이터 뷰 글꼴·팔레트 통일 — maplibre가 주입하는 Helvetica/흰 팝업을 본문 디자인 토큰으로 오버라이드
+   (maplibre-gl.css가 나중에 로드되므로 ID 셀렉터로 우선순위 확보) ── */
+#twBody .maplibregl-map{font:12px/1.45 "Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif}
+#twBody .maplibregl-popup-content{background:var(--panel2);color:var(--text);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;font-size:11.5px;box-shadow:0 4px 14px rgba(0,0,0,.45)}
+#twBody .maplibregl-popup-anchor-bottom .maplibregl-popup-tip{border-top-color:var(--panel2)}
+#twBody .maplibregl-popup-anchor-top .maplibregl-popup-tip{border-bottom-color:var(--panel2)}
+#twBody .maplibregl-popup-anchor-left .maplibregl-popup-tip{border-right-color:var(--panel2)}
+#twBody .maplibregl-popup-anchor-right .maplibregl-popup-tip{border-left-color:var(--panel2)}
+#twBody code{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--edge-hi)}
+#twBody .maplibregl-ctrl-group{background:var(--panel2);border:1px solid var(--border);box-shadow:none}
+#twBody .maplibregl-ctrl-group button+button{border-top:1px solid var(--border)}
+#twBody .maplibregl-ctrl button .maplibregl-ctrl-icon{filter:invert(.85)}
+#twBody .maplibregl-ctrl-attrib{background:rgba(30,30,28,.75);font-size:10px}
+#twBody .maplibregl-ctrl-attrib,#twBody .maplibregl-ctrl-attrib a{color:var(--muted)}
+/* 세로 스크롤 — v8 트윈과 같은 색으로 이어지게 (임베드 시 경계 없이 연속) */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#3a3a36;border-radius:5px}
+::-webkit-scrollbar-track{background:transparent}
+html{scrollbar-color:#3a3a36 transparent}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>미국판매법인 비즈니스 온톨로지 <span class="mono muted" id="ontVer"></span></h1>
+    <div class="sub">parquet 데이터 마트 위 시멘틱 레이어 — 객체 · 링크 · 액션 · 수명주기 선언 (v7-ontology.js)</div>
+  </div>
+  <nav class="tabs">
+    <button id="tabG" class="on">온톨로지 그래프</button>
+    <button id="tabE">객체 탐색</button>
+    <button id="tabA">액션 · 수명주기</button>
+    <button id="tabP">데이터 파이프라인</button>
+  </nav>
+  <div class="stats" id="hdrStats"></div>
+</header>
+
+<main id="viewG" class="on">
+  <div class="cytools" id="graphTools" style="display:none">
+    <button id="btnBack" style="display:none">← 이전 <span class="kbd">ESC</span></button>
+    <span id="focusCrumb" style="display:none"></span>
+    <span id="twinClock" style="display:none" title="전략 트윈의 Play 커서와 동기화 — 카드 측정값이 이 월 기준"></span>
+    <button id="btnFocus" style="display:none"></button>
+  </div>
+  <div id="graphCol">
+    <div id="cy"></div>
+    <!-- 디지털 트윈 데이터 뷰 — 관계 뷰 전체 높이 오버레이 (액션 2개 이상이면 드롭다운 전환) -->
+    <div id="twinPanel">
+      <div class="twHead">
+        <b>◈ 디지털 트윈 데이터 뷰</b>
+        <span id="twObj" class="muted"></span>
+        <select id="twSelect" title="이 객체의 다른 트윈 뷰로 전환"></select>
+        <span id="tmStats" class="muted" style="margin-left:auto"></span>
+        <button class="btn" id="twClose" style="margin:0 0 0 12px">▲ 관계 뷰로 <span class="kbd2">ESC</span></button>
+      </div>
+      <div id="twBody">
+        <div id="tripMap" class="twView"></div>
+        <div id="dtcBoard" class="twView"></div>
+      </div>
+    </div>
+  </div>
+  <!-- 정보 패널 접기 — 관계 뷰 가로 면적을 넓게 쓰고 싶을 때 (16px 스트립은 항상 남아 재펼침) -->
+  <button id="sideToggle" title="정보 패널 접기 — 관계 뷰를 넓게">▸</button>
+  <aside class="side" id="sidePanel"></aside>
+</main>
+
+<main id="viewE">
+  <div class="col-types" id="typeList"></div>
+  <div class="col-list">
+    <div class="lhead"><h2 id="listTitle">객체</h2><span class="n" id="listCount"></span>
+      <input id="listSearch" placeholder="검색 (ID·속성값)" autocomplete="off">
+    </div>
+    <div class="ilist" id="instList"></div>
+  </div>
+  <div class="col-obj" id="objView"></div>
+</main>
+
+<main id="viewA">
+  <div class="actions-wrap" id="actionsWrap"></div>
+</main>
+
+<main id="viewP">
+  <div class="actions-wrap" id="pipelineWrap"></div>
+</main>
+
+
+<script src="v7-data.js"></script>
+<script src="v7-ontology.js"></script>
+<script src="v7-ontology-instances.js"></script>
+<script src="vendor/cytoscape.min.js"></script>
+<script>
+'use strict';
+// 임베드 모드 (?embed=1) — 트윈이 관계 뷰만 오버레이로 띄울 때: 탐색기 자체 크롬(헤더·탭)을
+// 숨겨 온톨로지 HTML 전체가 아니라 해당 객체의 관계 뷰만 보이게 한다.
+if (new URLSearchParams(location.search).has('embed')) document.body.classList.add('embed');
+const O = window.ONTOLOGY;
+const DB = window.buildOntologyInstances(window.TWIN_DATA);
+const GC = { org:'#3987e5', product:'#d95926', plan:'#199e70', logistics:'#c98500', commerce:'#d55181', care:'#008300', quality:'#9085e9' };
+const OT = Object.fromEntries(O.objectTypes.map(t => [t.id, t]));
+const LT = Object.fromEntries(O.linkTypes.map(l => [l.id, l]));
+const cnt = t => (DB.byType[t] || []).length;
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// 디자인 토큰 조회 — cytoscape·maplibre처럼 CSS var()를 못 쓰는 곳에서도 :root 팔레트 단일 소스 유지
+const _rootCS = getComputedStyle(document.documentElement);
+const CV = k => _rootCS.getPropertyValue(k).trim();
+const STATUS_KO = { bound: 'BOUND · 마트 연결', derived: 'DERIVED · 파생', planned: 'PLANNED · 신설 예정' };
+
+document.getElementById('ontVer').textContent = 'v' + O.meta.version;
+document.getElementById('hdrStats').innerHTML =
+  `<span>객체 타입 <b>${O.objectTypes.length}</b></span><span>링크 <b>${O.linkTypes.length}</b></span>` +
+  `<span>액션 <b>${O.actionTypes.length}</b></span><span>표본 인스턴스 <b>${DB.order.length.toLocaleString()}</b></span>`;
+
+// ── 탭 전환 ──────────────────────────────────────────────────────────────────
+const tabs = { tabG: 'viewG', tabE: 'viewE', tabA: 'viewA', tabP: 'viewP' };
+for (const [b, v] of Object.entries(tabs)) {
+  document.getElementById(b).onclick = () => {
+    for (const [b2, v2] of Object.entries(tabs)) {
+      document.getElementById(b2).classList.toggle('on', b2 === b);
+      document.getElementById(v2).classList.toggle('on', v2 === v);
+    }
+    if (b === 'tabG' && window._cy) window._cy.resize();
+  };
+}
+
+// ── 정보 패널 접기/펼치기 — 관계 뷰의 가로 면적 확보 (16px 스트립은 항상 유지) ──
+function setSideMin(min){
+  document.body.classList.toggle('sideMin', min);
+  const t = document.getElementById('sideToggle');
+  t.textContent = min ? '◂' : '▸';
+  t.title = min ? '정보 패널 펼치기' : '정보 패널 접기 — 관계 뷰를 넓게';
+  window._cy && window._cy.resize();   // 그래프가 넓어진/줄어든 폭을 즉시 반영
+}
+document.getElementById('sideToggle').onclick = () =>
+  setSideMin(!document.body.classList.contains('sideMin'));
+
+// =============================================================================
+// 탭1 — 온톨로지 그래프 (타입 레벨) : 열 = 도메인 그룹(밸류체인 순), 직교 엣지
+// =============================================================================
+(function buildGraph() {
+  const groups = [...O.groups].sort((a, b) => a.order - b.order);
+  const byGroup = {};
+  O.objectTypes.forEach(t => (byGroup[t.group] = byGroup[t.group] || []).push(t));
+
+  // 밸류체인 좌표 (그룹=세로 열, 좌→우 흐름) — 포커스(관계) 뷰는 이 좌표를 중심으로 방사 배치
+  const COLW = 250, ROWH = 92, X0 = 140, Y0 = 110;
+  const posCol = {};
+  const els = [];
+  groups.forEach((g, gi) => {
+    els.push({ data: { id: 'grp:' + g.id, label: g.name, isGroup: 1, gcol: GC[g.id] } });
+    (byGroup[g.id] || []).forEach((t, ti) => {
+      posCol[t.id] = { x: X0 + gi * COLW, y: Y0 + ti * ROWH };
+      els.push({
+        data: { id: t.id, parent: 'grp:' + g.id, label: `${t.name}\n${t.en} · ${cnt(t.id)}건`,
+          gcol: GC[t.group], st: t.datasource.status },
+        position: { x: posCol[t.id].x, y: posCol[t.id].y },
+      });
+    });
+  });
+
+  O.linkTypes.forEach(l => els.push({ data: { id: 'lt:' + l.id, source: l.from, target: l.to, label: l.name, lt: l.id } }));
+
+  const cy = window._cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements: els,
+    layout: { name: 'preset' },
+    autoungrabify: true,        // 배치는 선언에서 계산된 고정 좌표 — 노드 이동 금지
+    // 주의: userPanningEnabled를 끄면 휠 줌(앵커 유지용 내부 팬 수반)까지 차단된다 — 켜 둔 채
+    // 배경 드래그는 내장 팬, 노드·엣지·그룹에서 시작한 드래그는 아래 수동 팬이 담당한다.
+    boxSelectionEnabled: false,
+    wheelSensitivity: 0.18,
+    style: [
+      { selector: 'node[isGroup]', style: {
+        shape: 'round-rectangle', 'background-color': CV('--panel'), 'background-opacity': 0.55,
+        'border-width': 0, label: 'data(label)', 'text-valign': 'top', 'text-margin-y': -8,
+        'font-size': 12, 'font-weight': 700, color: CV('--muted'), padding: 26 } },
+      { selector: 'node[!isGroup]', style: {
+        shape: 'round-rectangle', width: 172, height: 54, 'z-index': 10,
+        'background-color': CV('--panel2'), 'border-width': 1.6, 'border-color': 'data(gcol)',
+        label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
+        'font-size': 11, color: CV('--text'), 'text-max-width': 158, 'line-height': 1.35,
+        'transition-property': 'opacity', 'transition-duration': '0.12s' } },
+      { selector: 'node[st="planned"]', style: { 'border-style': 'dashed' } },
+      { selector: 'node[st="derived"]', style: { 'border-style': 'double', 'border-width': 3 } },
+      { selector: 'node.ghost', style: { 'background-opacity': 0, 'border-width': 0, 'text-opacity': 0 } },
+      { selector: 'edge', style: {
+        'curve-style': 'taxi', 'taxi-direction': 'auto', 'taxi-turn': 28, 'taxi-turn-min-distance': 9,
+        width: 1.1, 'line-color': CV('--edge'), 'target-arrow-shape': 'triangle',
+        'target-arrow-color': CV('--edge'), 'arrow-scale': 0.72, label: '',
+        'font-size': 10, color: CV('--muted'), 'text-background-color': CV('--bg'),
+        'text-background-opacity': 0.9, 'text-background-padding': 2,
+        'transition-property': 'opacity', 'transition-duration': '0.12s' } },
+      /* width 1.8은 엣지 전용 — 'node.hi'에 새면 노드 폭이 1.8px로 붕괴해 히트 판정과 진동(깜빡임)을 일으킨다 */
+      { selector: 'edge.hi', style: { 'line-color': CV('--edge-hi'), 'target-arrow-color': CV('--edge-hi'), width: 1.8, label: 'data(label)', 'z-index': 9 } },
+      { selector: 'node.hi', style: { 'border-width': 2.6, 'background-color': CV('--panel3') } },
+      { selector: '.dim', style: { opacity: 0.18 } },
+      { selector: 'node:selected', style: { 'border-color': CV('--edge-hi'), 'border-width': 2.8 } },
+      { selector: 'edge:selected', style: { 'line-color': CV('--edge-hi'), 'target-arrow-color': CV('--edge-hi'), width: 2, label: 'data(label)' } },
+      /* 관계(포커스) 뷰 — 선택 객체 + 링크된 타입만. 카드 = 상단 아이콘(라인아트 SVG) + 타입/객체/속성 텍스트 */
+      { selector: 'node.focus', style: {
+        width: 252, height: 168, 'font-size': 10.5, 'text-max-width': 234, 'line-height': 1.6,
+        'background-image': 'data(icon)', 'background-width': 44, 'background-height': 44,
+        'background-position-x': '50%', 'background-position-y': '12px',
+        'text-valign': 'center', 'text-margin-y': 30 } },
+      { selector: 'node.focus-center', style: {
+        width: 272, height: 178, 'border-width': 3, 'border-color': CV('--edge-hi'), 'font-size': 11,
+        'background-width': 48, 'background-height': 48 } },
+      { selector: 'edge.focus', style: { label: 'data(label)', 'line-color': CV('--edge-hi'), 'target-arrow-color': CV('--edge-hi'),
+        width: 1.6, 'font-size': 10, 'text-rotation': 'autorotate' } },
+      { selector: '.hidden', style: { display: 'none' } },
+    ],
+  });
+  cy.nodes('[isGroup]').selectify(); cy.nodes('[isGroup]').unselectify();
+
+  // ── 객체 아이콘 (라인아트 SVG, 그룹색) — 관계 뷰 카드 상단에 표시 ──────────
+  const GLYPHS = {
+    building: '<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 7h2M14 7h2M8 11h2M14 11h2M8 15h2M14 15h2M10 21v-3h4v3"/>',
+    factory: '<path d="M3 21V9l6 4V9l6 4V5h6v16z"/><path d="M7 17h2M12 17h2M16 17h2"/>',
+    pin: '<path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+    store: '<path d="M4 7l1.5-4h13L20 7"/><path d="M4 7h16v3a2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1-6 0z"/><path d="M6 12v9h12v-9M10 21v-5h4v5"/>',
+    person: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6.5 8-6.5s8 2.5 8 6.5"/>',
+    car: '<path d="M5 16l1.5-5a2 2 0 0 1 2-1.5h7a2 2 0 0 1 2 1.5L19 16"/><path d="M4 16h16v4h-2.5M4 20h2.5M6.5 20h11"/><circle cx="7.5" cy="18" r="1.2"/><circle cx="16.5" cy="18" r="1.2"/>',
+    chart: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 16v-4M12 16V8M17 16v-6"/>',
+    truck: '<rect x="2" y="7" width="12" height="9"/><path d="M14 10h4l3 3v3h-3"/><circle cx="6.5" cy="18" r="1.8"/><circle cx="16.5" cy="18" r="1.8"/><path d="M8.3 18h6.4M2 18h2.7"/>',
+    shieldCheck: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+    tag: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.6"/>',
+    wrench: '<path d="M14.7 6.3a4.5 4.5 0 0 0-6 5.6L3 17.6V21h3.4l5.7-5.7a4.5 4.5 0 0 0 5.6-6L14 13l-3-3z"/>',
+    signal: '<circle cx="12" cy="18" r="1.6"/><path d="M8.5 14.5a5 5 0 0 1 7 0M5.6 11.6a9 9 0 0 1 12.8 0M2.8 8.8a13 13 0 0 1 18.4 0"/>',
+    doc: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h6M9 16h6"/>',
+    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+    megaphone: '<path d="M3 10v4h3l8 5V5l-8 5z"/><path d="M17.5 9a4 4 0 0 1 0 6M20 7a7.5 7.5 0 0 1 0 10"/>',
+  };
+  const GROUP_GLYPH = { org: 'building', product: 'car', plan: 'chart', logistics: 'truck', commerce: 'tag', care: 'wrench', quality: 'signal' };
+  const TYPE_GLYPH = { plant: 'factory', salesZone: 'pin', dealer: 'store', customer: 'person', inspection: 'shieldCheck',
+    shipment: 'truck', repairOrder: 'wrench', warrantyClaim: 'doc', businessPlan: 'doc', qualityIssue: 'shieldCheck',
+    vocTicket: 'chat', socialPost: 'megaphone' };
+  function iconUri(t) {
+    const g = GLYPHS[TYPE_GLYPH[t.id] || GROUP_GLYPH[t.group]] || GLYPHS.doc;
+    // width/height 고유 크기 필수 — 없으면 브라우저가 기본 크기(300×150)로 래스터화해 캔버스에서
+    // 아이콘이 잘리고, 줌 배율마다 다른 부분이 보인다. 96px = 확대(줌 인)에도 선명한 여유 해상도.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="${GC[t.group]}"`
+      + ` stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${g}</svg>`;
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+  }
+  cy.nodes('[!isGroup]').forEach(n => {
+    const t = OT[n.id()]; if (!t) return;
+    n.data('label0', n.data('label'));   // 관계 뷰 카드 라벨 복원용 원본
+    n.data('icon', iconUri(t));
+  });
+  cy.fit(cy.elements(':visible'), 40);
+
+  // 호버 = 이웃 하이라이트 + 나머지 dim (다이어그램 규칙)
+  // 판정은 cytoscape 이벤트 계층을 완전히 우회한다 — 내부 히트테스트·캡처 조건·
+  // 렌더 박스 캐시가 하이라이트 적용(스타일 무효화) 순간 판정을 흔들 수 있으므로,
+  // 컨테이너의 원시 pointermove 좌표를 pan/zoom 역변환해 모델 좌표로 만들고
+  // 노드 중심±(폭/2, 높이/2) 사각형과 순수 수학으로 대조한다.
+  // 하이라이트가 화면에 무엇을 더 그리든 이 판정에는 아무 영향이 없다.
+  let hoverId = null;
+  let pinnedId = null;   // 클릭 고정 대상 (노드 또는 엣지 id) — 고정 중에는 호버·줌·팬이 하이라이트를 못 바꾼다
+  const hoverStats = { applies: 0, clears: 0 };
+  window._hoverDebug = { stats: hoverStats, get hoverId() { return hoverId; }, get pinnedId() { return pinnedId; } };
+  function applyFocus(id) {
+    hoverStats.applies++;
+    cy.batch(() => {
+      cy.elements().removeClass('dim hi');
+      const ele = cy.getElementById(id);   // 엣지 id('lt:…')의 콜론이 셀렉터 문법과 충돌하므로 getElementById 사용
+      const hood = ele.isEdge() ? ele.union(ele.connectedNodes()) : ele.closedNeighborhood();
+      cy.elements().not(hood).not('[isGroup]').not('[isPlane]').addClass('dim');
+      hood.addClass('hi');
+    });
+  }
+  function clearFocus() { hoverStats.clears++; cy.elements().removeClass('dim hi'); }
+  function nodeAtModel(mx, my) {
+    const nodes = cy.nodes('[!isGroup][!isPlane]');
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i], p = n.position();
+      if (n.hasClass('hidden')) continue;   // 포커스 모드에서 숨긴 노드는 판정 제외
+      if (Math.abs(mx - p.x) <= n.width() / 2 && Math.abs(my - p.y) <= n.height() / 2) return n.id();
+    }
+    return null;
+  }
+  function nodeAtClient(cx, cyy) {
+    const r = cy.container().getBoundingClientRect();
+    const z = cy.zoom(), pan = cy.pan();
+    return nodeAtModel((cx - r.left - pan.x) / z, (cyy - r.top - pan.y) / z);
+  }
+  function nodeAtRendered(rp) {
+    const z = cy.zoom(), pan = cy.pan();
+    return nodeAtModel((rp.x - pan.x) / z, (rp.y - pan.y) / z);
+  }
+  // 전환 규칙 — 수평 스윕 시 노드 사이 틈마다 "전체 해제→전체 재적용"이 반복되면
+  // 캔버스 전체 명암이 연타로 뒤집혀 깜빡임으로 보인다. 그래서:
+  //  · 노드→노드: 공백 없이 직행 전환 (해제 단계 없음)
+  //  · 노드→배경: 유휴 타이머 — 배경 위에서 "이동이 멈춘 뒤" 220ms에만 해제.
+  //    이동할 때마다 타이머가 리셋되므로 틈을 아무리 천천히 지나가도 해제가 없다.
+  //  · 남는 전환은 opacity 페이드(0.12s)로 부드럽게
+  //  · 줌/팬(fit 등 프로그램적 변화 포함) 후에는 마지막 포인터 좌표로 재판정 — 스테일 방지
+  const GRACE_MS = 220;
+  let clearTimer = 0;
+  const ptr = { x: 0, y: 0, inside: false, buttons: 0 };
+  function cancelClear() { if (clearTimer) { clearTimeout(clearTimer); clearTimer = 0; } }
+  function scheduleClear() {
+    cancelClear();
+    clearTimer = setTimeout(() => { clearTimer = 0; hoverId = null; clearFocus(); }, GRACE_MS);
+  }
+  // ── 관계(온톨로지 포커스) 뷰 ────────────────────────────────────────────────
+  // 객체 고정 후 [관계 뷰] 버튼(또는 패널 버튼)으로 진입 — 선택 객체를 중심에 두고
+  // 링크된 타입만 방사형으로 남기며, 각 노드를 아이콘 + 표본 인스턴스 + 주요 속성
+  // 카드로 확장한다 (팔란티어 항공 온톨로지 다이어그램 스타일).
+  // 링크된 객체 클릭 = 드릴다운(스택 push), ESC / [← 이전] / 배경 클릭 = 한 단계 복귀.
+  let focusOn = null;        // 포커스 중인 타입 id
+  const focusStack = [];     // 드릴다운 경로 (이전 버튼 · ESC로 역순 복귀)
+  window._focusDebug = { get focusOn() { return focusOn; }, get stack() { return [...focusStack]; } };
+  // 트윈 Play 연동 — 커서 월의 측정값을 카드에 표기 (객체 타입 → 월별 측정값 서술)
+  const fmtI = v => Math.round(v).toLocaleString();
+  const TIME_LINE = {
+    salesCompany: c => `영업이익 $${(c.op / 1e6).toFixed(0)}M/월 (BP $${(c.bpOp / 1e6).toFixed(0)}M)`,
+    wholesale: c => `도매 ${fmtI(c.ws)}대/월`,
+    vehiclePurchase: c => `법인간 매입 ${fmtI(c.ws)}대/월 (도매 연동)`,
+    retailSale: c => `소매 ${fmtI(c.retail)}대/월 (BP ${fmtI(c.bpRetail)})`,
+    vehicle: c => `재고 ${fmtI(c.stock)}대 · DS ${Math.round(c.ds)}일`,
+    businessPlan: c => `소매 목표 ${fmtI(c.bpRetail)}대/월`,
+    customer: c => `외부 CSI ${c.csi.toFixed(1)}`,
+    incentiveProgram: c => `평균 인센티브 $${fmtI(c.inc)}/대`,
+    marketingCampaign: c => `마케팅 $${c.mkt.toFixed(1)}M/월`,
+    allocation: c => `배분 ≈${fmtI(c.ws)}대/월 (도매 선행)`,
+    dealer: c => `딜러 재고 ${fmtI(c.stock)}대 · DS ${Math.round(c.ds)}일`,
+  };
+  function focusLabel(t) {
+    const keys = DB.byType[t.id] || [];
+    const sample = keys.length ? DB.objects[keys[0]].title : '표본 없음';
+    const more = keys.length > 1 ? ` 외 ${(keys.length - 1).toLocaleString()}건` : '';
+    const props = t.properties.slice(0, 4).map(p => p.name).join(', ');
+    const tc = window._twinTime;
+    const timeLn = tc && TIME_LINE[t.id]
+      ? `\n⏱ ${TIME_LINE[t.id](tc)} — ${tc.ym}${tc.sim ? ' 시뮬' : ''}` : '';
+    return `${t.name} · ${t.en}\n${'─'.repeat(18)}\n객체: ${sample}${more}\n속성: ${props}${timeLn}`;
+  }
+  function applyFocusMode(id) {
+    focusOn = id;
+    const hood = cy.getElementById(id).closedNeighborhood();
+    const inHood = new Set(hood.map(x => x.id()));
+    cy.batch(() => {
+      cy.elements().removeClass('dim hi');
+      cy.nodes('[isGroup]').addClass('ghost');
+      cy.edges().style({ 'curve-style': 'straight' });   // 방사형 스포크는 직선으로
+      cy.nodes('[!isGroup]').forEach(n => {
+        if (!OT[n.id()]) return;
+        const on = inHood.has(n.id());
+        n.toggleClass('hidden', !on);
+        n.toggleClass('focus', on);
+        n.toggleClass('focus-center', n.id() === id);
+        n.data('label', on ? focusLabel(OT[n.id()]) : n.data('label0'));
+      });
+      cy.edges().forEach(e => {
+        const on = inHood.has(e.id());
+        e.toggleClass('hidden', !on);
+        e.toggleClass('focus', on);
+      });
+    });
+    // 방사 배치: 중심 = 선택 객체의 밸류체인 좌표, 이웃은 그룹(밸류체인) 순으로 타원 링에
+    const gOrd = Object.fromEntries(O.groups.map(g => [g.id, g.order]));
+    const center = posCol[id];
+    const neigh = hood.nodes().toArray().filter(n => n.id() !== id)
+      .sort((a, b) => (gOrd[OT[a.id()].group] - gOrd[OT[b.id()].group]) || a.id().localeCompare(b.id()));
+    const R = Math.max(430, neigh.length * 72);
+    cy.nodes('[!isGroup]').stop(true);
+    cy.getElementById(id).animate({ position: { x: center.x, y: center.y } }, { duration: 350, easing: 'ease-in-out' });
+    neigh.forEach((n, i) => {
+      const ang = -Math.PI / 2 + (i * 2 * Math.PI) / neigh.length;
+      n.animate({ position: { x: center.x + R * Math.cos(ang), y: center.y + R * 0.72 * Math.sin(ang) } },
+        { duration: 350, easing: 'ease-in-out' });
+    });
+    setTimeout(() => cy.animate({ fit: { eles: hood, padding: 60 }, duration: 250 }), 360);
+  }
+  function exitFocus(withPositions) {
+    if (!focusOn) return;
+    focusOn = null;
+    cy.batch(() => {
+      cy.elements().removeClass('hidden focus focus-center');
+      cy.nodes('[isGroup]').removeClass('ghost');
+      cy.edges().style({ 'curve-style': 'taxi', 'taxi-direction': 'auto' });
+      cy.nodes('[!isGroup]').forEach(n => { if (n.data('label0')) n.data('label', n.data('label0')); });
+    });
+    if (withPositions) {
+      cy.nodes('[!isGroup]').stop(true).forEach(n =>
+        n.animate({ position: posCol[n.id()] }, { duration: 350, easing: 'ease-in-out' }));
+      setTimeout(() => cy.animate({ fit: { eles: cy.elements(':visible'), padding: 40 }, duration: 250 }), 360);
+    }
+  }
+  function enterFocusView(id) {
+    if (!OT[id]) return;
+    if (focusOn) { if (focusOn !== id) focusStack.push(focusOn); }
+    else focusStack.length = 0;
+    pinnedId = id; hoverId = null; cancelClear();
+    applyFocusMode(id);
+    updateTools();
+  }
+  function goBack() {   // ESC · [← 이전] · 포커스 중 배경 클릭
+    if (!focusOn) return;
+    const prev = focusStack.pop();
+    if (prev) { pinnedId = prev; hoverId = null; applyFocusMode(prev); renderTypePanel(prev); }
+    else {
+      const last = focusOn;
+      exitFocus(true);
+      pinnedId = last; applyFocus(last); renderTypePanel(last);   // 그래프 복귀 후에도 마지막 객체는 고정 유지
+    }
+    updateTools();
+  }
+  window._enterFocus = enterFocusView;   // 사이드패널 버튼에서 호출
+  // 트윈 Play 동기화 수신 — v8이 커서(월) 이동마다 호출. 과거=실적, 미래=시뮬레이션 예측.
+  window._setTwinTime = ctx => {
+    window._twinTime = ctx;
+    const el = document.getElementById('twinClock');
+    el.style.display = '';
+    el.innerHTML = `⏱ ${ctx.ym} <b style="color:${ctx.sim ? 'var(--st-planned)' : 'var(--st-bound)'}">${ctx.sim ? '시뮬 · 미래 예측' : '실적'}</b>`;
+    updateTools();
+    if (focusOn) cy.batch(() => cy.nodes('.focus').forEach(n => {   // 카드 측정값을 커서 월로 갱신
+      const t = OT[n.id()]; if (t) n.data('label', focusLabel(t));
+    }));
+    if (window._refreshTwinData) window._refreshTwinData();          // 지도·보드도 커서 월 누적으로
+  };
+  // 임베드 재진입용 — 마지막 세션(드릴 경로·트윈 패널)을 버리고 해당 객체의 관계 뷰로 초기화.
+  // id가 없으면(미선택) 전체 관계 뷰(온톨로지 그래프 전체 + 개요 패널)로 초기화한다.
+  window._resetFocusView = id => {
+    if (typeof closeTripMap === 'function') closeTripMap();
+    document.getElementById('tabG').click();
+    setSideMin(false);   // 접어둔 정보 패널도 초기 상태(펼침)로
+    focusStack.length = 0;
+    if (id && OT[id]) {
+      pinnedId = id; hoverId = null; cancelClear();
+      applyFocusMode(id);
+      renderTypePanel(id);
+    } else {
+      unpin();               // 포커스 해제 + 그래프 전체 복원
+      renderIntroPanel();
+    }
+    updateTools();
+  };
+
+  // ── 좌상단 도구바: 고정 시 [관계 뷰] 버튼, 포커스 중 [← 이전] + 경로 표시 ──
+  const toolsEl = document.getElementById('graphTools');
+  const btnFocus = document.getElementById('btnFocus');
+  const btnBack = document.getElementById('btnBack');
+  const crumbEl = document.getElementById('focusCrumb');
+  function updateTools() {
+    const showFocus = !focusOn && pinnedId && OT[pinnedId];
+    btnFocus.style.display = showFocus ? '' : 'none';
+    if (showFocus) btnFocus.textContent = `◎ ${OT[pinnedId].name} 관계 뷰로 보기`;
+    btnBack.style.display = focusOn ? '' : 'none';
+    crumbEl.style.display = focusOn ? '' : 'none';
+    if (focusOn) crumbEl.textContent = [...focusStack, focusOn].map(i => OT[i].name).join(' › ');
+    toolsEl.style.display = (showFocus || focusOn || window._twinTime) ? '' : 'none';
+  }
+  btnFocus.onclick = () => enterFocusView(pinnedId);
+  btnBack.onclick = goBack;
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const tp = document.getElementById('twinPanel');
+    if (tp.classList.contains('on')) { window.closeTripMap(); return; }   // 트윈 데이터 뷰 → 관계 뷰 복귀 우선
+    if (!document.getElementById('viewG').classList.contains('on')) return;
+    if (focusOn) goBack();
+    else if (pinnedId) { unpin(); renderIntroPanel(); }
+  });
+
+  // 클릭 고정 — 객체 클릭 시 현재 하이라이트를 고정, 배경(비객체) 클릭 시 해제, 다른 객체 클릭 시 변경.
+  // 관계 뷰 중의 객체 클릭은 드릴다운(포커스 이동)으로 처리한다.
+  function pinFocus(id) {
+    if (focusOn && OT[id]) { enterFocusView(id); return; }
+    pinnedId = id; cancelClear(); hoverId = null;
+    applyFocus(id);
+    updateTools();
+  }
+  function unpin() {
+    pinnedId = null; hoverId = null; cancelClear();
+    if (focusOn) { focusStack.length = 0; exitFocus(true); }
+    clearFocus();
+    updateTools();
+  }
+  window._graphPin = pinFocus;   // 딥링크·객체 탐색 탭의 타입칩에서도 동일하게 고정
+  function evaluateHover() {
+    if (pinnedId) return;                     // 고정 중에는 호버 갱신 정지
+    if (!ptr.inside || ptr.buttons) return;   // 밖이거나 드래그(노드 이동·팬) 중에는 동결
+    const id = nodeAtClient(ptr.x, ptr.y);
+    if (id === hoverId) {                     // 같은 객체 내부 이동(또는 계속 배경) → 유지
+      if (id) cancelClear();
+      return;
+    }
+    if (id) {                                 // 다른 객체로 진입 → 직행 전환
+      cancelClear();
+      hoverId = id;
+      applyFocus(id);
+    } else if (hoverId) scheduleClear();      // 배경 이동 — 매 이동마다 리셋(유휴 시에만 해제)
+  }
+  // 드래그 = 팬 (시작 지점 불문) — cytoscape 내장 팬은 "순수 배경"에서 시작한 드래그만
+  // 처리해서 노드·엣지·투명 그룹 상자 위에서는 이동이 안 된다. 배경 시작은 내장 팬에 맡기고
+  // (tapstart 타깃으로 식별), 그 외에서 시작한 드래그만 수동 panBy로 잇는다 — 이중 팬 없음.
+  // 4px 임계값: 클릭(고정)의 미세한 흔들림이 팬으로 새지 않게.
+  let dragPan = null;
+  let cyOwnsPan = false;   // 이번 제스처를 내장 팬이 처리하는가 (배경에서 시작)
+  cy.on('tapstart', e => { cyOwnsPan = e.target === cy; });
+  cy.container().addEventListener('pointermove', evt => {
+    ptr.x = evt.clientX; ptr.y = evt.clientY; ptr.inside = true; ptr.buttons = evt.buttons;
+    if (dragPan && !cyOwnsPan && (evt.buttons & 1)) {
+      const dx = evt.clientX - dragPan.x, dy = evt.clientY - dragPan.y;
+      if (dragPan.on || Math.hypot(dx, dy) > 4) {
+        dragPan.on = true;
+        cy.panBy({ x: dx, y: dy });
+        dragPan.x = evt.clientX; dragPan.y = evt.clientY;
+      }
+    }
+    evaluateHover();
+  });
+  cy.container().addEventListener('pointerdown', evt => {
+    ptr.buttons = evt.buttons;
+    if (evt.button === 0) dragPan = { x: evt.clientX, y: evt.clientY, on: false };
+  });
+  cy.container().addEventListener('pointerup', evt => { ptr.buttons = evt.buttons; dragPan = null; evaluateHover(); });
+  cy.container().addEventListener('mouseleave', () => {
+    cancelClear(); ptr.inside = false; dragPan = null;
+    if (pinnedId) return;                     // 고정 중에는 캔버스를 떠나도 유지 (패널을 읽는 동안 등)
+    hoverId = null; clearFocus();
+  });
+  let hoverRaf = false;
+  cy.on('zoom pan', () => {                   // 뷰포트 변화 → 다음 프레임에 1회 재판정
+    if (hoverRaf) return;
+    hoverRaf = true;
+    requestAnimationFrame(() => { hoverRaf = false; evaluateHover(); });
+  });
+  // 탭도 동일한 사각형 판정 — 노드 박스 안 클릭이 겹친 엣지·배경으로 새지 않게.
+  // 객체(노드·엣지) 클릭 = 하이라이트 고정, 배경·그룹 상자 클릭 = 해제.
+  cy.on('tap', 'node[!isGroup]', e => { const id = e.target.id(); pinFocus(id); renderTypePanel(id); });
+  cy.on('tap', 'edge', e => {
+    const nid = e.renderedPosition && nodeAtRendered(e.renderedPosition);
+    if (nid) { pinFocus(nid); renderTypePanel(nid); }
+    else if (focusOn) renderLinkPanel(e.target.data('lt'));   // 포커스 유지한 채 링크 상세만
+    else { pinFocus(e.target.id()); renderLinkPanel(e.target.data('lt')); }
+  });
+  cy.on('tap', e => {
+    const t = e.target;
+    if (t !== cy && !(t.isNode && t.isNode() && t.data('isGroup'))) return;   // 노드·엣지 탭은 위에서 처리
+    const id = e.renderedPosition && nodeAtRendered(e.renderedPosition);
+    if (id) { pinFocus(id); renderTypePanel(id); }
+    else if (focusOn) goBack();                 // 관계 뷰 중 배경 클릭 = 한 단계 복귀 (ESC와 동일)
+    else { unpin(); renderIntroPanel(); }
+  });
+
+})();
+
+// ── 우측 패널: 초기(온톨로지 개요) ───────────────────────────────────────────
+function renderIntroPanel() {
+  const el = document.getElementById('sidePanel');
+  // 설명문(개요·설계 원칙·사용법)은 기본 접힘 — 제목 클릭 시에만 펼쳐 확인
+  el.innerHTML = `
+    <h2>${esc(O.meta.name)}</h2>
+    <div class="en">${esc(O.meta.id)} · v${O.meta.version} · ${O.meta.updated}</div>
+    <details class="introDesc"><summary>ⓘ 설명 · 설계 원칙 · 사용법 — 클릭해서 펼치기</summary>
+      <p class="desc">${esc(O.meta.description)}</p>
+      <div class="card"><h3>설계 원칙</h3>
+        ${O.meta.principles.map(p => `<div class="actrow" style="border:none;padding:3px 0">· ${esc(p)}</div>`).join('')}
+      </div>
+      <div class="hint">노드 = 객체 타입 (호버: 관계 하이라이트 · 클릭: 하이라이트 <b>고정</b> + 정의 상세 — 고정 중에는 줌/팬/호버에도 유지,
+      배경 클릭/ESC = 해제 · 다른 객체 클릭 = 변경) · 엣지 = 링크 타입 · 휠 줌/드래그 팬.<br>
+      객체를 고정하면 좌상단에 <b>[◎ 관계 뷰로 보기]</b> 버튼이 나타난다 — 링크된 타입만 방사형으로 펼치고
+      각 객체를 아이콘 + 표본 인스턴스 + 주요 속성 카드로 보여주는 온톨로지 포커스 뷰.
+      링크된 객체 클릭 = 드릴다운, <b>ESC / [← 이전] / 배경 클릭</b> = 역순 복귀.<br>
+      선언 파일 하나(v7-ontology.js)가 이 화면·쿼리 바인딩·액션 카탈로그 전부의 원천이다.</div>
+    </details>
+    <div class="card"><h3>범례</h3>
+      <div class="kv">
+        ${O.groups.map(g => `<span><span class="gdot" style="background:${GC[g.id]}"></span>${esc(g.name)}</span>
+          <span class="muted">${(O.objectTypes.filter(t => t.group === g.id)).length}개 타입</span>`).join('')}
+      </div>
+      <div style="margin-top:10px;font-size:11.5px;line-height:2">
+        <span class="badge bound">BOUND</span> 마트 연결됨(실선) &nbsp;
+        <span class="badge derived">DERIVED</span> 조인·역산 파생(이중선)<br>
+        <span class="badge planned">PLANNED</span> 마트 신설 예정(파선 테두리)
+      </div>
+    </div>`;
+}
+
+// ── 우측 패널: 객체 타입 상세 ────────────────────────────────────────────────
+function renderTypePanel(tid) {
+  const t = OT[tid]; if (!t) return;
+  const ds = t.datasource;
+  const inL = O.linkTypes.filter(l => l.to === tid), outL = O.linkTypes.filter(l => l.from === tid);
+  const acts = O.actionTypes.filter(a => a.objectType === tid);
+  const el = document.getElementById('sidePanel');
+  el.innerHTML = `
+    <h2><span class="gdot" style="background:${GC[t.group]}"></span>${esc(t.name)}</h2>
+    <div class="en">${esc(t.en)} · ${esc(O.groups.find(g => g.id === t.group).name)} · PK <span class="mono">${esc(t.primaryKey)}</span></div>
+    <p class="desc">${esc(t.description)}</p>
+    <div class="card"><h3>데이터 소스 <span class="badge ${ds.status}">${STATUS_KO[ds.status]}</span></h3>
+      <div class="kv">
+        <span class="k">경로</span><span class="mono" style="word-break:break-all">${esc(ds.path)}</span>
+        <span class="k">그레인</span><span>${esc(ds.grain || '-')}</span>
+        ${ds.note ? `<span class="k">비고</span><span class="muted">${esc(ds.note)}</span>` : ''}
+      </div>
+    </div>
+    <div class="card"><h3>속성 ${t.properties.length}</h3>
+      <table class="props"><tr><th>속성</th><th>타입</th><th>역할</th><th>샘플</th></tr>
+      ${t.properties.map(p => `<tr>
+        <td><b>${esc(p.name)}</b><br><span class="mono muted" style="font-size:10px">${esc(p.id)}</span></td>
+        <td class="muted">${esc(p.type)}${p.unit ? ' · ' + esc(p.unit) : ''}</td>
+        <td><span class="role ${p.role}">${esc(p.role)}</span></td>
+        <td class="mono muted" style="font-size:10.5px">${esc(p.sample || '')}</td></tr>`).join('')}
+      </table>
+    </div>
+    <div class="card"><h3>링크 ${inL.length + outL.length}</h3>
+      ${outL.map(l => `<div class="linkrow" onclick="renderLinkPanel('${l.id}')">
+        <span class="lname">${esc(l.name)}</span><span class="dir">→ ${esc(OT[l.to].name)} (${l.card})</span></div>`).join('')}
+      ${inL.map(l => `<div class="linkrow" onclick="renderLinkPanel('${l.id}')">
+        <span class="lname">${esc(l.name)}</span><span class="dir">← ${esc(OT[l.from].name)} (${l.card})</span></div>`).join('')}
+    </div>
+    ${acts.length ? `<div class="card"><h3>액션 ${acts.length}</h3>
+      ${acts.map(a => `<div class="actrow"><b>${esc(a.name)}</b> <span class="mono muted" style="font-size:10px">${esc(a.id)}</span>
+        <div class="fx">효과: ${a.effects.map(esc).join(' · ')}</div>
+        ${a.automation ? `<div class="fx" style="color:var(--st-derived)">⚙ 자동화 결과: ${esc(a.automation.output)}</div>` : ''}
+        ${a.twinView ? `<button class="btn twinBtn" onclick="openTwinView('${a.id}')">◈ 디지털 트윈 — ${esc(a.twinView.label)}</button>` : ''}</div>`).join('')}</div>` : ''}
+    ${t.lifecycleRef ? `<div class="card"><h3>수명주기</h3><div class="hint">${esc(O.lifecycles[t.lifecycleRef].name)} —
+      상태 ${O.lifecycles[t.lifecycleRef].states.length}단계 · 게이트 검사 G1~G4. [액션 · 수명주기] 탭 참조.</div></div>` : ''}
+    <button class="btn" onclick="window._enterFocus('${tid}')">◎ 관계 뷰로 보기 (링크 + 표본)</button>
+    <button class="btn" onclick="gotoInstances('${tid}')">표본 인스턴스 ${cnt(tid)}건 보기 →</button>`;
+}
+
+// ── 우측 패널: 링크 타입 상세 ────────────────────────────────────────────────
+function renderLinkPanel(lid) {
+  const l = LT[lid]; if (!l) return;
+  const el = document.getElementById('sidePanel');
+  const n = DB.links.filter(x => x.lt === lid).length;
+  el.innerHTML = `
+    <h2>링크 · ${esc(l.name)}</h2>
+    <div class="en mono">${esc(l.id)}</div>
+    <div class="card"><h3>정의</h3>
+      <div class="kv">
+        <span class="k">방향</span><span>${esc(OT[l.from].name)} → ${esc(OT[l.to].name)}</span>
+        <span class="k">카디널리티</span><span class="mono">${esc(l.card)}</span>
+        <span class="k">조인 키</span><span class="mono" style="word-break:break-all">${esc(l.fk)}</span>
+        <span class="k">표본 링크</span><span>${n}건</span>
+        ${l.desc ? `<span class="k">설명</span><span class="muted">${esc(l.desc)}</span>` : ''}
+      </div>
+    </div>
+    <div class="hint">링크는 조인 키 선언이다 — 그래프DB 없이도 parquet 조인(DuckDB)으로 순회가 성립한다.
+    새 관계 = linkTypes에 1건 추가.</div>`;
+}
+renderIntroPanel();
+
+// =============================================================================
+// 탭2 — 객체 탐색 (인스턴스 → 링크 순회, 팔란티어 객체 뷰 스타일)
+// =============================================================================
+let curType = null, curKey = null, navStack = [];
+
+(function buildTypeList() {
+  const el = document.getElementById('typeList');
+  let html = '';
+  [...O.groups].sort((a, b) => a.order - b.order).forEach(g => {
+    html += `<div class="grp">${esc(g.name)}</div>`;
+    O.objectTypes.filter(t => t.group === g.id).forEach(t => {
+      html += `<div class="trow" id="tr-${t.id}" onclick="selectType('${t.id}')">
+        <span class="gdot" style="background:${GC[t.group]}"></span>${esc(t.name)}
+        <span class="cnt">${cnt(t.id)}</span></div>`;
+    });
+  });
+  el.innerHTML = html;
+})();
+
+function selectType(tid, keepSearch) {
+  curType = tid;
+  document.querySelectorAll('.trow').forEach(e => e.classList.toggle('on', e.id === 'tr-' + tid));
+  const t = OT[tid];
+  document.getElementById('listTitle').textContent = t.name;
+  if (!keepSearch) document.getElementById('listSearch').value = '';
+  renderInstList();
+  const keys = filteredKeys();
+  if (keys.length) renderObject(keys[0], true);
+  else document.getElementById('objView').innerHTML =
+    `<div class="hint" style="margin-top:20px">표본 인스턴스가 없습니다 — 데이터 소스 상태:
+     <span class="badge ${t.datasource.status}">${STATUS_KO[t.datasource.status]}</span></div>`;
+}
+function filteredKeys() {
+  const q = document.getElementById('listSearch').value.trim().toLowerCase();
+  let keys = DB.byType[curType] || [];
+  if (q) keys = keys.filter(k => { const o = DB.objects[k];
+    return o.id.toLowerCase().includes(q) || o.title.toLowerCase().includes(q) ||
+      Object.values(o.props).some(v => String(v).toLowerCase().includes(q)); });
+  return keys;
+}
+function subtitleOf(o) {
+  const t = OT[o.type];
+  const dims = t.properties.filter(p => p.role === 'dim' || p.role === 'status').slice(0, 3);
+  return dims.map(p => o.props[p.id]).filter(v => v !== undefined && v !== o.title).join(' · ');
+}
+function renderInstList() {
+  const keys = filteredKeys();
+  document.getElementById('listCount').textContent = ` ${keys.length}건 (표본)`;
+  document.getElementById('instList').innerHTML = keys.slice(0, 400).map(k => {
+    const o = DB.objects[k];
+    return `<div class="irow ${k === curKey ? 'on' : ''}" id="ir-${cssId(k)}" onclick="renderObject('${k.replace(/'/g, "\\'")}')">
+      <div class="t">${esc(o.title)}</div><div class="s">${esc(subtitleOf(o))}</div></div>`;
+  }).join('');
+}
+const cssId = k => k.replace(/[^a-zA-Z0-9]/g, '_');
+document.getElementById('listSearch').addEventListener('input', renderInstList);
+
+function gotoInstances(tid) {
+  document.getElementById('tabE').click();
+  navStack = [];
+  selectType(tid);
+}
+
+function renderObject(k, resetNav) {
+  const o = DB.objects[k]; if (!o) return;
+  if (resetNav) navStack = [];
+  if (navStack[navStack.length - 1] !== k) navStack.push(k);
+  if (navStack.length > 6) navStack.shift();
+  curKey = k;
+  if (o.type !== curType) { curType = o.type; selectTypeRowOnly(o.type); }
+  renderInstList();
+  const row = document.getElementById('ir-' + cssId(k)); if (row) row.scrollIntoView({ block: 'nearest' });
+
+  const t = OT[o.type];
+  // 링크 순회: out(이 객체 → 대상), in(다른 객체 → 이 객체)
+  const outs = (DB.linksFrom[k] || []).map(l => ({ lt: LT[l.lt], other: DB.objects[l.to], dir: '→' }));
+  const ins = (DB.linksTo[k] || []).map(l => ({ lt: LT[l.lt], other: DB.objects[l.from], dir: '←' }));
+  const grouped = {};
+  outs.concat(ins).forEach(x => {
+    const gk = x.dir + x.lt.id;
+    (grouped[gk] = grouped[gk] || { name: x.lt.name, dir: x.dir, items: [] }).items.push(x.other);
+  });
+
+  const crumbs = navStack.map((nk, i) => {
+    const no = DB.objects[nk];
+    return i === navStack.length - 1 ? `<b>${esc(no.title)}</b>`
+      : `<a onclick="navTo(${i})">${esc(no.title)}</a>`;
+  }).join(' <span class="muted">›</span> ');
+
+  document.getElementById('objView').innerHTML = `
+    <div class="crumbs">${crumbs}</div>
+    <div class="objtitle">
+      <h2>${esc(o.title)}</h2>
+      <span class="typechip" style="color:${GC[t.group]};border-color:${GC[t.group]}"
+        onclick="document.getElementById('tabG').click();window._cy.$('#${t.id}').select();window._graphPin('${t.id}');renderTypePanel('${t.id}')">${esc(t.name)}</span>
+      <span class="badge ${t.datasource.status}">${STATUS_KO[t.datasource.status].split(' ·')[0]}</span>
+    </div>
+    <div class="muted" style="font-size:11.5px">PK <span class="mono">${esc(t.primaryKey)} = ${esc(o.id)}</span> ·
+      소스 <span class="mono">${esc(t.datasource.path)}</span></div>
+    ${o.type === 'vehicle' ? renderLifecycleStrip(k, o) : ''}
+    <div class="section"><h3>속성</h3>
+      <table class="props" style="max-width:640px"><tr><th>속성</th><th>값</th></tr>
+      ${t.properties.map(p => o.props[p.id] === undefined ? '' :
+        `<tr><td class="muted" style="width:170px">${esc(p.name)} <span class="mono" style="font-size:9.5px">${esc(p.id)}</span></td>
+         <td><b>${esc(String(o.props[p.id]))}</b>${p.unit ? ` <span class="muted">${esc(p.unit)}</span>` : ''}</td></tr>`).join('')}
+      </table>
+    </div>
+    <div class="section"><h3>연결된 객체 (${outs.length + ins.length})</h3>
+      ${Object.values(grouped).map(g => `
+        <div style="margin-bottom:9px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${g.dir === '→' ? '' : '← '}${esc(g.name)} <span class="mono">(${g.items.length})</span></div>
+          <div class="chips">${g.items.slice(0, 24).map(it =>
+            `<span class="chip" onclick="renderObject('${key2(it)}')"><span class="cty">${esc(OT[it.type].abbr)}</span>${esc(it.title)}</span>`).join('')}
+          ${g.items.length > 24 ? `<span class="muted" style="font-size:11px">+${g.items.length - 24}</span>` : ''}</div>
+        </div>`).join('') || '<div class="hint">연결 없음</div>'}
+    </div>`;
+}
+const key2 = o => (o.type + ':' + o.id).replace(/'/g, "\\'");
+function navTo(i) { const k = navStack[i]; navStack = navStack.slice(0, i); renderObject(k); }
+function selectTypeRowOnly(tid) {
+  document.querySelectorAll('.trow').forEach(e => e.classList.toggle('on', e.id === 'tr-' + tid));
+  document.getElementById('listTitle').textContent = OT[tid].name;
+}
+
+// 차량 수명주기 스트립 — 게이트 검사 결과 연동
+function renderLifecycleStrip(k, o) {
+  const lc = O.lifecycles.vehicleLifecycle;
+  const idx = lc.states.findIndex(s => s.id === o.props.state);
+  const insps = (DB.linksTo[k] || []).filter(l => l.lt === 'inspectionOfVehicle').map(l => DB.objects[l.from]);
+  let html = '<div class="lifecycle">';
+  lc.states.forEach((s, i) => {
+    const cls = i < idx ? 'done' : (i === idx ? 'now' : '');
+    html += `<div class="lstate ${cls}"><div class="box">${esc(s.name)}<br><span class="mono" style="font-size:9px">${esc(s.id)}</span></div></div>`;
+    if (i < lc.states.length - 1) {
+      const tr = lc.transitions.find(t => t.from === s.id);
+      const gate = tr && tr.gate;
+      let gcls = '', gtxt = gate || '·';
+      if (gate) {
+        const ins = insps.find(x => x.props.gate.startsWith(gate));
+        if (ins) { gcls = ins.props.result.includes('HOLD') ? 'hold' : 'pass'; gtxt = gate + ' ' + ins.props.result; }
+        else if (i < idx) gcls = 'pass';
+      }
+      html += `<div class="lgate ${gcls}">${gate ? `<span class="g">${esc(gtxt)}</span>` : ''}
+        <div class="arr">→</div>${tr && tr.gateName ? `<div class="gn">${esc(tr.gateName)}</div>` : ''}</div>`;
+    }
+  });
+  html += '</div>';
+  if (insps.length) html += `<div class="hint" style="margin-top:2px">검사 ${insps.length}건 기록 — PASS가 있어야 다음 단계로 전달 (연결된 객체의 품질 검사 참조)</div>`;
+  return `<div class="section"><h3>수명주기 — ${esc(lc.name)}</h3>${html}</div>`;
+}
+
+// =============================================================================
+// 탭3 — 액션 카탈로그 + 차량 수명주기 상태도
+// =============================================================================
+(function buildActions() {
+  const lc = O.lifecycles.vehicleLifecycle;
+  const W = 1180, BX = 138, BH = 50, GAP = (W - 60 - BX) / (lc.states.length - 1);
+  let svg = `<svg id="lifecycleSvg" viewBox="0 0 ${W} 190" role="img" aria-label="차량 수명주기 상태도">`;
+  // 전이 화살표 + 게이트
+  lc.transitions.forEach(tr => {
+    const i = lc.states.findIndex(s => s.id === tr.from);
+    const x1 = 30 + i * GAP + BX, x2 = 30 + (i + 1) * GAP, y = 82;
+    svg += `<line x1="${x1}" y1="${y}" x2="${x2 - 7}" y2="${y}" stroke="#6e6e67" stroke-width="1.4"/>
+      <path d="M${x2 - 7},${y - 4} L${x2},${y} L${x2 - 7},${y + 4} Z" fill="#6e6e67"/>`;
+    const mx = (x1 + x2) / 2;
+    if (tr.gate) svg += `
+      <rect x="${mx - 15}" y="${y - 26}" width="30" height="15" rx="7" fill="var(--bg)" stroke="#c98500" stroke-width="1"/>
+      <text x="${mx}" y="${y - 15}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#c98500">${tr.gate}</text>
+      <text x="${mx}" y="${y + 20}" text-anchor="middle" font-size="10" fill="var(--muted)">${esc(tr.gateName)}</text>`;
+    if (tr.action) svg += `<text x="${mx}" y="${y + 34}" text-anchor="middle" font-size="9.5" fill="#6e6e67" font-family="monospace">${tr.action}</text>`;
+    if (tr.note) svg += `<text x="${mx}" y="${y + 48}" text-anchor="middle" font-size="9.5" fill="var(--dim)">※ ${esc(tr.note.split('.')[0])}</text>`;
+  });
+  // 상태 박스
+  lc.states.forEach((s, i) => {
+    const x = 30 + i * GAP, y = 57;
+    svg += `<rect x="${x}" y="${y}" width="${BX}" height="${BH}" rx="9" fill="var(--panel2)" stroke="#3987e5" stroke-width="1.4"/>
+      <text x="${x + BX / 2}" y="${y + 21}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text)">${esc(s.name)}</text>
+      <text x="${x + BX / 2}" y="${y + 37}" text-anchor="middle" font-size="9.5" fill="var(--muted)" font-family="monospace">${s.id}</text>`;
+  });
+  svg += `<text x="30" y="30" font-size="12.5" font-weight="700" fill="var(--text)">차량(VIN) 수명주기 — 상태 전이마다 검사 게이트(G1~G4)에서 PASS 기록 후 다음 단계 전달</text>
+    <text x="30" y="170" font-size="10.5" fill="var(--muted)">${esc(lc.description)}</text></svg>`;
+
+  const STAGE = { plan: '계획 · 발주', logistics: '물류 · 검사', commerce: '도매 · 소매 · 프로그램', finance: '재무 · 정산 (Finance)', care: '커스터머 케어', quality: '커넥티드 · 품질' };
+  const STAGE_G = { plan: 'plan', logistics: 'logistics', commerce: 'commerce', finance: 'plan', care: 'care', quality: 'quality' };
+  let cards = '';
+  Object.entries(STAGE).forEach(([st, nm]) => {
+    const acts = O.actionTypes.filter(a => a.stage === st);
+    if (!acts.length) return;
+    cards += `<div class="stagecard"><h3><span class="gdot" style="background:${GC[STAGE_G[st]]}"></span>${esc(nm)} (${acts.length})</h3>
+      ${acts.map(a => `<div class="actrow">
+        <b>${esc(a.name)}</b> <span class="mono muted" style="font-size:10px">${esc(a.id)}</span>
+        <span class="muted" style="font-size:10.5px"> · 대상: ${esc(OT[a.objectType].name)}</span>
+        ${a.desc ? `<div class="fx">${esc(a.desc)}</div>` : ''}
+        <div class="fx">파라미터: <span class="mono">${a.params.map(p => esc(p.id)).join(', ')}</span></div>
+        <div class="fx">효과: ${a.effects.map(esc).join(' · ')}</div>
+        ${a.automation ? `<div class="fx" style="border-left:2px solid var(--st-derived);padding-left:8px;margin-top:4px">
+          <span style="color:var(--muted)">수동(before):</span> ${esc(a.automation.before)}<br>
+          <span style="color:var(--st-derived)">자동화(after):</span> ${esc(a.automation.after)}<br>
+          <span style="color:var(--st-bound)">결과 화면:</span> ${esc(a.automation.output)}</div>` : ''}
+        ${a.twinView ? `<button class="btn twinBtn" onclick="openTwinView('${a.id}')">◈ 디지털 트윈 — ${esc(a.twinView.label)}</button>` : ''}
+      </div>`).join('')}</div>`;
+  });
+
+  document.getElementById('actionsWrap').innerHTML = `
+    <h2>차량 수명주기</h2>${svg}
+    <h2 style="margin-top:22px">액션 카탈로그 — 워크플로우 단계별 ${O.actionTypes.length}개</h2>
+    <div class="lead">액션은 온톨로지에 선언된 "업무 행위"다. 파라미터·효과(상태 전이/객체 생성/속성 갱신)가 선언되어 있어
+      실행 계층(API·화면)이 그대로 해석한다. 새 업무가 생기면 actionTypes에 1건을 추가하는 것으로 카탈로그·객체 패널에 자동 노출된다.</div>
+    <div class="stagegrid">${cards}</div>
+    <div class="extguide"><b>확장 가이드 — 판매법인 워크플로우 변화 반영 절차</b><br>
+      ① 새 객체 = objectTypes 1건 추가 (마트 생기기 전 status=planned로 먼저 선언 가능)<br>
+      ② 새 속성 = 해당 objectType.properties 1건 추가 (마트 컬럼명 = property.id)<br>
+      ③ 새 관계 = linkTypes 1건 추가 (fk 조인 키 선언 → 탐색·쿼리 생성 자동 반영)<br>
+      ④ 새 액션 = actionTypes 1건 추가 (stage·params·effects)<br>
+      화면·쿼리 코드는 타입을 하드코딩하지 않고 이 선언만 읽으므로, 정의 추가 = 전체 자동 전파.
+      데이터측은 SCHEMA.md §9 원칙(VIN 원장 + 마스터 속성 + downstream 자동 재생성)과 짝을 이룬다.</div>`;
+})();
+
+// =============================================================================
+// 탭4 — 데이터 파이프라인 (데이터 엔지니어 뷰: parquet 마트 → 온톨로지 변환 흐름)
+//  바인딩 테이블·빌드 DAG는 온톨로지 선언(datasource·fk)에서 자동 생성 — 별도 관리 없음
+// =============================================================================
+(function buildPipeline() {
+  const stCnt = { bound: 0, derived: 0, planned: 0 };
+  O.objectTypes.forEach(t => stCnt[t.datasource.status]++);
+  const kindCnt = {};
+  O.objectTypes.forEach(t => kindCnt[t.datasource.kind] = (kindCnt[t.datasource.kind] || 0) + 1);
+
+  // ── 흐름도 SVG: 원천 → 랜딩 → 마트 → 온톨로지 빌드 → 서빙 ──
+  const stages = [
+    { t: '원천 시스템 (SoR)', c: '#8f8d85', s: ['ERP — 발주 · 도매 · 정산', 'DMS — 소매 · 정비(RO)', '물류 EDI · 항만 VPC', '텔레매틱스 · 콜센터 CSI'] },
+    { t: '랜딩 (Raw)', c: '#c98500', s: ['원본 스키마 그대로 적재', 'month=YYYY-MM 파티션', 'append-only · 불변', '스키마 드리프트 격리'] },
+    { t: '데이터 마트 (Conform)', c: '#199e70', s: [`dim_* 마스터 ${kindCnt.master || 0}종`, `fact parquet ${(kindCnt.parquet || 0) + (kindCnt['stream→parquet'] || 0)}종 (스트림 ${kindCnt['stream→parquet'] || 0} 포함)`, 'VIN 원장 = 정본 (SCHEMA §9)', 'SCHEMA.md = 스키마 계약'] },
+    { t: '온톨로지 빌드', c: '#3987e5', s: [`객체 ${O.objectTypes.length} — PK 승격 뷰`, `링크 ${O.linkTypes.length} — FK 조인 뷰`, `derived ${stCnt.derived} — 역산 · 클러스터링`, '품질 게이트 통과분만 publish'] },
+    { t: '시멘틱 서빙', c: '#d55181', s: ['온톨로지 탐색기 (이 화면)', '객체 · 링크 · 액션 API', 'V7 전략 시뮬레이션', '액션 실행 → 마트 역기록'] },
+  ];
+  const arrows = ['CDC · 배치 수집', 'DuckDB 변환\n(파티션 replace · 멱등)', '선언 읽기\n(v7-ontology.js)', '쿼리 바인딩'];
+  const W = 1180, BW = 196, BH = 138, GAPX = (W - 40 - 5 * BW) / 4, BY = 56;
+  let svg = `<svg id="pipelineSvg" viewBox="0 0 ${W} 248" role="img" aria-label="parquet 마트에서 온톨로지까지 데이터 파이프라인">`;
+  svg += `<text x="20" y="30" font-size="12.5" font-weight="700" fill="var(--text)">parquet 데이터 마트 → 온톨로지 변환 파이프라인 — 정의는 선언 파일 하나, 물리 데이터는 마트에만 존재 (온톨로지 = 뷰)</text>`;
+  stages.forEach((st, i) => {
+    const x = 20 + i * (BW + GAPX);
+    svg += `<rect x="${x}" y="${BY}" width="${BW}" height="${BH}" rx="10" fill="var(--panel2)" stroke="${st.c}" stroke-width="1.6"/>
+      <text x="${x + BW / 2}" y="${BY + 24}" text-anchor="middle" font-size="12" font-weight="700" fill="${st.c}">${esc(st.t)}</text>`;
+    st.s.forEach((line, li) => {
+      svg += `<text x="${x + 13}" y="${BY + 48 + li * 21}" font-size="10.5" fill="var(--text)">· ${esc(line)}</text>`;
+    });
+    if (i < 4) {
+      const ax1 = x + BW, ax2 = x + BW + GAPX, ay = BY + BH / 2;
+      svg += `<line x1="${ax1}" y1="${ay}" x2="${ax2 - 7}" y2="${ay}" stroke="#6e6e67" stroke-width="1.4"/>
+        <path d="M${ax2 - 7},${ay - 4} L${ax2},${ay} L${ax2 - 7},${ay + 4} Z" fill="#6e6e67"/>`;
+      arrows[i].split('\n').forEach((line, li) => {
+        svg += `<text x="${(ax1 + ax2) / 2}" y="${ay - 12 + li * 12}" text-anchor="middle" font-size="9" fill="var(--muted)">${esc(line)}</text>`;
+      });
+    }
+  });
+  svg += `<text x="20" y="${BY + BH + 30}" font-size="10.5" fill="var(--muted)">재처리 = month 파티션 단위 replace(멱등) · 온톨로지 빌드는 물리 복제 없는 뷰라서 선언 변경이 재적재 없이 즉시 전파된다.</text></svg>`;
+
+  // ── 바인딩 테이블: objectTypes.datasource에서 자동 생성 ──
+  const gOrder = Object.fromEntries(O.groups.map(g => [g.id, g.order]));
+  const rows = [...O.objectTypes].sort((a, b) => gOrder[a.group] - gOrder[b.group])
+    .map(t => { const ds = t.datasource; return `<tr>
+      <td><span class="gdot" style="background:${GC[t.group]}"></span><b>${esc(t.name)}</b>
+        <span class="mono muted" style="font-size:10px">${esc(t.id)}</span></td>
+      <td><span class="badge ${ds.status}">${esc(ds.status.toUpperCase())}</span></td>
+      <td class="muted">${esc(ds.kind)}</td>
+      <td class="mono" style="word-break:break-all">${esc(ds.path)}</td>
+      <td class="muted">${esc(ds.grain || '-')}</td>
+      <td class="mono">${esc(t.primaryKey)}</td></tr>`; }).join('');
+
+  // ── 빌드 순서 DAG: linkTypes.fk 선언에서 위상 정렬로 도출 ──
+  const deps = {}; O.objectTypes.forEach(t => deps[t.id] = new Set());
+  let mediated = 0;
+  O.linkTypes.forEach(l => {
+    const owner = (l.fk || '').split('.')[0];
+    if (owner === l.from && l.from !== l.to) deps[l.from].add(l.to);
+    else if (owner === l.to && l.from !== l.to) deps[l.to].add(l.from);
+    else mediated++;
+  });
+  const waves = []; const placed = new Set();
+  let rest = O.objectTypes.map(t => t.id);
+  while (rest.length) {
+    const ready = rest.filter(id => [...deps[id]].every(d => placed.has(d)));
+    if (!ready.length) { waves.push(rest); break; }
+    waves.push(ready); ready.forEach(id => placed.add(id));
+    rest = rest.filter(id => !placed.has(id));
+  }
+  const waveHtml = waves.map((w, i) => `<div class="wave">
+    <span class="wno">WAVE ${i + 1}</span>
+    <div class="chips">${w.map(id => `<span class="chip" style="cursor:default"><span class="gdot" style="background:${GC[OT[id].group]};width:7px;height:7px"></span>${esc(OT[id].name)}</span>`).join('')}</div>
+  </div>`).join('');
+
+  document.getElementById('pipelineWrap').innerHTML = `
+    <h2>데이터 파이프라인 — 마트에서 온톨로지까지</h2>
+    <div class="lead">데이터 엔지니어 관점의 변환 흐름. 핵심 원칙: <b style="color:var(--text)">온톨로지는 ETL 산출물이 아니라 마트 위의 뷰</b>다 —
+      객체는 마트 테이블의 PK 승격, 링크는 fk 선언의 조인 구체화라서 그래프DB 등 별도 저장소로 복제하지 않는다.
+      아래 바인딩 테이블과 빌드 순서는 v7-ontology.js 선언에서 화면이 직접 생성한 것으로, 선언과 문서가 어긋날 수 없다.</div>
+    ${svg}
+
+    <h2 style="margin-top:24px">① 마트 ↔ 객체 바인딩 — 선언 자동 생성 (bound ${stCnt.bound} · derived ${stCnt.derived} · planned ${stCnt.planned})</h2>
+    <div class="lead">마트 신설 전에도 planned로 먼저 선언한다 — 파이프라인 백로그가 온톨로지 안에서 관리된다.</div>
+    <table class="bind"><tr><th>객체 타입</th><th>상태</th><th>kind</th><th>마트 경로 (datasource.path)</th><th>그레인</th><th>PK</th></tr>${rows}</table>
+
+    <h2 style="margin-top:24px">② 빌드 순서 — 링크 FK 선언에서 위상 정렬로 도출한 DAG</h2>
+    <div class="lead">각 웨이브 안은 상호 의존이 없어 병렬 실행 가능. 새 링크를 선언하면 이 순서가 자동으로 다시 계산된다
+      (fk가 매개 객체를 경유하는 링크 ${mediated}건은 양끝 객체 빌드 뒤 산출).</div>
+    <div style="max-width:1180px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:6px 16px">${waveHtml}</div>
+
+    <h2 style="margin-top:24px">③ 증분 전략 · 품질 게이트</h2>
+    <div class="stagegrid" style="grid-template-columns:repeat(auto-fill,minmax(480px,1fr))">
+      <div class="stagecard"><h3>증분 전략 (멱등이 기본)</h3>
+        <div class="actrow"><b>fact 마트</b><div class="fx">month=YYYY-MM 파티션 append. 지연 도착·정정은 해당 파티션 전체 replace — 상태 없는 재실행으로 백필 완결</div></div>
+        <div class="actrow"><b>마스터(dim)</b><div class="fx">스냅샷 교체가 기본, 이력 필요 속성(딜러 등급 등)만 SCD2</div></div>
+        <div class="actrow"><b>온톨로지</b><div class="fx">뷰라서 증분 개념 자체가 없음 — 마트 파티션이 publish되면 즉시 반영, 선언 변경도 재적재 없이 전파</div></div>
+      </div>
+      <div class="stagecard"><h3>품질 게이트 (실패 시 파티션 publish 차단)</h3>
+        <div class="actrow"><b>PK 유일성 — ${O.objectTypes.length}건</b><div class="fx">objectType.primaryKey 선언에서 테스트 자동 생성 (dbt unique 상당)</div></div>
+        <div class="actrow"><b>FK 고아 0건 — ${O.linkTypes.length - mediated}건</b><div class="fx">linkTypes.fk 선언에서 자동 생성 (dbt relationships 상당) — 고아 행은 격리 테이블로</div></div>
+        <div class="actrow"><b>수명주기 합법성</b><div class="fx">vehicle.state 전이가 G1~G4 게이트 순서를 위반하지 않는지 — lifecycles 선언이 테스트 스펙</div></div>
+        <div class="actrow"><b>derived 신선도</b><div class="fx">파생 객체(${stCnt.derived})가 입력 마트 최신 파티션보다 오래되면 재산출 트리거</div></div>
+      </div>
+    </div>
+
+    <h2 style="margin-top:24px">④ DuckDB 변환 예시 — 선언 → SQL 기계 변환</h2>
+    <pre class="code"><span class="c">-- 객체·링크·테스트 SQL은 전부 선언에서 생성 가능하다 (아래는 vehicle 1건 예시)</span>
+<span class="c">-- ① 객체 뷰: 마트 → 객체. PK 승격, 컬럼명 = property.id 그대로 (매핑 계층 없음)</span>
+<span class="k">CREATE OR REPLACE VIEW</span> ont_vehicle <span class="k">AS</span>
+<span class="k">SELECT</span> vin <span class="k">AS</span> __pk, * <span class="k">FROM</span> read_parquet(<span style="color:var(--g-plan)">'mart/vehicle_master/month=*/*.parquet'</span>);
+
+<span class="c">-- ② 링크 뷰: linkTypes.fk = 'vehicle.model_id' 선언 그대로 조인</span>
+<span class="k">CREATE OR REPLACE VIEW</span> lnk_vehicle_model <span class="k">AS</span>
+<span class="k">SELECT</span> v.__pk <span class="k">AS</span> from_pk, m.model_id <span class="k">AS</span> to_pk
+<span class="k">FROM</span> ont_vehicle v <span class="k">JOIN</span> ont_model m <span class="k">ON</span> v.model_id = m.model_id;
+
+<span class="c">-- ③ 품질 게이트: 고아 FK가 0이어야 해당 month 파티션 publish</span>
+<span class="k">SELECT</span> count(*) <span class="k">AS</span> orphans
+<span class="k">FROM</span> ont_vehicle v <span class="k">LEFT JOIN</span> ont_model m <span class="k">ON</span> v.model_id = m.model_id
+<span class="k">WHERE</span> m.model_id <span class="k">IS NULL</span>;  <span class="c">-- 0 초과면 차단 + 고아 행 격리</span></pre>`;
+})();
+
+// =============================================================================
+// 텔레매틱스 Trip 지도 — recordDrivingTrip 액션의 "디지털 트윈 데이터 뷰"
+//  베이스맵: Carto 벡터 GL 스타일(OSM 데이터) — 오프라인이면 다크 배경 폴백
+//  데이터: 표본 telematicsEvent(data_category=trip)의 도착지 GPS → H3 r7 셀 집계
+// =============================================================================
+// =============================================================================
+// 디지털 트윈 데이터 뷰 — 관계 뷰 영역 전체를 덮는 오버레이 (Y축 길이 = 관계 뷰와 동일)
+//  · 액션의 twinView 선언(kind: map/board = 데이터 뷰, sim = 전략 트윈 복귀)
+//  · 같은 객체에 데이터 뷰 액션이 2개 이상이면 드롭다운으로 즉시 전환
+//  · 닫기는 [▲ 관계 뷰로] 단일 컨트롤 — 관계 뷰와의 연결성 유지 (ESC 동일)
+// =============================================================================
+const twinPanel = document.getElementById('twinPanel');
+const twSelect = document.getElementById('twSelect');
+let twCurrent = null;   // 표시 중인 트윈 뷰 액션 id
+const dataViewsOf = tid =>
+  O.actionTypes.filter(a => a.objectType === tid && a.twinView && a.twinView.kind !== 'sim');
+function openTwinView(actionId) {
+  const a = O.actionTypes.find(x => x.id === actionId);
+  if (!a || !a.twinView) return;
+  if (a.twinView.kind !== 'sim') { openTwinPanel(actionId); return; }
+  // sim: v8 오버레이(임베드) 안이면 새 창 없이 실행 중인 트윈으로 복귀
+  try {
+    if (window.parent !== window && typeof window.parent.closeOntology === 'function') {
+      window.parent.closeOntology();
+      return;
+    }
+  } catch (e) { /* cross-origin 등 — 새 창 폴백 */ }
+  window.open('v8-strategy-sim-twin.html#noBrief', '_blank');
+}
+async function openTwinPanel(actionId) {
+  const a = O.actionTypes.find(x => x.id === actionId);
+  const views = dataViewsOf(a.objectType);
+  twSelect.innerHTML = views.map(v =>
+    `<option value="${v.id}"${v.id === actionId ? ' selected' : ''}>${esc(v.name)} — ${esc(v.twinView.label)}</option>`).join('');
+  twSelect.style.display = views.length > 1 ? '' : 'none';
+  document.getElementById('twObj').textContent =
+    `${OT[a.objectType].name}${views.length > 1 ? ` · 트윈 뷰 ${views.length}개` : ` — ${a.name}`}`;
+  twinPanel.classList.add('on');
+  window._cy && window._cy.resize();
+  await showTwinView(actionId);
+}
+twSelect.onchange = () => showTwinView(twSelect.value);
+async function showTwinView(actionId) {
+  twCurrent = actionId;
+  const a = O.actionTypes.find(x => x.id === actionId);
+  document.querySelectorAll('.twView').forEach(e => e.classList.remove('on'));
+  if (a.twinView.kind === 'map') {
+    document.getElementById('tripMap').classList.add('on');
+    await initTripMap();
+    window._updateTripTime && window._updateTripTime();   // 현재 Play 커서 월 반영
+    window._tripMap && window._tripMap.map.resize();
+  } else {
+    document.getElementById('dtcBoard').classList.add('on');
+    renderDtcBoard();
+  }
+  window._twinPanel = { open: true, action: actionId, views: [...twSelect.options].map(o => o.value) };
+}
+function closeTwinPanel() {
+  twinPanel.classList.remove('on');
+  window._twinPanel = { open: false };
+  window._cy && window._cy.resize();
+}
+// Play 커서(월) 변경 → 열려 있는 트윈 데이터 뷰를 해당 월 누적으로 갱신
+window._refreshTwinData = () => {
+  if (!twinPanel.classList.contains('on') || !twCurrent) return;
+  const a = O.actionTypes.find(x => x.id === twCurrent);
+  if (!a || !a.twinView) return;
+  if (a.twinView.kind === 'map') { if (window._updateTripTime) window._updateTripTime(); }
+  else renderDtcBoard();
+};
+document.getElementById('twClose').onclick = closeTwinPanel;
+// 하위 호환 별칭 (v8·기존 경로)
+function openTripMap() { return openTwinPanel('recordDrivingTrip'); }
+function closeTripMap() { closeTwinPanel(); }
+
+// ── 데이터 뷰 2: DTC 신호 보드 — 텔레매틱스 이상 신호(data_category=dtc) 트리아지 현황 ──
+function renderDtcBoard() {
+  const tc = window._twinTime;   // Play 커서 월까지 누적 (v8 연동)
+  const evs = DB.order.map(k => DB.objects[k])
+    .filter(o => o.type === 'telematicsEvent' && o.props.data_category === 'dtc'
+      && (!tc || o.props.ts.slice(0, 7) <= tc.ym))
+    .map(o => o.props)
+    .sort((a, b) => (a.severity === 'SAFETY' ? -1 : 1) - (b.severity === 'SAFETY' ? -1 : 1));
+  const sev = {}; evs.forEach(e => sev[e.severity] = (sev[e.severity] || 0) + 1);
+  const SEV_C = { SAFETY: 'var(--safety)', HIGH: '#d95926', MEDIUM: 'var(--st-planned)', LOW: 'var(--muted)' };
+  const mx = Math.max(1, ...Object.values(sev));
+  document.getElementById('dtcBoard').innerHTML = `
+    <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+      <div class="card" style="min-width:250px">
+        <h3>심각도 분포 — 표본 ${evs.length}건${tc ? ` · ⏱ ${tc.ym}까지 누적${tc.sim ? ' (실측은 현재월까지)' : ''}` : ''}</h3>
+        ${Object.entries(sev).map(([s, n]) => `
+          <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:3px 0">
+            <span style="width:64px;font-weight:700;color:${SEV_C[s] || 'var(--text)'}">${esc(s)}</span>
+            <div style="flex:1;height:9px;background:var(--panel3);border-radius:4px"><div style="width:${n / mx * 100}%;height:100%;background:${SEV_C[s] || 'var(--edge-hi)'};border-radius:4px"></div></div>
+            <b style="width:30px;text-align:right">${n}</b>
+          </div>`).join('')}
+        <div class="hint" style="margin-top:8px">SAFETY = 즉시 안전 대응 · 패턴 신호는 품질 이슈 후보로 클러스터링 (triageTelematicsSignal 액션의 결과 뷰)</div>
+      </div>
+      <div class="card" style="flex:1;min-width:420px">
+        <h3>신호 목록 — 트리아지 상태</h3>
+        <table class="props"><tr><th>이벤트</th><th>VIN</th><th>DTC</th><th>심각도</th><th>트리아지</th><th>발생</th></tr>
+        ${evs.map(e => `<tr>
+          <td class="mono" style="font-size:10px">${esc(e.event_id)}</td>
+          <td class="mono" style="font-size:10px">${esc(e.vin.slice(-8))}</td>
+          <td class="mono">${esc(e.dtc_code)}</td>
+          <td style="color:${SEV_C[e.severity] || 'var(--text)'};font-weight:700">${esc(e.severity)}</td>
+          <td class="muted">${esc(e.triage_status)}</td>
+          <td class="muted mono" style="font-size:10px">${esc(e.ts.slice(0, 10))}</td></tr>`).join('')}
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── 데이터 뷰 1: Trip 지도 (지연 초기화 1회) ─────────────────────────────────
+let _tripMapReady = null;
+async function initTripMap() {
+  if (_tripMapReady) return _tripMapReady;
+  _tripMapReady = (async () => {
+    // h3-js (UMD) + maplibre css 로드
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'vendor/h3-js.umd.js'; s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    const css = document.createElement('link');
+    css.rel = 'stylesheet'; css.href = 'vendor/maplibre-gl.css';
+    document.head.appendChild(css);
+    const ml = await import('./vendor/maplibre-gl.mjs');
+    const maplibregl = ml.default ?? ml;   // v6 ESM은 named export만 제공
+
+    // Trip 이벤트 → H3 r7 셀 집계 (도착지 GPS 기준) — Play 커서 월까지 '누적'으로 필터
+    const allTrips = DB.order.map(k => DB.objects[k])
+      .filter(o => o.type === 'telematicsEvent' && o.props.data_category === 'trip')
+      .map(o => o.props);
+    const maxN = (() => {   // 색·크기 스케일은 전체 데이터 기준으로 고정 — 시간 이동에도 일관
+      const c = {};
+      allTrips.forEach(p => { const k = h3.latLngToCell(p.dest_lat, p.dest_lon, 7); c[k] = (c[k] || 0) + 1; });
+      return Math.max(1, ...Object.values(c));
+    })();
+    const buildData = ymLimit => {
+      const trips = ymLimit ? allTrips.filter(p => p.ts.slice(0, 7) <= ymLimit) : allTrips;
+      const cells = {};
+      trips.forEach(p => {
+        const c = h3.latLngToCell(p.dest_lat, p.dest_lon, 7);
+        (cells[c] = cells[c] || { n: 0, km: 0, vins: new Set() });
+        cells[c].n++; cells[c].km += p.trip_km; cells[c].vins.add(p.vin);
+      });
+      const hexFC = { type: 'FeatureCollection', features: Object.entries(cells).map(([c, v]) => ({
+        type: 'Feature',
+        properties: { h3: c, trips: v.n, km: +v.km.toFixed(1), vins: v.vins.size, w: v.n / maxN },
+        geometry: { type: 'Polygon', coordinates: [h3.cellToBoundary(c, true)] },
+      })) };
+      const ptFC = { type: 'FeatureCollection', features: hexFC.features.map(f => {
+        const [lat, lng] = h3.cellToLatLng(f.properties.h3);
+        return { type: 'Feature', properties: f.properties, geometry: { type: 'Point', coordinates: [lng, lat] } };
+      }) };
+      return { trips, hexFC, ptFC };
+    };
+    const setStats = d => {
+      const tc = window._twinTime;
+      document.getElementById('tmStats').textContent =
+        `trip ${d.trips.length.toLocaleString()}건 · H3 셀 ${d.hexFC.features.length}개` +
+        (tc ? ` · ⏱ ${tc.ym}까지 누적${tc.sim ? ' (실측은 현재월까지)' : ''}` : ' · 표본 인스턴스 기준');
+    };
+    const first = buildData(window._twinTime ? window._twinTime.ym : null);
+    setStats(first);
+    // 데이터 전체가 항상 화면에 들어오게 fitBounds — 고정 center/zoom은 짧은 패널에서 잘려 보인다
+    const BOUNDS = (() => {
+      let w = 180, s = 90, e = -180, n = -90;
+      allTrips.forEach(p => { w = Math.min(w, p.dest_lon); e = Math.max(e, p.dest_lon);
+        s = Math.min(s, p.dest_lat); n = Math.max(n, p.dest_lat); });
+      return [[w - 2, s - 2], [e + 2, n + 2]];
+    })();
+
+    // 베이스맵 — Carto 벡터 스타일 시도, 실패 시 다크 폴백 (오프라인)
+    let style = {
+      version: 8, sources: {},
+      layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#11151c' } }],
+    };
+    try {
+      const r = await fetch('https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json',
+        { signal: AbortSignal.timeout(5000) });
+      if (r.ok) style = await r.json();
+      else document.getElementById('tmStats').textContent += ' · 베이스맵 오프라인(폴백)';
+    } catch { document.getElementById('tmStats').textContent += ' · 베이스맵 오프라인(폴백)'; }
+
+    const map = new maplibregl.Map({
+      container: 'tripMap', style, bounds: BOUNDS, fitBoundsOptions: { padding: 30 },
+      attributionControl: { compact: false },
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+    await new Promise(res => map.on('load', res));
+    // 셀 중심점 소스 — 전국 줌에서는 r7 헥사곤(~1km)이 서브픽셀이라 서클로 표기하고,
+    // 줌 7.5 이상으로 확대하면 실제 H3 경계 폴리곤이 나타난다 (줌 적응형)
+    map.addSource('trip-hex', { type: 'geojson', data: first.hexFC });
+    map.addSource('trip-pts', { type: 'geojson', data: first.ptFC });
+    // 농도 = Trip 수 — 주행이 많은 셀일수록 밝고 크게 (도메인은 실제 최대 카운트 기준 동적)
+    const RAMP = ['interpolate', ['linear'], ['get', 'w'], 0, '#16406f', 0.4, '#2f81f7', 1, '#b9dcff'];
+    map.addLayer({ id: 'hex-dot', type: 'circle', source: 'trip-pts', maxzoom: 7.5, paint: {
+      'circle-color': RAMP,
+      'circle-opacity': ['interpolate', ['linear'], ['get', 'w'], 0, 0.45, 1, 0.95],
+      'circle-radius': ['interpolate', ['linear'], ['get', 'trips'], 1, 4.5, Math.max(2, maxN), 16],
+      'circle-stroke-color': '#cfe6ff',
+      'circle-stroke-width': ['interpolate', ['linear'], ['get', 'w'], 0, 0.4, 1, 1.6] } });
+    map.addLayer({ id: 'hex-fill', type: 'fill', source: 'trip-hex', minzoom: 7.5, paint: {
+      'fill-color': RAMP,
+      'fill-opacity': ['interpolate', ['linear'], ['get', 'w'], 0, 0.4, 1, 0.88],
+    } });
+    map.addLayer({ id: 'hex-line', type: 'line', source: 'trip-hex', minzoom: 7.5, paint: {
+      'line-color': CV('--edge-hi'), 'line-width': 0.8, 'line-opacity': 0.8 } });
+    map.on('click', 'hex-dot', e => {
+      map.easeTo({ center: e.lngLat, zoom: 9.2, duration: 700 });   // 서클 클릭 = 셀 상세로 줌
+    });
+    map.on('click', 'hex-fill', e => {
+      const p = e.features[0].properties;
+      new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat)
+        .setHTML(`<div>H3 <code>${p.h3}</code><br>` +   // 글꼴·색은 #twBody 팝업 오버라이드(디자인 토큰)로 통일
+          `Trip <b>${p.trips}</b>건 · 차량 ${p.vins}대 · 누적 ${p.km}km</div>`)
+        .addTo(map);
+    });
+    map.on('mouseenter', 'hex-fill', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'hex-fill', () => map.getCanvas().style.cursor = '');
+    window._tripMap = { map, cells: first.hexFC.features.length, trips: first.trips.length, maxN, bounds: BOUNDS };
+    const fitTrips = () => map.fitBounds(BOUNDS, { padding: 30, duration: 0, maxZoom: 8 });
+    // Play 커서 월 변경 → 누적 데이터 갱신 (v8 _setTwinTime 경유)
+    window._updateTripTime = () => {
+      const d = buildData(window._twinTime ? window._twinTime.ym : null);
+      map.getSource('trip-hex').setData(d.hexFC);
+      map.getSource('trip-pts').setData(d.ptFC);
+      window._tripMap.trips = d.trips.length;
+      window._tripMap.cells = d.hexFC.features.length;
+      setStats(d);
+    };
+    // 컨테이너 크기 변화(패널 개폐·임베드 iframe 리사이즈·창 크기) → 캔버스 리사이즈 + 재-fit
+    // (절반 렌더/잘림 방지 — 데이터 전체가 항상 보이게)
+    new ResizeObserver(() => { map.resize(); fitTrips(); }).observe(document.getElementById('tripMap'));
+    requestAnimationFrame(() => { map.resize(); fitTrips(); });
+    return map;
+  })();
+  return _tripMapReady;
+}
+
+// 그래프 탭 첫 진입 시 URL 해시로 타입 딥링크 — '#<tid>' = 고정, '#focus:<tid>' = 관계 뷰 진입
+if (location.hash.length > 1) {
+  const h = location.hash.slice(1);
+  const focus = h.startsWith('focus:');
+  const tid = focus ? h.slice(6) : h;
+  if (OT[tid]) {
+    window._cy.$('#' + tid).select();
+    if (focus) window._enterFocus(tid); else window._graphPin(tid);
+    renderTypePanel(tid);
+  }
+}
+</script>
+</body>
+</html>

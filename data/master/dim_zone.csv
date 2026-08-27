@@ -1,0 +1,6 @@
+zone_id,zone_name,dealer_cnt,pop_share,ev_affinity
+west,West,168,0.26,1.35
+central,Central,141,0.17,0.75
+south,South,158,0.22,0.75
+northeast,Northeast,132,0.17,1.35
+southeast,Southeast,146,0.18,1.0
