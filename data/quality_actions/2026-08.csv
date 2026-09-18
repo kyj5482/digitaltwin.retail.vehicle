@@ -1,0 +1,3 @@
+ym,action_id,action_type,model_id,category,title,detected_ym,target_vins,applied_vins_cum,claim_per_1k_before,claim_per_1k_now,status
+2026-08,OTA-2606-LUM,OTA,LUM,커넥티드/SW,커넥티드 SW 결함 OTA 시정,2026-05,10000,9500,8.5,0.4,완결
+2026-08,INV-2608-VST,조사,VST,샤시/조향,조향 이음 신규 이슈 원인 조사,2026-08,0,0,2.6,2.6,원인 조사중

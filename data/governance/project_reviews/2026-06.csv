@@ -1,0 +1,5 @@
+ym,project_id,project_name,goal_node,metric,expect_value,actual_value,verdict
+2026-06,PRJ-OTA-LUM,루멘 커넥티드 OTA 품질 회복,ND-VOC,클레임/1k,0.5,3.1,진행중
+2026-06,PRJ-FSC-AUR,Aurora EV 필드 서비스 캠페인,ND-CAMP,캠페인 적용률 %,90.0,90.8,달성
+2026-06,PRJ-GRAY-ORD,그레이 색상 수요 대응 증산,ND-DS,NE 그레이 Weight,1.2,1.53,달성
+2026-06,PRJ-SOL-LAUNCH,Solara EV 런칭 준비,KPI-SHARE,런칭 준비율 %,100.0,36.7,진행중

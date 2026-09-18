@@ -1,0 +1,3 @@
+ym,action_id,action_type,model_id,category,title,detected_ym,target_vins,applied_vins_cum,claim_per_1k_before,claim_per_1k_now,status
+2026-04,FSC-2603-AUR,FSC,AUR,전장/배터리,Aurora EV 필드 서비스 캠페인,2026-03,26000,8200,6.2,4.1,조치중
+2026-04,TSB-2602-MRD,TSB,MRD,공조,블로어 모터 소음 TSB,2026-02,3100,2900,2.9,1.1,조치중

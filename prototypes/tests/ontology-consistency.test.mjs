@@ -289,3 +289,55 @@ test('C16 액션 자동화 메타 — automation 필드는 before/after/output �
   });
   assert.ok(n >= 8, `자동화 선언된 액션이 충분히 존재 (현재 ${n}건)`);
 });
+
+// ── C19. 시멘틱 정본 동기 — v7-ontology.js 는 semantic-layer.json 의 생성물 ──
+test('C19 정본 동기 — 프런트 온톨로지 = 시멘틱 정본 (빌드 생성물 일치)', () => {
+  const sem = JSON.parse(read('data_new/semantic/semantic-layer.json'));
+  // 생성기(build-ontology.js)가 내보내는 섹션이 정본과 deep-equal — 드리프트 = 실패
+  for (const k of ['meta', 'groups', 'objectTypes', 'linkTypes', 'lifecycles', 'actionTypes', 'metrics'])
+    assert.deepEqual(O[k], sem[k], `ONTOLOGY.${k} = 정본.${k} — 어긋나면 node development/tools/build-ontology.js 재실행`);
+  // data_new 마트 바인딩 계약 — mart 필드는 경로·필드 스키마를 갖는다
+  const martObjs = sem.objectTypes.filter(t => t.mart);
+  assert.ok(martObjs.length >= 13, `mart 바인딩 객체 ≥13 (현재 ${martObjs.length})`);
+  martObjs.forEach(t => {
+    assert.match(t.mart.path, /^data_new\/.+\.parquet$/, `${t.id}.mart.path 형식`);
+    assert.ok(Array.isArray(t.mart.fields) && t.mart.fields.length >= 2, `${t.id}.mart.fields 필드 계약 선언`);
+    assert.ok(t.mart.fields.some(f => f.id === 'object_id'), `${t.id} 마트에 object_id`);
+  });
+  // 링크 mart from/to 가 mart 바인딩 객체를 가리키면 조인 가능해야 한다
+  const gates = sem.actionTypes.filter(a => a.gate);
+  assert.ok(gates.length >= 8, `게이트(HITL/AI) 선언 액션 ≥8 (현재 ${gates.length})`);
+  gates.forEach(a => assert.ok(['ai', 'hitl'].includes(a.gate) && a.ledger, `${a.id} gate·ledger 선언`));
+});
+
+// ── C20. 월드 레지스트리 — 정본↔생성물 구조 동기 + 시멘틱 참조 무결성 ────────
+test('C20 월드 레지스트리 — json 정본↔js 생성물 구조 일치, onto 참조가 시멘틱 정본에 실재', () => {
+  const src = JSON.parse(read('development/world-registry.json'));
+  const w = {};
+  new Function('window', read('prototypes/world-registry.js'))(w);
+  const gen = w.WORLD_REGISTRY;
+  assert.ok(gen, 'world-registry.js 가 WORLD_REGISTRY 정의');
+  // 구조 동기 — 표기(name·owner·lbl·planned)는 프로필 병합으로 달라질 수 있으므로 구조 필드만 비교
+  const shape = r => ({
+    version: r.version,
+    root: r.org.root.id, hq: r.org.hq.id,
+    depts: r.depts.map(d => ({ id: d.id, hex: d.hex, kpis: d.kpis,
+      steps: d.steps.map(s => ({ act: s.act, id: s.id, cadence: s.cadence, typ: s.typ, onto: s.onto, out: s.out })) })),
+    worlds: r.worlds,
+  });
+  assert.deepEqual(shape(gen), shape(src),
+    '생성물 구조 = 정본 구조 — 어긋나면 node development/tools/build-entity.js 재실행');
+  // 시멘틱 참조 무결성 — 스텝의 onto.act/type 은 온톨로지(=시멘틱 정본 생성물)에 실재
+  const actIds = new Set(O.actionTypes.map(a => a.id));
+  const objIds = new Set(O.objectTypes.map(t => t.id));
+  for (const d of gen.depts) for (const s of d.steps) for (const o of s.onto || []) {
+    if (o.act) assert.ok(actIds.has(o.act), `${d.id}/${s.id || s.act} 액션 ${o.act} 시멘틱 실재`);
+    if (o.type) assert.ok(objIds.has(o.type), `${d.id}/${s.id || s.act} 객체 ${o.type} 시멘틱 실재`);
+    if (o.world) assert.ok(gen.worlds[o.world], `${d.id}/${s.id || s.act} 월드 ${o.world} 카탈로그 실재`);
+  }
+  // 부문 KPI ↔ ceo_tree
+  const treeIds = new Set(read('data/governance/ceo_tree.csv').split(/\r?\n/).slice(1)
+    .map(l => l.split(',')[0]).filter(Boolean));
+  for (const d of gen.depts) for (const k of d.kpis)
+    assert.ok(treeIds.has(k), `${d.id} KPI ${k} 가 ceo_tree에 실재`);
+});

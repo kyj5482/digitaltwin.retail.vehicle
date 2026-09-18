@@ -1,0 +1,27 @@
+{
+  "rows": 2000000,
+  "size_mb": {
+    "csv": 111.9,
+    "parquet": 14
+  },
+  "query_ms": {
+    "agg_group_by": {
+      "csv": 170.5,
+      "parquet": 18.4
+    },
+    "single_column_sum": {
+      "csv": 120,
+      "parquet": 4.8
+    },
+    "month_filter": {
+      "csv": 138.3,
+      "parquet": 5
+    }
+  },
+  "ratio": {
+    "size": 8,
+    "agg": 9.3,
+    "onecol": 25,
+    "filter": 27.7
+  }
+}

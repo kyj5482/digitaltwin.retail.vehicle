@@ -1,0 +1,537 @@
+// 생성 파일 — 직접 수정 금지. 구조 정본: development/world-registry.json,
+// 표기 입력: development/entity-profile.md — 재생성: node development/tools/build-entity.js
+// v10 트윈 월드의 조직·부문·소환 월드 구조는 이 레지스트리가 결정한다 (코드 하드코딩 금지).
+window.WORLD_REGISTRY = {
+  "$comment": "월드 구조 레지스트리 정본 — v10 트윈 월드의 조직·부문·소환 월드 구조 선언 (requirements/01-world-hierarchy.md 의 레지스트리 사양 구현). 표기(이름·오너)는 entity-profile.md 가 빌드 시 오버라이드하고, 구조(부문 추가·삭제, 스텝, 형제 법인 수)는 이 파일을 수정한다. 빌드: node development/tools/build-entity.js → prototypes/world-registry.js (window.WORLD_REGISTRY — 직접 수정 금지). 스텝의 onto.act/onto.type 은 시멘틱 정본(data_new/semantic/semantic-layer.json)의 액션/객체 타입을 참조하며 빌드가 검증한다.",
+  "version": "1.0.0",
+  "org": {
+    "root": {
+      "id": "SC-US",
+      "$comment": "루트 id 는 프로토타입 데이터 체계의 키(TWIN_DATA·온톨로지 인스턴스·게이트 원장) — 표기는 entity-profile 법인명이 덮고, 데이터 키 교체는 실데이터 전환 시 파이프라인과 함께 수행한다."
+    },
+    "hq": {
+      "id": "HQ-NA",
+      "name": "북미권역본부",
+      "lbl": "권역 본부",
+      "hex": "#79b8ff"
+    },
+    "siblings": [
+      {
+        "id": "SC-CA",
+        "name": "캐나다판매법인",
+        "lbl": "판매법인 (계획)",
+        "hex": "#8f8d85",
+        "planned": true
+      },
+      {
+        "id": "SC-MX",
+        "name": "멕시코판매법인",
+        "lbl": "판매법인 (계획)",
+        "hex": "#8f8d85",
+        "planned": true
+      }
+    ]
+  },
+  "depts": [
+    {
+      "id": "DEPT-SLS",
+      "name": "판매",
+      "hex": "#e8e6e1",
+      "kpis": [
+        "KPI-WS",
+        "KPI-SUV",
+        "ND-DS"
+      ],
+      "desc": "월 생산 주문(DoS Weight) → 도매·소매 운영 → 판매 프로그램 — 도매판매·SUV 육성·재고일수를 움직인다.",
+      "steps": [
+        {
+          "act": "ORD-1",
+          "onto": [
+            {
+              "act": "submitProductionRequest"
+            },
+            {
+              "act": "allocateToDealers"
+            }
+          ]
+        },
+        {
+          "act": "SLS-1",
+          "onto": [
+            {
+              "act": "invoiceWholesale"
+            },
+            {
+              "act": "recordRetailSale"
+            }
+          ]
+        },
+        {
+          "act": "SLS-2",
+          "onto": [
+            {
+              "act": "registerIncentiveProgram"
+            },
+            {
+              "act": "adjustIncentive"
+            }
+          ]
+        },
+        {
+          "id": "SLS-3",
+          "name": "딜러 평가·배분 가중",
+          "cadence": "quarterly",
+          "owner": "판매",
+          "typ": "hitl",
+          "onto": [
+            {
+              "act": "evaluateDealer"
+            }
+          ],
+          "out": "vehicle_master"
+        }
+      ]
+    },
+    {
+      "id": "DEPT-MKT",
+      "name": "마케팅",
+      "hex": "#eaa93e",
+      "kpis": [
+        "KPI-SHARE",
+        "KPI-BRAND"
+      ],
+      "desc": "연간 플랜 → 분기 캠페인 제작 → 매체 퍼포먼스 — 점유율·브랜드트래커(adstock)를 움직인다.",
+      "steps": [
+        {
+          "act": "MKT-1",
+          "onto": [
+            {
+              "act": "launchBrandCampaign"
+            }
+          ]
+        },
+        {
+          "act": "MKT-2",
+          "onto": [
+            {
+              "act": "launchMarketingCampaign"
+            },
+            {
+              "act": "launchDealerLocalAd"
+            }
+          ]
+        },
+        {
+          "act": "MKT-3",
+          "onto": [
+            {
+              "act": "manageMediaPlanActuals"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DEPT-PRD",
+      "name": "상품",
+      "hex": "#b58cff",
+      "kpis": [
+        "KPI-EV",
+        "KPI-ASP"
+      ],
+      "desc": "차년도 상품·Feature 확정 → 트림믹스 → MY 전환 — 친환경 라인업·ASP(믹스 프리미엄)를 움직인다.",
+      "steps": [
+        {
+          "act": "PP-1",
+          "onto": [
+            {
+              "type": "model"
+            },
+            {
+              "type": "trim"
+            }
+          ]
+        },
+        {
+          "act": "BP-2",
+          "onto": [
+            {
+              "act": "reviseBusinessPlan"
+            },
+            {
+              "type": "trim"
+            }
+          ]
+        },
+        {
+          "act": "PP-2",
+          "onto": [
+            {
+              "type": "vehicle"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DEPT-FIN",
+      "name": "재경",
+      "hex": "#79b8ff",
+      "kpis": [
+        "KPI-RECUR",
+        "KPI-COMB",
+        "KPI-COMBR"
+      ],
+      "desc": "사업계획(BP) 수립 → FOB 확정 → 월 마감·정산 — 경상이익률·합산손익의 원장 주체.",
+      "steps": [
+        {
+          "act": "BP-1",
+          "onto": [
+            {
+              "act": "reviseBusinessPlan"
+            }
+          ]
+        },
+        {
+          "act": "BP-3",
+          "onto": [
+            {
+              "act": "settleIntercompanyPayable"
+            },
+            {
+              "type": "productionCompany"
+            }
+          ]
+        },
+        {
+          "id": "FIN-3",
+          "name": "월 재무 마감 (P&L 확정)",
+          "cadence": "monthly",
+          "owner": "재경",
+          "typ": "ai",
+          "onto": [
+            {
+              "act": "closeMonthlyFinance"
+            },
+            {
+              "act": "settleWholesaleRevenue"
+            }
+          ],
+          "out": "financials_pnl"
+        },
+        {
+          "id": "FIN-4",
+          "name": "인센티브·Co-op 정산",
+          "cadence": "monthly",
+          "owner": "재경",
+          "typ": "auto",
+          "onto": [
+            {
+              "act": "accrueIncentiveLiability"
+            },
+            {
+              "act": "settleIncentiveToDealer"
+            },
+            {
+              "act": "settleCoopAdReimbursement"
+            }
+          ],
+          "out": "price_incentive"
+        }
+      ]
+    },
+    {
+      "id": "DEPT-SVC",
+      "name": "서비스",
+      "hex": "#4cc38a",
+      "kpis": [
+        "ND-PARTS",
+        "KPI-CSIS"
+      ],
+      "desc": "Parts 가격 개정 → Parts 판매·워런티 정산 → 클레임 심사 — Parts 손익·CS서비스를 움직인다.",
+      "steps": [
+        {
+          "act": "SVC-1",
+          "onto": [
+            {
+              "type": "salesCompany"
+            }
+          ]
+        },
+        {
+          "act": "SVC-2",
+          "onto": [
+            {
+              "act": "openRepairOrder"
+            },
+            {
+              "act": "payWarrantyClaim"
+            }
+          ]
+        },
+        {
+          "id": "SVC-3",
+          "name": "워런티 클레임 심사",
+          "cadence": "continuous",
+          "owner": "서비스",
+          "typ": "ai",
+          "onto": [
+            {
+              "act": "approveWarrantyClaim"
+            }
+          ],
+          "out": "service_quality"
+        }
+      ]
+    },
+    {
+      "id": "DEPT-QLT",
+      "name": "품질",
+      "hex": "#e5484d",
+      "kpis": [
+        "KPI-CSIS",
+        "ND-VOC",
+        "ND-CAMP"
+      ],
+      "desc": "VoC·소셜 모니터링 → 이슈 승격 → TSB/OTA 시정 조치 — VoC 발생률·캠페인 커버리지를 움직인다.",
+      "steps": [
+        {
+          "act": "QLT-1",
+          "onto": [
+            {
+              "act": "classifyVocDaily"
+            },
+            {
+              "act": "analyzeSocialListening"
+            },
+            {
+              "act": "analyzeVocSocialUnified"
+            }
+          ]
+        },
+        {
+          "act": "QLT-2",
+          "onto": [
+            {
+              "act": "openQualityIssue"
+            },
+            {
+              "act": "launchQualityCampaign"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DEPT-SAF",
+      "name": "안전",
+      "hex": "#f2884d",
+      "kpis": [
+        "ND-CAMP"
+      ],
+      "desc": "SAFETY 신호 즉시 대응 → 리콜·규제 보고 → 검사 게이트 관리 — 안전 캠페인 완결을 책임진다.",
+      "steps": [
+        {
+          "id": "SAF-1",
+          "name": "안전 신호 트리아지 (SAFETY)",
+          "cadence": "continuous",
+          "owner": "안전",
+          "typ": "ai",
+          "onto": [
+            {
+              "act": "triageTelematicsSignal"
+            }
+          ],
+          "out": "voc_category"
+        },
+        {
+          "id": "SAF-2",
+          "name": "리콜·규제 보고 (NHTSA)",
+          "cadence": "event",
+          "owner": "안전위원회",
+          "typ": "hitl",
+          "onto": [
+            {
+              "act": "launchQualityCampaign"
+            },
+            {
+              "type": "qualityCampaign"
+            }
+          ],
+          "out": "quality_actions"
+        },
+        {
+          "id": "SAF-3",
+          "name": "항만·PDS 검사 게이트 관리",
+          "cadence": "continuous",
+          "owner": "안전·물류",
+          "typ": "auto",
+          "onto": [
+            {
+              "act": "recordInspection"
+            }
+          ],
+          "out": "vehicle_master"
+        }
+      ]
+    },
+    {
+      "id": "DEPT-IT",
+      "name": "IT",
+      "hex": "#58d1c9",
+      "kpis": [
+        "KPI-SEC",
+        "KPI-CSIS"
+      ],
+      "desc": "차량 데이터 파이프라인 → 신호 적재 → KPI 드라이버 발굴·예측 학습 — 학습 기반(온톨로지 bound)의 담당 부문.",
+      "steps": [
+        {
+          "id": "IT-1",
+          "name": "데이터 파이프라인 운영 (품질 게이트)",
+          "cadence": "continuous",
+          "owner": "IT 데이터",
+          "typ": "ai",
+          "onto": [
+            {
+              "act": "recordDrivingTrip"
+            },
+            {
+              "act": "logFeatureUsage"
+            },
+            {
+              "type": "telematicsEvent"
+            }
+          ],
+          "out": "feature_usage"
+        },
+        {
+          "id": "IT-2",
+          "name": "차량 SW 보안 패치 (OTA)",
+          "cadence": "monthly",
+          "owner": "IT·품질",
+          "typ": "ai",
+          "onto": [
+            {
+              "type": "qualityCampaign"
+            }
+          ],
+          "out": "quality_actions"
+        },
+        {
+          "id": "IT-4",
+          "name": "KPI 드라이버 발굴·예측 학습",
+          "cadence": "monthly",
+          "owner": "IT 데이터 사이언스",
+          "typ": "ai",
+          "onto": [
+            {
+              "act": "discoverKpiDrivers"
+            },
+            {
+              "act": "trainForecastModel"
+            },
+            {
+              "world": "vdata"
+            }
+          ],
+          "out": "feature_usage"
+        },
+        {
+          "id": "IT-3",
+          "name": "침해 시도 대응 (SOC)",
+          "cadence": "continuous",
+          "owner": "IT 보안",
+          "typ": "hitl",
+          "onto": [],
+          "out": ""
+        }
+      ]
+    },
+    {
+      "id": "DEPT-HR",
+      "name": "인사/총무",
+      "hex": "#8f8d85",
+      "kpis": [
+        "ND-OPEX"
+      ],
+      "desc": "시설 에너지 운영(HVAC 레버) → 임차 계약 관리 → 인력 운영 — 오피스 관리비의 실행 주체.",
+      "steps": [
+        {
+          "id": "HR-1",
+          "name": "시설 에너지 운영 (HVAC 전략)",
+          "cadence": "monthly",
+          "owner": "총무 시설",
+          "typ": "hitl",
+          "onto": [
+            {
+              "act": "adjustHvacSetpoint"
+            },
+            {
+              "world": "opex"
+            }
+          ],
+          "out": "facility_energy"
+        },
+        {
+          "id": "HR-2",
+          "name": "임차 계약 관리",
+          "cadence": "annual",
+          "owner": "총무",
+          "typ": "hitl",
+          "mFrom": 1,
+          "mTo": 2,
+          "onto": [
+            {
+              "type": "facility"
+            },
+            {
+              "type": "energyMeter"
+            }
+          ],
+          "out": "office_zones"
+        },
+        {
+          "id": "HR-3",
+          "name": "인력 운영·채용",
+          "cadence": "monthly",
+          "owner": "인사",
+          "typ": "hitl",
+          "onto": [],
+          "out": ""
+        }
+      ]
+    }
+  ],
+  "worlds": {
+    "v9": {
+      "src": "v9-lifecycle-twin.html",
+      "ttl": "◎ 운영 월드 — V9 라이프사이클 트윈",
+      "sub": "연간 업무 사이클 · 폐루프 씬 · 단계별 데이터 드릴"
+    },
+    "v8": {
+      "src": "v8-strategy-sim-twin.html#noBrief",
+      "ttl": "⚙ 전략 월드 — V8 시뮬레이션 트윈",
+      "sub": "전략 레버 · 시나리오 · BP 대비 미래 생성"
+    },
+    "opex": {
+      "src": "v10-opex-sim.html",
+      "ttl": "⚡ 전략 월드 — 오피스 관리비",
+      "sub": "전력·임차·소모품 KPI 리스트 · 3층×구역 씬 · Play · 향후 12개월 시뮬레이션 — 적용 시 트윈 월드 KPI로 환류"
+    },
+    "vdata": {
+      "src": "v10-vehicle-sim.html",
+      "ttl": "⚡ 전략 월드 — 차량 데이터 (IT)",
+      "sub": "주행·DTC·기능 사용(HDA·트레일러 모드) 신호 → KPI 드라이버 발굴 → 레버(가상 데이터 주입)로 미래 재생성"
+    },
+    "onto": {
+      "src": "v7-ontology-explorer.html?embed=1",
+      "ttl": "◇ 온톨로지",
+      "sub": "객체 32 · 링크 62 · 액션 36 타입 — 월드의 의미 계층 (featureUsageEvent·mlModel 학습 기반 · marketSnapshot 시장 축 포함)"
+    },
+    "vintwin": {
+      "src": "v11-vin-twin.html",
+      "ttl": "◎ 차량 트윈 — 고객 만족(서비스) 개선",
+      "sub": "고객만족(서비스) KPI 트리 — 딜러·품질·서비스팀 하위 KPI 6종 → 데이터 확인 → 문제 VIN 드릴(트립 신호·상태 리플레이) → 조치 환류 → 전후 검증 · 관제(F1 피트월)"
+    }
+  }
+};

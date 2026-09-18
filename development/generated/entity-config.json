@@ -1,0 +1,194 @@
+{
+  "generatedFrom": "development/entity-profile.md",
+  "generator": "development/tools/build-entity.js",
+  "entity": {
+    "name": "미국판매법인",
+    "code": "SC-US",
+    "hq": "북미권역본부",
+    "currency": "USD",
+    "market": "미국",
+    "fyStart": "1월",
+    "siblings": [
+      {
+        "name": "캐나다판매법인",
+        "code": "SC-CA",
+        "built": false
+      },
+      {
+        "name": "멕시코판매법인",
+        "code": "SC-MX",
+        "built": false
+      }
+    ]
+  },
+  "kpis": {
+    "KPI-ASP": {
+      "name": "ASP (인센티브 차감 후)",
+      "short": "ASP",
+      "weight": 5,
+      "unit": "$",
+      "dir": "+",
+      "source": "agg_kpi.asp"
+    },
+    "KPI-RECUR": {
+      "name": "경상이익률",
+      "short": "경상이익",
+      "weight": 5,
+      "unit": "%",
+      "dir": "+",
+      "source": "agg_kpi.recur"
+    },
+    "KPI-COMB": {
+      "name": "합산손익",
+      "short": "합산손익",
+      "weight": 12,
+      "unit": "$",
+      "dir": "+",
+      "source": "agg_kpi.comb"
+    },
+    "KPI-COMBR": {
+      "name": "합산손익률",
+      "short": "합산손익률",
+      "weight": 15,
+      "unit": "%",
+      "dir": "+",
+      "source": "agg_kpi.combr"
+    },
+    "KPI-WS": {
+      "name": "도매판매량",
+      "short": "도매판매",
+      "weight": 10,
+      "unit": "대",
+      "dir": "+",
+      "target": "790,000대",
+      "source": "agg_kpi.ws"
+    },
+    "KPI-SUV": {
+      "name": "볼륨 SUV 육성 (소매)",
+      "short": "SUV육성",
+      "weight": 10,
+      "unit": "대",
+      "dir": "+",
+      "source": "agg_kpi.suv"
+    },
+    "KPI-SHARE": {
+      "name": "시장점유율",
+      "short": "점유율",
+      "weight": 10,
+      "unit": "%",
+      "dir": "+",
+      "source": "agg_kpi.share"
+    },
+    "KPI-EV": {
+      "name": "친환경 소매판매량 (소매)",
+      "short": "친환경",
+      "weight": 5,
+      "unit": "대",
+      "dir": "+",
+      "source": "agg_kpi.ev"
+    },
+    "KPI-GREEN": {
+      "name": "그린워싱",
+      "short": "그린워싱",
+      "weight": 5,
+      "unit": "건",
+      "dir": "-",
+      "target": "0건"
+    },
+    "KPI-FSI": {
+      "name": "Full SI 2.0",
+      "short": "Full SI",
+      "weight": 5,
+      "unit": "%",
+      "dir": "+"
+    },
+    "KPI-CSIS": {
+      "name": "고객만족도 (서비스)",
+      "short": "CS서비스",
+      "weight": 3.5,
+      "unit": "점",
+      "dir": "+",
+      "source": "agg_kpi.csisvc"
+    },
+    "KPI-CSIP": {
+      "name": "고객만족도 (판매)",
+      "short": "CS판매",
+      "weight": 3.5,
+      "unit": "점",
+      "dir": "+",
+      "source": "agg_kpi.csidlv"
+    },
+    "KPI-SEC": {
+      "name": "보안",
+      "short": "보안",
+      "weight": 3,
+      "unit": "건",
+      "dir": "-",
+      "target": "0건"
+    },
+    "KPI-BRAND": {
+      "name": "브랜드트래커",
+      "short": "브랜드",
+      "weight": 5,
+      "unit": "점",
+      "dir": "+",
+      "source": "agg_kpi.brand"
+    }
+  },
+  "depts": {
+    "DEPT-SLS": {
+      "name": "판매"
+    },
+    "DEPT-MKT": {
+      "name": "마케팅"
+    },
+    "DEPT-PRD": {
+      "name": "상품"
+    },
+    "DEPT-FIN": {
+      "name": "재경"
+    },
+    "DEPT-SVC": {
+      "name": "서비스"
+    },
+    "DEPT-QLT": {
+      "name": "품질"
+    },
+    "DEPT-SAF": {
+      "name": "안전"
+    },
+    "DEPT-HR": {
+      "name": "인사/총무"
+    },
+    "DEPT-IT": {
+      "name": "IT"
+    }
+  },
+  "dataInventory": [
+    {
+      "source": "agg_kpi (월 집계 CSV)",
+      "objectType": "kpiSnapshot",
+      "level": "L0 회사",
+      "grain": "월 × KPI",
+      "refresh": "월 마감",
+      "note": "프로토타입 예시"
+    },
+    {
+      "source": "vin_retail / vin_wholesale",
+      "objectType": "vehicle",
+      "level": "L3 인스턴스",
+      "grain": "VIN",
+      "refresh": "일",
+      "note": "프로토타입 예시"
+    },
+    {
+      "source": "governance/workflow_gates",
+      "objectType": "approvalGate",
+      "level": "L2 부문",
+      "grain": "게이트 × 월",
+      "refresh": "수시",
+      "note": "프로토타입 예시"
+    }
+  ],
+  "newKpis": []
+}

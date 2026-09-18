@@ -1,0 +1,2 @@
+ym,action_id,action_type,model_id,category,title,detected_ym,target_vins,applied_vins_cum,claim_per_1k_before,claim_per_1k_now,status
+2026-07,OTA-2606-LUM,OTA,LUM,커넥티드/SW,커넥티드 SW 결함 OTA 시정,2026-05,10000,7000,8.5,0.9,조치중

@@ -28,6 +28,38 @@
   <p class="sub">미국 자동차 판매법인 업무 프로세스 — UI/UX 표현 방식 검증용 (가상 데이터, 단일 HTML)</p>
 
   <section>
+    <h2>디지털 트윈 월드</h2>
+    <a class="card" href="prototypes/v10-twin-world.html">
+      <span class="ver">V10</span><span class="name"><span class="star">★</span> 디지털 트윈 월드 — 회사 목표 관계뷰·부문 워크플로우 폐루프</span>
+      <span class="desc">미국판매법인(재무·사업·지속경영·운영) 관계뷰 + 업/다운스트림 탐색 + Quick Link + 9개 부문 운영 월드(온톨로지 액션→데이터뷰) + HITL/AI 게이트</span>
+    </a>
+    <a class="card" href="prototypes/v10-opex-sim.html">
+      <span class="ver">10.O</span><span class="name">전략 월드 — 오피스 관리비 (도메인 시뮬)</span>
+      <span class="desc">전력·임차·소모품 KPI 리스트 + 3층×구역 씬 + Play + 미래 12개월 시뮬 그래프 — V10에서 소환·환류</span>
+    </a>
+    <a class="card" href="prototypes/v10-vehicle-sim.html">
+      <span class="ver">10.V</span><span class="name">전략 월드 — 차량 데이터 (IT · 학습 기반)</span>
+      <span class="desc">주행·DTC·기능 사용(HDA·트레일러 모드) 신호 × KPI 드라이버 발굴(상관 학습) + 레버(가상 데이터 주입) 미래 재생성 — V10 IT 부문에서 소환·환류</span>
+    </a>
+    <a class="card" href="prototypes/v11-vin-twin.html">
+      <span class="ver">V11</span><span class="name"><span class="star">★</span> 차량 트윈 — 고객 만족(서비스) 개선 (하나의 서비스)</span>
+      <span class="desc">홈 KPI 트리(내부 CSI ← 딜러 서비스·품질팀·서비스팀 하위 KPI 6종, 목표 판정) → KPI 상세(카테고리 롤업·OTA 전후 Δ·문제 차량) → VIN 드릴(라이프사이클·트립 신호·상태 리플레이 홀로 콕핏) → 조치 환류 → 재검증 폐루프 + 관제(F1 피트월) + AI 사전 진단 — V10 서비스 부문에서 소환·환류</span>
+    </a>
+    <a class="card" href="data_new/pipeline-overview.html">
+      <span class="ver">DATA</span><span class="name">데이터 파이프라인 — SAP Raw → 온톨로지 → 시멘틱 → DuckDB 서빙</span>
+      <span class="desc">SAP 모사 Raw(Parquet) → 표준화 → 객체·링크·KPI 마트 → 의미 선언 → 적재 없는 서빙 — 진행 방향 DAG + CSV/Parquet 실측 판단 (data_new/)</span>
+    </a>
+  </section>
+
+  <section>
+    <h2>라이프사이클</h2>
+    <a class="card" href="prototypes/v9-lifecycle-twin.html">
+      <span class="ver">V9</span><span class="name"><span class="star">★</span> 라이프사이클 트윈 — 연간 업무 사이클</span>
+      <span class="desc">상품→BP·트림믹스·FOB→마케팅→주문(DoS)→판매→품질(TSB/OTA)→Parts 폐루프 + 연간 링 + 실행 업무 피드</span>
+    </a>
+  </section>
+
+  <section>
     <h2>전략 시뮬레이션</h2>
     <a class="card" href="prototypes/v8-strategy-sim-twin.html">
       <span class="ver">V8</span><span class="name"><span class="star">★</span> 전략 시뮬레이션 트윈 — 생산/판매 2층</span>

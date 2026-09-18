@@ -39,6 +39,21 @@ window.buildOntologyInstances = function (TD) {
   SC.forEach(([id, nm, mk, lv]) => put('salesCompany', id, nm, { company_id: id, company_name: nm, market: mk, twin_level: lv }));
   const kSCUS = key('salesCompany', 'SC-US');
 
+  // 시장 스냅샷 — 경쟁·시장 축 (외부 구독 데이터. 최근 12개월, 결정적 수식)
+  for (let d = 11; d >= 0; d--) {
+    const ym = ymAdd(NOW, -d);
+    const mi = Number(ym.slice(5)) - 1;
+    const k = put('marketSnapshot', 'MKT-' + ym, ym + ' 시장', {
+      snapshot_id: 'MKT-' + ym, ym,
+      saar_units: Math.round(15500 + 900 * Math.sin(2 * Math.PI * mi / 12) + 350 * (rnd() - 0.5)) * 1000,
+      own_share_pct: Math.round((8.6 + 0.5 * Math.sin(2 * Math.PI * (mi + 2) / 12) + 0.6 * rnd()) * 100) / 100,
+      seg_suv_share_pct: Math.round((6.8 + 0.7 * Math.sin(2 * Math.PI * (mi + 4) / 12) + 0.5 * rnd()) * 100) / 100,
+      comp_avg_incentive_usd: Math.round(1450 + 600 * Math.sin(2 * Math.PI * (mi + 6) / 12) + 350 * rnd()),
+      comp_launch_cnt: ri(0, 1),
+    });
+    link('marketOfSc', k, kSCUS);
+  }
+
   const PCS = [
     ['PC-KR', '국내생산법인', 'KR', 'CIF 서부수입항', ['KR-1', 'KR-2']],
     ['PC-GA', '조지아생산법인', 'US', 'FOB 공장', ['US-GA']],
@@ -56,6 +71,34 @@ window.buildOntologyInstances = function (TD) {
     const k = put('plant', p.id, p.name, { plant_id: p.id, plant_name: p.name, country: p.country, cap_month: p.cap, lead_month: p.lead_m, ship_mode: p.ship, batch_size: p.batch, wmi: p.wmi, freight_usd_per_unit: TD.freight[p.id] });
     link('pcOwnsPlant', plantPC[p.id], k);
   });
+
+  // 시설·전력 계측 — 관리비(경상이익률 다운스트림)의 물리 실체 (governance.facility에서 구축)
+  if (TD.governance && TD.governance.facility) {
+    const F = TD.governance.facility;
+    const ci = Object.fromEntries(F.cols.map((c, k) => [c, k]));
+    const nowRows = F.rows.filter(r => r[ci.ym] === NOW);
+    const FIDS = { '동관': 'FC-EAST', '서관': 'FC-WEST' };
+    const byBld = {};
+    nowRows.forEach(r => (byBld[r[ci.building]] = byBld[r[ci.building]] || []).push(r));
+    Object.entries(byBld).forEach(([bld, rows]) => {
+      const fid = FIDS[bld] || 'FC-' + bld;
+      const kF = put('facility', fid, bld, {
+        facility_id: fid, facility_name: bld,
+        floors: new Set(rows.map(r => r[ci.floor])).size,
+        area_m2: rows.reduce((s, r) => s + r[ci.area_m2], 0),
+      });
+      link('scOperatesFacility', kF, kSCUS);
+      rows.forEach(r => {
+        const mid = `EM-${r[ci.zone_id]}`;
+        const nm = `${bld} ${r[ci.floor]}F ${r[ci.zone_name]}`;
+        const kM = put('energyMeter', mid, nm, {
+          meter_id: mid, meter_name: nm, floor: r[ci.floor],
+          temp_set_c: r[ci.temp_set_c], kwh_peak: r[ci.kwh_peak], cost_usd: r[ci.cost_usd],
+        });
+        link('meterOfFacility', kM, kF);
+      });
+    });
+  }
 
   // 지역사무소 — 판매법인의 지역 조직 (딜러 관리·배분·지역 마케팅의 현장 주체)
   const OFFICE_CITY = { west: 'Irvine, CA', central: 'Chicago, IL', south: 'Dallas, TX', northeast: 'Parsippany, NJ', southeast: 'Atlanta, GA' };
@@ -440,6 +483,40 @@ window.buildOntologyInstances = function (TD) {
       });
       link('claimOfRo', wc, rk); link('claimPaidBySc', wc, kSCUS);
     }
+  }
+
+  // ══ 학습 기반 — 차량 기능 사용 스냅샷(feature_usage 마트) + 학습 모델 레지스트리 ══
+  if (TD.vdata) {
+    const vc = Object.fromEntries(TD.vdata.cols.map((c, k) => [c, k]));
+    let firstFu = null;
+    TD.vdata.rows.filter(r => r[vc.ym] === NOW).forEach(r => {
+      const mid = r[vc.model_id];
+      const id = `FU-${NOW}-${mid}`;
+      const fk = put('featureUsageEvent', id, id, {
+        usage_key: id, ym: NOW, model_id: mid,
+        hda_usage_pct: r[vc.hda_usage_pct], trailer_mode_pct: r[vc.trailer_mode_pct],
+        fota_install_pct: r[vc.fota_install_pct], connected_optin_pct: r[vc.connected_optin_pct],
+        dtc_per_1k: r[vc.dtc_per_1k], trips_per_vehicle: r[vc.trips_per_vehicle],
+      });
+      if (!firstFu) firstFu = fk;
+      link('usageOfModel', fk, key('model', mid));
+    });
+    const anyTe = DB.order.find(k => k.startsWith('telematicsEvent:'));
+    const mFcst = put('mlModel', 'ML-KPI-FCST-V0', 'KPI 시계열 예측 v0', {
+      ml_model_id: 'ML-KPI-FCST-V0', ml_name: 'KPI 시계열 예측 v0', task: 'forecast',
+      algo: '시즌 지수 + 선형 추세', target: '회사 KPI 14종 + 다운스트림 지표',
+      train_window: `${TD.meta.months[0]}~${NOW} (32개월)`, quality_metric: 'MAPE 6.2% (홀드아웃 6개월)',
+      status: 'serving',
+    });
+    const mDrv = put('mlModel', 'ML-DRIVER-DISC-V0', 'KPI 드라이버 발굴 v0', {
+      ml_model_id: 'ML-DRIVER-DISC-V0', ml_name: 'KPI 드라이버 발굴 v0', task: 'driver-discovery',
+      algo: '피어슨 상관 + 중요도 랭킹', target: '차량 신호 → CS·VoC·브랜드 KPI',
+      train_window: `${TD.meta.months[0]}~${NOW} (32개월)`, quality_metric: '유의 드라이버 3종 (|r|≥0.5)',
+      status: 'serving',
+    });
+    if (firstFu) { link('mlTrainsOnUsage', mFcst, firstFu); link('mlTrainsOnUsage', mDrv, firstFu); }
+    if (anyTe) { link('mlTrainsOnTelematics', mDrv, anyTe); link('mlTrainsOnTelematics', mFcst, anyTe); }
+    link('mlPredictsFor', mFcst, kSCUS); link('mlPredictsFor', mDrv, kSCUS);
   }
 
   // ── 인덱스 구성 ──────────────────────────────────────────────────────────

@@ -1,0 +1,2 @@
+ym,action_id,action_type,model_id,category,title,detected_ym,target_vins,applied_vins_cum,claim_per_1k_before,claim_per_1k_now,status
+2026-05,FSC-2603-AUR,FSC,AUR,전장/배터리,Aurora EV 필드 서비스 캠페인,2026-03,26000,17800,6.2,2.2,조치중

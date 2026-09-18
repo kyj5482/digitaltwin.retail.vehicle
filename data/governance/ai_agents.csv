@@ -1,0 +1,6 @@
+agent_id,agent_name,scope_activity,task,accuracy_pct
+AGT-ORD,주문 배분 에이전트,ORD-1,DoS Weight 셀 배분 초안 생성,97.2
+AGT-VOC,VoC 분류 에이전트,QLT-1,VoC 카테고리·심각도 자동 분류,94.8
+AGT-MED,매체 예산 에이전트,MKT-3,CPM·CTR 기반 예산 재배분,91.5
+AGT-VIN,캠페인 VIN 추출 에이전트,QLT-2,조치 대상 VIN 추출,99.6
+AGT-BP,BP 초안 에이전트,BP-1,믹스 모델 기반 BP 초안 생성,89.0

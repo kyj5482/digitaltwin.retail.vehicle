@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ============================================================================
+V10 도메인 전략 월드 — 차량 데이터 (IT)
+주행(Trip)·DTC·기능 사용(HDA·트레일러 모드·FOTA·커넥티드 옵트인) 신호에서
+KPI에 영향을 주는 드라이버를 발굴하고, 레버(가상 데이터 주입)로 미래를 재생성한다.
+- 데이터: v7-data.js vdata (data/feature_usage/ 마트와 동일 소스, 월×차종)
+- KPI 드라이버 보드: 신호 × KPI(내부 CSI·VoC) 피어슨 상관 랭킹 — 학습 후보 피처
+- 레버 3종(FOTA 캠페인·HDA 온보딩·진단 조기경보) → 향후 12개월 신호·KPI 예측 재생성
+- 온톨로지: featureUsageEvent(bound) · mlModel(derived) — 학습 가능 상태의 근거
+- V10 소환·환류: 해시(#i=) in / postMessage v10-vdata-project out (opex 월드와 동일 계약)
+============================================================================= -->
+<title>전략 월드 — 차량 데이터 (주행·DTC·기능 사용 → KPI 드라이버)</title>
+<style>
+:root{
+  --page:#161614;--surface:#1e1e1c;--surface2:#262623;--line:#33332f;
+  --ink:#f0efec;--muted:#a3a199;--edge:#6e6e67;--edge-hi:#79b8ff;
+  --good:#4cc38a;--warn:#eaa93e;--crit:#e5484d;--na:#57554e;--ai:#58d1c9;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--page);color:var(--ink);overflow:hidden;display:flex;flex-direction:column;
+  font:13px/1.45 Pretendard,"Apple SD Gothic Neo","Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+header{height:46px;flex:0 0 46px;display:flex;align-items:center;gap:12px;padding:0 14px;
+  background:var(--surface);border-bottom:1px solid var(--line)}
+header h1{font-size:14px;font-weight:700}
+header .sub{font-size:11.5px;color:var(--muted)}
+#main{flex:1;display:grid;grid-template-columns:218px 1fr 340px;grid-template-rows:100%;min-height:0}
+#rail{border-right:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px;min-height:0}
+#side{border-left:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px;min-height:0}
+.railTtl{font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin:6px 4px 8px}
+.sigTile{width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);
+  border-left:3px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px}
+.sigTile:hover{border-color:var(--edge)}
+.sigTile.sel{border-color:var(--edge-hi)}
+.sigTile .nm{font-size:12px;font-weight:700}
+.sigTile .v1{font-size:15px;font-weight:700;margin-top:3px}
+.sigTile .v2{font-size:10.5px;color:var(--muted);margin-top:1px}
+.sigTile .sv{color:var(--good);font-weight:700}
+#center{display:flex;flex-direction:column;min-width:0;min-height:0}
+#sceneWrap{flex:1;position:relative;min-height:0}
+#scene{width:100%;height:100%;display:block}
+#simBand{flex:0 0 196px;border-top:1px solid var(--line);position:relative;background:var(--surface)}
+#simBand .ttl{position:absolute;top:8px;left:12px;font-size:11px;color:var(--muted);z-index:2}
+#simChart{width:100%;height:100%;display:block}
+.card{background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px}
+.card .hd{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.card .hd .k{margin-left:auto;font-size:9.5px;color:var(--muted);font-weight:400}
+.card .ctx{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.55}
+.card .ctx code{color:var(--ink);font-size:10px}
+.drv{display:flex;align-items:center;gap:7px;font-size:11px;padding:4px 0;
+  border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.drv:last-child{border-bottom:none}
+.drv .nm{flex:1;min-width:0}
+.drv .nm b{font-size:11px}
+.drv .nm .to{color:var(--muted);font-size:10px}
+.drv .barW{width:74px;height:7px;background:var(--line);border-radius:4px;overflow:hidden;flex:0 0 74px}
+.drv .barW i{display:block;height:100%}
+.drv .r{width:44px;text-align:right;font-weight:700;flex:0 0 44px}
+.tag{display:inline-block;font-size:9px;font-weight:700;padding:0 6px;border-radius:8px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.lever{color:var(--good);border-color:var(--good)}
+.lv{margin-bottom:7px}
+.lv .row{display:flex;align-items:center;gap:8px;font-size:11.5px}
+.lv .row label{flex:1;color:var(--ink)}
+.lv .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.lv .seg button{padding:2px 11px;font-size:11px;color:var(--muted);border-right:1px solid var(--line)}
+.lv .seg button:last-child{border-right:none}
+.lv .seg button.on{background:color-mix(in srgb,var(--edge-hi) 22%,transparent);color:var(--ink)}
+.lv .fx{font-size:10px;color:var(--muted);margin-top:2px}
+#btnApply{width:100%;border:1px solid var(--good);color:var(--good);border-radius:7px;padding:6px;font-size:12px;margin-top:4px}
+#btnApply:hover{background:color-mix(in srgb,var(--good) 14%,transparent)}
+#btnApply:disabled{opacity:.4;cursor:default}
+footer{height:52px;flex:0 0 52px;display:flex;align-items:center;gap:12px;padding:0 16px;
+  background:var(--surface);border-top:1px solid var(--line)}
+footer .btn{border:1px solid var(--line);border-radius:6px;padding:4px 12px;font-size:12px}
+footer .btn:hover{border-color:var(--edge)}
+#ymLbl{font-size:14px;font-weight:700;min-width:84px}
+#modeLbl{font-size:11px;color:var(--warn);min-width:92px}
+#tlWrap{flex:1}
+#tl{width:100%;accent-color:var(--edge-hi)}
+.hm{font-size:10px;fill:var(--muted)}
+.hmV{font-size:10.5px;font-weight:600;fill:var(--ink)}
+.tierLbl{font-size:10.5px;fill:var(--muted);letter-spacing:.08em}
+.gAxis{font-size:10px;fill:var(--muted)}
+.gCur{font-size:10.5px;font-weight:700;fill:var(--warn)}
+.tip{position:fixed;z-index:90;background:var(--surface2);border:1px solid var(--edge);border-radius:7px;
+  padding:7px 10px;font-size:11.5px;pointer-events:none;display:none;max-width:300px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.tip b{display:block;margin-bottom:2px}
+::-webkit-scrollbar{width:9px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>전략 월드 — 차량 데이터 (IT)</h1>
+  <span class="sub">주행·DTC·기능 사용 신호 → KPI 드라이버 발굴 → 레버(가상 데이터 주입)로 미래 재생성 — 학습 기반: 온톨로지 featureUsageEvent·mlModel</span>
+</header>
+<div id="main">
+  <aside id="rail">
+    <div class="railTtl">차량 신호 — 플릿 (커서 월)</div>
+    <div id="sigList"></div>
+    <div class="railTtl" style="margin-top:10px">학습 파이프라인</div>
+    <div class="card"><div class="ctx" id="mlNote"></div></div>
+  </aside>
+  <div id="center">
+    <div id="sceneWrap"><svg id="scene" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div id="simBand"><span class="ttl" id="simTtl"></span><svg id="simChart"></svg></div>
+  </div>
+  <aside id="side">
+    <div class="railTtl">KPI 드라이버 발굴 — 신호 × KPI 상관 (32개월 학습)</div>
+    <div id="drvList" class="card"></div>
+    <div class="railTtl" style="margin-top:10px">전략 레버 — 가상 데이터 주입 (향후 12개월)</div>
+    <div class="card" id="levers"></div>
+    <div class="card"><div class="ctx" id="impactNote"></div></div>
+    <button id="btnApply">트윈 월드에 적용 — 데이터 프로젝트 등록</button>
+    <div class="card" style="margin-top:6px;display:none" id="embedNote"><div class="ctx">단독 실행 중 — V10 디지털 트윈 월드(IT 부문)에서 소환하면 적용이 프로젝트로 환류된다.</div></div>
+  </aside>
+</div>
+<footer>
+  <button class="btn" id="btnPlay">▶ Play</button>
+  <span id="ymLbl">2026-08</span>
+  <span id="modeLbl">실적</span>
+  <div id="tlWrap"><input type="range" id="tl" min="0" max="43" value="31" step="1"></div>
+  <span class="sub">실적 32개월 + 미래 12개월(FORECAST — 학습 v0 · 레버 반영)</span>
+</footer>
+<div class="tip" id="tip"></div>
+<script src="v7-data.js"></script>
+<script>
+'use strict';
+/* ═══ PART A. 데이터 — vdata(월×차종 신호) · KPI 시계열 ═══ */
+const D=window.TWIN_DATA, M=D.meta, NOW=M.now, MONTHS=M.months, MAXI=NOW+12;
+const MODELS=D.models, SEAS=M.seas;
+const EMBED=window.parent!==window;
+const $=id=>document.getElementById(id);
+const el=(t,a,p)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const f1=n=>(Math.round(n*10)/10).toFixed(1);
+const VC=Object.fromEntries(D.vdata.cols.map((c,k)=>[c,k]));
+const VD={};                                             // VD[mid][i] = row
+D.vdata.rows.forEach(r=>{ const i=MONTHS.indexOf(r[VC.ym]); (VD[r[VC.model_id]]=VD[r[VC.model_id]]||[])[i]=r; });
+const SIGS=[
+  {key:'hda',    col:'hda_usage_pct',       name:'HDA 사용률',      unit:'%',  hex:'#79b8ff', dir:'+'},
+  {key:'trailer',col:'trailer_mode_pct',    name:'트레일러 모드',   unit:'%',  hex:'#8f8d85', dir:'~'},
+  {key:'fota',   col:'fota_install_pct',    name:'FOTA 설치율',     unit:'%',  hex:'#58d1c9', dir:'+'},
+  {key:'optin',  col:'connected_optin_pct', name:'커넥티드 옵트인', unit:'%',  hex:'#4cc38a', dir:'+'},
+  {key:'dtc',    col:'dtc_per_1k',          name:'DTC/1k',          unit:'/1k',hex:'#e5484d', dir:'-'},
+  {key:'trips',  col:'trips_per_vehicle',   name:'월 Trip/대',      unit:'회', hex:'#eaa93e', dir:'~'},
+];
+const SIG_OF=Object.fromEntries(SIGS.map(s=>[s.key,s]));
+// 원장 값 (실적 구간) — 차종별 · 플릿(판매 비중 가중)
+const raw=(mid,sig,i)=>VD[mid][Math.min(i,NOW)][VC[SIG_OF[sig].col]];
+const fleetRaw=(sig,i)=>MODELS.reduce((s,m)=>s+raw(m.id,sig,i)*m.share,0);
+/* ── 레버 — 가상 데이터 주입: 미래(i>NOW) 신호를 바꾸고 KPI 기대 효과로 환산 ── */
+const LV={fota:0, hda:0, ews:0};
+const LEVERS=[
+  {key:'fota', name:'FOTA 캠페인 확대', fx:'설치율 +10%p → DTC −15% (원격 시정 커버리지)'},
+  {key:'hda',  name:'HDA 온보딩 프로모션', fx:'사용률 +8%p → CS 서비스 체감 개선 (드라이버 상관 근거)'},
+  {key:'ews',  name:'진단 조기경보 배포', fx:'DTC −25% (사전 정비 유도) → VoC·워런티 하락'},
+];
+// 미래 신호: 최근 12개월 선형 추세 연장(학습 v0 미러) + 레버 효과 + 캡
+function trendOf(mid,sig){
+  const n=12, x0=NOW-n+1;
+  let sx=0,sy=0,sxy=0,sxx=0;
+  for(let k=0;k<n;k++){ const y=raw(mid,sig,x0+k); sx+=k; sy+=y; sxy+=k*y; sxx+=k*k; }
+  const b=(n*sxy-sx*sy)/(n*sxx-sx*sx), a=(sy-b*sx)/n;
+  return j=>a+b*(j-x0);                                   // j = 월 인덱스
+}
+const _tr={};
+function sigVal(mid,sig,i,lv){
+  if(i<=NOW) return raw(mid,sig,i);
+  const key=mid+'|'+sig;
+  const t=_tr[key]||(_tr[key]=trendOf(mid,sig));
+  let v=t(i);
+  if(lv){
+    if(sig==='fota'&&lv.fota) v+=10;
+    if(sig==='hda'&&lv.hda) v+=8;
+    if(sig==='dtc'){ if(lv.fota) v*=0.85; if(lv.ews) v*=0.75; }
+  }
+  if(SIG_OF[sig].unit==='%') v=Math.max(0,Math.min(98,v));
+  if(sig==='dtc') v=Math.max(1.0,v);
+  return v;
+}
+const fleetVal=(sig,i,lv)=>MODELS.reduce((s,m)=>s+sigVal(m.id,sig,i,lv)*m.share,0);
+/* ── KPI 시계열 (실적) — 드라이버 상관의 타깃 ── */
+const CSI=D.csi_internal;
+const VOCT=(()=>{ const t=D.lifecycle.voc, idx=Object.fromEntries(t.cols.map((c,k)=>[c,k]));
+  const by={}; t.rows.forEach(r=>{ by[r[0]]=(by[r[0]]||0)+r[idx.voc_cnt]; });
+  return i=>{ const uio=MODELS.reduce((s,m)=>s+260000*m.share*(1+0.03*i/12),0);
+    return (by[MONTHS[i]]||0)/(uio/1000); }; })();
+const KPIS={
+  csi_total:{name:'내부 CSI 종합', fn:i=>CSI[i].total},
+  csi_svc:  {name:'내부 CSI 서비스', fn:i=>CSI[i].service},
+  csi_conn: {name:'내부 CSI 커넥티드', fn:i=>CSI[i].connected},
+  csi_q:    {name:'내부 CSI 품질', fn:i=>CSI[i].quality},
+  voc:      {name:'VoC/1k UIO', fn:VOCT},
+};
+/* ── KPI 드라이버 발굴 — 피어슨 상관 (32개월) ── */
+function pearson(a,b){
+  const n=a.length, ma=a.reduce((s,v)=>s+v,0)/n, mb=b.reduce((s,v)=>s+v,0)/n;
+  let sab=0,sa=0,sb=0;
+  for(let k=0;k<n;k++){ const da=a[k]-ma, db=b[k]-mb; sab+=da*db; sa+=da*da; sb+=db*db; }
+  return sab/Math.sqrt(sa*sb||1);
+}
+const seriesSig=(sig,mid)=>Array.from({length:NOW+1},(_,i)=>mid?raw(mid,sig,i):fleetRaw(sig,i));
+const seriesKpi=k=>Array.from({length:NOW+1},(_,i)=>KPIS[k].fn(i));
+const DRV_PAIRS=[
+  {sig:'dtc', mid:'LUM', kpi:'csi_conn',  why:'LUM 커넥티드 SW 결함 스토리 — OTA로 소멸'},
+  {sig:'dtc', mid:'AUR', kpi:'csi_q',     why:'AUR 구동계 결함 — FSC 조기 완결'},
+  {sig:'dtc', mid:null,  kpi:'csi_total', why:'플릿 결함 신호가 종합 만족도를 깎는다'},
+  {sig:'hda', mid:null,  kpi:'csi_svc',   why:'추세 상관 — 인과는 검증 필요(교란 변수)'},
+  {sig:'optin',mid:null, kpi:'csi_conn',  why:'옵트인 = 커넥티드 가치 수용 (약함)'},
+  {sig:'fota', mid:null, kpi:'voc',       why:'동반 추세 — 허위 상관 가능 (검증 필요)'},
+  {sig:'trips',mid:null, kpi:'csi_svc',   why:'이용 강도 → 서비스 수요·체감'},
+];
+function corrs(){
+  return DRV_PAIRS.map(p=>{
+    const r=pearson(seriesSig(p.sig,p.mid), seriesKpi(p.kpi));
+    return {...p, r,
+      sigNm:SIG_OF[p.sig].name+(p.mid?` (${p.mid})`:' (플릿)'), kpiNm:KPIS[p.kpi].name,
+      grade:Math.abs(r)>=0.7?'강':(Math.abs(r)>=0.4?'중':'약')};
+  }).sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
+}
+// 기대 임팩트 — DTC 탄성(데이터 근거: LUM 스파이크 8.5/1k ↔ 내부 CSI −7pt ≈ 0.8pt/1k)
+function impact(lv){
+  const base=fleetVal('dtc',NOW+12,null), lev=fleetVal('dtc',NOW+12,lv);
+  const dDtc=base-lev;
+  const csiGain=dDtc*0.8 + (lv.hda?0.4:0);
+  return {dDtc, csiGain, hdaUp:lv.hda?8:0, fotaUp:lv.fota?10:0};
+}
+/* ═══ PART B. 씬 — 차종×신호 히트맵 (커서 월, 미래는 FORECAST+레버) ═══ */
+let cursor=NOW, sel='dtc';
+function renderScene(){
+  const svg=$('scene'); svg.innerHTML='';
+  const i=cursor, sim=i>NOW;
+  el('text',{x:24,y:26,class:'tierLbl'},svg).textContent=
+    `차종 × 신호 히트맵 — ${MONTHS[i]}${sim?' · FORECAST(학습 v0)+레버':' · 실적(feature_usage 원장)'} · 열 클릭: 신호 선택`;
+  const X0=150, Y0=84, CW=118, CH=64;
+  // 열 헤더 (신호)
+  SIGS.forEach((s,c)=>{
+    const g=el('g',{style:'cursor:pointer'},svg);
+    el('rect',{x:X0+c*CW,y:Y0-34,width:CW-8,height:26,rx:6,
+      fill:sel===s.key?'color-mix(in srgb,var(--edge-hi) 20%,transparent)':'var(--surface2)',
+      stroke:sel===s.key?'var(--edge-hi)':'var(--line)'},g);
+    el('text',{x:X0+c*CW+(CW-8)/2,y:Y0-16,class:'hmV','text-anchor':'middle'},g).textContent=s.name;
+    g.addEventListener('click',()=>{ sel=s.key; render(); });
+  });
+  // 정규화 범위 (신호별 전 차종·전 기간)
+  const rng={};
+  SIGS.forEach(s=>{ let mn=1e9,mx=-1e9;
+    MODELS.forEach(m=>{ for(let j=0;j<=MAXI;j++){ const v=sigVal(m.id,s.key,j,LV); mn=Math.min(mn,v); mx=Math.max(mx,v);} });
+    rng[s.key]=[mn,mx]; });
+  MODELS.forEach((m,rIdx)=>{
+    el('text',{x:X0-14,y:Y0+rIdx*CH+CH/2-4,class:'hmV','text-anchor':'end'},svg).textContent=m.name;
+    el('text',{x:X0-14,y:Y0+rIdx*CH+CH/2+11,class:'hm','text-anchor':'end'},svg).textContent=m.seg;
+    SIGS.forEach((s,c)=>{
+      const v=sigVal(m.id,s.key,i,LV), [mn,mx]=rng[s.key];
+      const t=(v-mn)/((mx-mn)||1);
+      const good=s.dir==='-'?1-t:t;                        // 방향 반영 (DTC는 낮을수록 좋음)
+      const hue=s.key==='dtc'?`rgba(229,72,77,${0.10+t*0.5})`:`rgba(121,184,255,${0.08+good*0.42})`;
+      el('rect',{x:X0+c*CW,y:Y0+rIdx*CH,width:CW-8,height:CH-8,rx:7,fill:hue,stroke:'var(--line)'},svg);
+      el('text',{x:X0+c*CW+(CW-8)/2,y:Y0+rIdx*CH+CH/2+1,class:'hmV','text-anchor':'middle'},svg)
+        .textContent=(s.key==='dtc'?v.toFixed(2):f1(v))+(s.unit==='%'?'%':'');
+    });
+  });
+  el('text',{x:24,y:Y0+6*CH+22,class:'hm'},svg).textContent=
+    '파랑 농도 = 신호 수준(방향 보정) · 빨강 = DTC 위험 — 온톨로지 featureUsageEvent(월×차종) 그레인 그대로';
+}
+/* ═══ PART C. 미래 차트 — 선택 신호: 실적 + 기준 vs 레버 ═══ */
+// V10 트윈 월드 그래프와 동일 문법: Y축 그리드·라벨 + 호버 툴팁 + 클릭 이동 + 휠 확대/드래그 이동/더블클릭 리셋
+const tip=$('tip');
+function tipShow(e,html){ tip.innerHTML=html; tip.style.display='block';
+  const r=tip.getBoundingClientRect();
+  tip.style.left=Math.min(e.clientX+14,innerWidth-r.width-10)+'px';
+  tip.style.top=Math.min(e.clientY+12,innerHeight-r.height-10)+'px'; }
+function tipHide(){ tip.style.display='none'; }
+const sigFmt=(s,v)=>(s.key==='dtc'?v.toFixed(2):f1(v))+(s.unit==='%'?'%':'');
+let CGW=1000, CGH=190, chartZoom=null, chartGeom=null;
+function initChart(){
+  const svg=$('simChart');
+  const measure=()=>{ CGW=Math.max(500, svg.clientWidth||1000); CGH=Math.max(140, svg.clientHeight||190); };
+  measure();
+  svg.setAttribute('viewBox',`0 0 ${CGW} ${CGH}`);
+  chartZoom=enableZoomPan(svg,CGW,CGH);
+  let rafR=0;
+  new ResizeObserver(()=>{ if(rafR) return; rafR=requestAnimationFrame(()=>{ rafR=0;
+    const w0=CGW,h0=CGH; measure();
+    if(w0!==CGW||h0!==CGH){ chartZoom.setBase(CGW,CGH); renderChart(); }
+  });}).observe($('simBand'));
+  const idxOf=e=>{ const g=chartGeom; if(!g) return null;
+    const vb=svg.viewBox.baseVal, r=svg.getBoundingClientRect();
+    if(!r.width||!vb.width) return null;
+    const ux=vb.x+(e.clientX-r.left)/r.width*vb.width;
+    const i=Math.max(0,Math.min(MAXI,Math.round((ux-g.PL)/(g.W-g.PL-g.PR)*MAXI)));
+    return Number.isFinite(i)?i:null;
+  };
+  svg.addEventListener('mousemove',e=>{
+    const g=chartGeom, i=idxOf(e); if(i==null) return;
+    svg.querySelector('.cxHv')?.remove();
+    el('line',{class:'cxHv',x1:g.X(i),y1:g.PT,x2:g.X(i),y2:g.H-g.PB,
+      stroke:'var(--edge)','stroke-width':1,'stroke-dasharray':'2 3','vector-effect':'non-scaling-stroke'},svg);
+    const s=SIG_OF[sel];
+    const d = i>NOW ? g.fl[i-NOW-1]-g.fb[i-NOW-1] : 0;
+    const body = i<=NOW
+      ? `실적 <b style="display:inline">${sigFmt(s,g.act[i])}</b>`
+      : `기준 ${sigFmt(s,g.fb[i-NOW-1])} · 레버 <b style="display:inline">${sigFmt(s,g.fl[i-NOW-1])}</b><br>기준 比 ${d>=0?'+':''}${s.key==='dtc'?d.toFixed(2):f1(d)}`;
+    tipShow(e,`<b>${MONTHS[i]} · ${esc(s.name)} (플릿)${i>NOW?' · FORECAST':''}</b>${body}<br><span style="opacity:.7">클릭: 해당 월로 이동</span>`);
+  });
+  svg.addEventListener('mouseleave',()=>{ tipHide(); svg.querySelector('.cxHv')?.remove(); });
+  svg.addEventListener('click',e=>{ const i=idxOf(e); if(i!=null) seek(i); });
+}
+function renderChart(){
+  const svg=$('simChart'); svg.innerHTML='';
+  const W=CGW, H=CGH, PL=64, PR=16, PT=14, PB=24;
+  const s=SIG_OF[sel];
+  const act=[],fb=[],fl=[];
+  for(let j=0;j<=MAXI;j++){
+    if(j<=NOW) act.push(fleetVal(sel,j,null));
+    else { fb.push(fleetVal(sel,j,null)); fl.push(fleetVal(sel,j,LV)); }
+  }
+  const all=act.concat(fb,fl), mn0=Math.min(...all), mx0=Math.max(...all);
+  const pad=(mx0-mn0)*0.08 || Math.abs(mx0)*0.05 || 1;
+  const mn=mn0-pad, mx=mx0+pad, sp=mx-mn;
+  const X=j=>PL+j/MAXI*(W-PL-PR), Y=v=>H-PB-(v-mn)/sp*(H-PT-PB);
+  chartGeom={PL,PR,PT,PB,W,H,X,Y,act,fb,fl};
+  // Y 그리드 4단 + 라벨 (반올림으로 같은 라벨이 겹치면 생략 — 트윈 월드와 동일)
+  let prevLbl=null;
+  for(let k=0;k<=4;k++){
+    const v=mn+sp*k/4, y=Y(v);
+    el('line',{x1:PL,y1:y,x2:W-PR,y2:y,stroke:'var(--line)','stroke-width':1,opacity:k?0.55:0.9},svg);
+    const lbl=sigFmt(s,v);
+    if(lbl!==prevLbl){ el('text',{x:PL-7,y:y+3.5,class:'gAxis','text-anchor':'end'},svg).textContent=lbl; prevLbl=lbl; }
+  }
+  // X 라벨 — 4개월 간격 + 눈금
+  for(let j=0;j<=MAXI;j+=4){
+    el('line',{x1:X(j),y1:H-PB,x2:X(j),y2:H-PB+4,stroke:'var(--edge)','stroke-width':1},svg);
+    el('text',{x:X(j),y:H-8,class:'gAxis','text-anchor':'middle'},svg).textContent=MONTHS[j].slice(2);
+  }
+  // FORECAST 구간 배경 + NOW 분리선
+  el('rect',{x:X(NOW),y:PT,width:X(MAXI)-X(NOW),height:H-PT-PB,fill:'rgba(121,184,255,.045)'},svg);
+  const pth=(arr,i0)=>arr.map((v,k)=>(k?'L':'M')+X(i0+k).toFixed(1)+' '+Y(v).toFixed(1)).join('');
+  const area=fb.map((v,k)=>(k?'L':'M')+X(NOW+1+k).toFixed(1)+' '+Y(v).toFixed(1)).join('')
+    +fl.slice().reverse().map((v,k)=>'L'+X(MAXI-k).toFixed(1)+' '+Y(v).toFixed(1)).join('')+'Z';
+  el('path',{d:area,fill:s.dir==='-'?'rgba(76,195,138,.15)':'rgba(121,184,255,.12)'},svg);
+  el('path',{d:pth(act,0),fill:'none',stroke:'var(--ink)','stroke-width':1.6,'vector-effect':'non-scaling-stroke'},svg);
+  el('path',{d:'M'+X(NOW)+' '+Y(act[NOW])+' '+pth(fb,NOW+1).replace(/^M/,'L'),fill:'none',stroke:'var(--edge)','stroke-width':1,'stroke-dasharray':'4 3','vector-effect':'non-scaling-stroke'},svg);
+  el('path',{d:'M'+X(NOW)+' '+Y(act[NOW])+' '+pth(fl,NOW+1).replace(/^M/,'L'),fill:'none',stroke:'var(--good)','stroke-width':1.8,'vector-effect':'non-scaling-stroke'},svg);
+  el('line',{x1:X(NOW),y1:PT,x2:X(NOW),y2:H-PB,stroke:'var(--crit)','stroke-width':1,opacity:.55,'stroke-dasharray':'3 3','vector-effect':'non-scaling-stroke'},svg);
+  // NOW 라벨은 하단 — 상단의 커서 월 라벨(gCur)과 겹치지 않게 (트윈 월드와 동일)
+  el('text',{x:X(NOW)+4,y:H-PB-6,class:'gAxis',fill:'var(--crit)'},svg).textContent='NOW';
+  // Play 커서 — 세로선 + 월 라벨 + 현재값 마커 (트윈 월드 그래프와 동일)
+  el('line',{x1:X(cursor),y1:PT,x2:X(cursor),y2:H-PB,stroke:'var(--warn)','stroke-width':1.2,opacity:.85,'vector-effect':'non-scaling-stroke'},svg);
+  el('text',{x:Math.min(X(cursor)+4,W-PR-52),y:PT+9,class:'gCur'},svg).textContent=MONTHS[cursor];
+  const cv = cursor<=NOW ? act[cursor] : fl[cursor-NOW-1];
+  const cc = cursor<=NOW ? 'var(--edge-hi)' : 'var(--good)';
+  el('circle',{cx:X(cursor),cy:Y(cv),r:4,fill:cc,stroke:'var(--page)','stroke-width':1.5},svg);
+  el('text',{x:Math.min(X(cursor)+7,W-PR-60),y:Y(cv)-7,class:'gAxis',fill:cc},svg).textContent=sigFmt(s,cv);
+  $('simTtl').textContent=`${s.name} (플릿) — 실적 32개월(실선) + 미래 12개월: 기준(점선) vs 레버(녹색) · FORECAST 학습 v0 · 호버 값 · 클릭 이동 · 휠 확대/더블클릭 리셋`;
+}
+// 씬 확대(휠)·이동(드래그)·초기화(더블클릭) — V10 트윈 월드와 동일 (그래프 캔버스에 적용)
+function enableZoomPan(svg, W, H){
+  const vb={x:0,y:0,w:W,h:H};
+  // 확대 상태에서는 뷰포트를 콘텐츠 영역 안으로 클램프 — 드래그로 전체가 화면 밖으로 나가지 않게
+  const apply=()=>{
+    if(vb.w<=W) vb.x=Math.max(0,Math.min(W-vb.w,vb.x));
+    if(vb.h<=H) vb.y=Math.max(0,Math.min(H-vb.h,vb.y));
+    svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  };
+  const pt=e=>{const r=svg.getBoundingClientRect();
+    return {x:vb.x+(e.clientX-r.left)/r.width*vb.w, y:vb.y+(e.clientY-r.top)/r.height*vb.h};};
+  svg.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const k=e.deltaY>0?1.12:1/1.12, p=pt(e);
+    const nw=Math.min(W*1.4, Math.max(W*0.15, vb.w*k)), nh=nw*H/W;
+    vb.x=p.x-(p.x-vb.x)*nw/vb.w; vb.y=p.y-(p.y-vb.y)*nh/vb.h; vb.w=nw; vb.h=nh; apply();
+  },{passive:false});
+  let pan=null, moved=false;
+  // 드래그 추적은 항상(드래그 후 클릭 오발동 차단용) — 실제 이동(팬)은 확대 중일 때만
+  svg.addEventListener('pointerdown',e=>{
+    pan={x:e.clientX,y:e.clientY,vx:vb.x,vy:vb.y,go:vb.w<W-0.5}; moved=false;});
+  window.addEventListener('pointermove',e=>{
+    if(!pan) return;
+    if(!(e.buttons&1)){ pan=null; return; }   // pointerup 유실(창 밖·iframe 경계에서 릴리스) → 팬 고착 방지
+    if(Math.abs(e.clientX-pan.x)+Math.abs(e.clientY-pan.y)>4) moved=true;
+    if(!moved || !pan.go) return;
+    const r=svg.getBoundingClientRect();
+    vb.x=pan.vx-(e.clientX-pan.x)*vb.w/r.width;
+    vb.y=pan.vy-(e.clientY-pan.y)*vb.h/r.height;
+    apply();
+  });
+  window.addEventListener('pointerup',()=>{pan=null; setTimeout(()=>moved=false,0);});
+  svg.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();}},true);
+  svg.addEventListener('dblclick',()=>{vb.x=0;vb.y=0;vb.w=W;vb.h=H;apply();});
+  // 기준 크기 갱신 (컨테이너 리사이즈 대응) — 줌은 초기화
+  const setBase=(nw,nh)=>{W=nw;H=nh;vb.x=0;vb.y=0;vb.w=nw;vb.h=nh;apply();};
+  return {view:()=>({...vb}), setBase};
+}
+/* ═══ PART D. 레일 · 드라이버 보드 · 레버 · 환류 ═══ */
+function renderRail(){
+  const host=$('sigList'); host.innerHTML='';
+  const i=cursor, sim=i>NOW;
+  SIGS.forEach(s=>{
+    const b=fleetVal(s.key,i,null), l=fleetVal(s.key,i,LV);
+    const d=l-b;
+    const c=document.createElement('button');
+    c.className='sigTile'+(sel===s.key?' sel':'');
+    c.style.borderLeftColor=s.hex;
+    c.innerHTML=`<div class="nm">${s.name}</div>
+      <div class="v1">${s.key==='dtc'?l.toFixed(2):f1(l)}${s.unit==='%'?'%':' '+s.unit}</div>
+      <div class="v2">${MONTHS[i]} ${sim?(Math.abs(d)>0.05?`FORECAST · 기준 比 <span class="sv">${d>0?'+':''}${f1(d)}</span>`:'FORECAST'):'실적'}</div>`;
+    c.addEventListener('click',()=>{ sel=s.key; render(); });
+    host.appendChild(c);
+  });
+  $('mlNote').innerHTML=`온톨로지 <code>featureUsageEvent</code>(bound)·<code>mlModel</code>(derived) 선언 —
+    학습 v0 = 시즌+추세, v1 = 드라이버 회귀(아래 보드), v2 = 레버 시나리오 생성.
+    마트가 온톨로지에 bound여야 학습 가능하다.`;
+}
+function renderDrivers(){
+  const host=$('drvList');
+  const cs=corrs();
+  host.innerHTML=`<div class="hd">드라이버 랭킹 <span class="k">피어슨 r · |r|≥0.7 = 레버 후보</span></div>`+
+    cs.map(c=>{
+      const w=Math.min(100,Math.abs(c.r)*100);
+      const col=c.r<0?'var(--crit)':'var(--good)';
+      return `<div class="drv" title="${esc(c.why)}">
+        <div class="nm"><b>${esc(c.sigNm)}</b> <span class="to">→ ${esc(c.kpiNm)}</span></div>
+        <div class="barW"><i style="width:${w}%;background:${col}"></i></div>
+        <span class="r" style="color:${col}">${c.r>=0?'+':''}${c.r.toFixed(2)}</span>
+        ${Math.abs(c.r)>=0.7?'<span class="tag lever">레버</span>':`<span class="tag">${c.grade}</span>`}
+      </div>`;}).join('')+
+    `<div class="ctx" style="margin-top:6px">32개월 <code>feature_usage</code> × 내부 CSI·VoC 학습 —
+     mlModel(ML-DRIVER-DISC-V0)의 산출. 음(−) = 신호가 오르면 KPI 하락.</div>`;
+}
+function renderLevers(){
+  const host=$('levers');
+  host.innerHTML=LEVERS.map(l=>`<div class="lv">
+    <div class="row"><label>${l.name}</label>
+      <div class="seg"><button data-k="${l.key}" data-v="0" class="${LV[l.key]?'':'on'}">해제</button>
+        <button data-k="${l.key}" data-v="1" class="${LV[l.key]?'on':''}">적용</button></div></div>
+    <div class="fx">${l.fx}</div></div>`).join('');
+  host.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>set(b.dataset.k,+b.dataset.v)));
+  const im=impact(LV);
+  $('impactNote').innerHTML=`<b>기대 임팩트 (12개월 후)</b><br>
+    DTC/1k <b style="color:var(--good)">−${im.dDtc.toFixed(2)}</b>
+    → 내부 CSI <b style="color:var(--good)">+${im.csiGain.toFixed(1)}pt</b> (탄성 0.8pt/1k — LUM 사례 학습)
+    ${im.hdaUp?`<br>HDA 사용률 +${im.hdaUp}%p → CS 서비스 체감 개선`:''}
+    ${im.fotaUp?`<br>FOTA 설치율 +${im.fotaUp}%p → 원격 시정 커버리지 확대`:''}
+    <br><span style="opacity:.8">레버 = 가상 데이터 주입 — 학습 모델이 미래 신호·KPI를 재생성한다.</span>`;
+  $('btnApply').disabled=!EMBED || !(LV.fota||LV.hda||LV.ews);
+  $('embedNote').style.display=EMBED?'none':'block';
+}
+function set(k,v){ LV[k]=v; render(); }
+function apply(){
+  const names=LEVERS.filter(l=>LV[l.key]).map(l=>l.name).join(' + ');
+  window.parent.postMessage({type:'v10-vdata-project',
+    name:`차량 데이터 레버 — ${names}`, goal:'KPI-CSIS'},'*');
+}
+$('btnApply').addEventListener('click',apply);
+/* ═══ PART E. 타임라인 · 초기화 ═══ */
+function seek(i){
+  cursor=Math.max(0,Math.min(MAXI,i));
+  $('tl').value=cursor;
+  $('ymLbl').textContent=MONTHS[cursor];
+  $('modeLbl').textContent=cursor>NOW?'FORECAST · 학습 v0':'실적';
+  renderScene(); renderChart(); renderRail();
+}
+function render(){ seek(cursor); renderDrivers(); renderLevers(); }
+let playing=null;
+$('tl').addEventListener('input',e=>seek(+e.target.value));
+$('btnPlay').addEventListener('click',()=>{
+  if(playing){ clearInterval(playing); playing=null; $('btnPlay').textContent='▶ Play'; return; }
+  if(cursor>=MAXI) cursor=-1;
+  $('btnPlay').textContent='❚❚ 정지';
+  playing=setInterval(()=>{ if(cursor>=MAXI){ clearInterval(playing); playing=null; $('btnPlay').textContent='▶ Play'; return; } seek(cursor+1); },700);
+});
+if(EMBED) document.querySelector('header').style.display='none';   // 제목줄 1개 원칙
+// 해시 진입 (#i=커서)
+const H=Object.fromEntries(location.hash.slice(1).split('&').map(s=>s.split('=')));
+initChart();
+render();
+seek(H.i!=null?+H.i:NOW);
+// 테스트 훅
+window._vv={seek, cursor:()=>cursor, NOWi:NOW, MAXI, EMBED, LV, set, apply,
+  sigVal:(mid,sig,i,lv)=>sigVal(mid,sig,i,lv===undefined?LV:lv), fleetVal, corrs, impact,
+  select:k=>{sel=k;render();}, sel:()=>sel, SIGS};
+</script>
+</body>
+</html>

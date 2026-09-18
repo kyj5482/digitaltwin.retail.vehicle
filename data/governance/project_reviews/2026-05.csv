@@ -1,0 +1,3 @@
+ym,project_id,project_name,goal_node,metric,expect_value,actual_value,verdict
+2026-05,PRJ-FSC-AUR,Aurora EV 필드 서비스 캠페인,ND-CAMP,캠페인 적용률 %,90.0,68.5,진행중
+2026-05,PRJ-SOL-LAUNCH,Solara EV 런칭 준비,KPI-SHARE,런칭 준비율 %,100.0,32.5,진행중

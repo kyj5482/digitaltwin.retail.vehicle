@@ -1,0 +1,16 @@
+activity_id,phase,activity_name,cadence,month_from,month_to,owner,output_dataset
+PP-1,product,차년도 상품·Feature 확정,annual,4,7,본사 상품기획,product_plan
+BP-1,bp,차년도 사업계획 수립 (Wholesale 기준),annual,8,10,판매법인 기획,bp_target
+BP-2,bp,차년도 트림믹스 결정,annual,10,10,판매법인 상품,bp_trim_mix
+BP-3,bp,생산법인 전달 · FOB 확정,annual,11,11,법인간 협의,bp_trim_mix
+MKT-1,marketing,연간 마케팅 플랜 확정,annual,12,1,마케팅,marketing_media
+MKT-2,marketing,Feature 매체 제작 (분기 캠페인),quarterly,0,0,마케팅·에이전시,marketing_media
+MKT-3,marketing,매체 퍼포먼스 관리,monthly,0,0,마케팅,marketing_media
+ORD-1,order,월 생산 주문 (DoS Weight 배분),monthly,0,0,판매법인 오더,order_plan
+SLS-1,sales,도매·소매 운영,continuous,0,0,세일즈·딜러,agg_kpi
+SLS-2,sales,연말 판매 프로그램,annual,11,12,세일즈,price_incentive
+QLT-1,quality,VoC·품질/안전 카테고리 모니터링,continuous,0,0,품질,voc_category
+QLT-2,quality,TSB·OTA 시정 조치,event,0,0,품질·서비스,quality_actions
+SVC-1,service,Parts 가격 개정 (DN/Factory 균형),annual,2,2,부품,parts_pnl
+SVC-2,service,Parts 판매 · 워런티 정산,monthly,0,0,부품·서비스,parts_pnl
+PP-2,product,모델이어(MY) 전환,annual,8,9,상품·오더,vehicle_master

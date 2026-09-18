@@ -1,0 +1,7 @@
+project_id,project_name,goal_node,template,model_id,start_ym,end_ym,status,metric,expect_value,linked_objects
+PRJ-OTA-LUM,루멘 커넥티드 OTA 품질 회복,ND-VOC,quality,LUM,2026-06,2026-08,완결,클레임/1k,0.5,model:LUM|qualityCampaign:OTA-2606-LUM|qualityIssue:QI-2605-LUM-CONN
+PRJ-FSC-AUR,Aurora EV 필드 서비스 캠페인,ND-CAMP,quality,AUR,2026-04,2026-06,완결,캠페인 적용률 %,90.0,model:AUR|qualityCampaign:FSC-2603-AUR
+PRJ-GRAY-ORD,그레이 색상 수요 대응 증산,ND-DS,order,LUM,2026-06,,진행중,NE 그레이 Weight,1.2,model:LUM|salesZone:northeast
+PRJ-EV-SOUTH,남부 EV 인지 캠페인,KPI-EV,media,AUR,2026-07,,진행중,AUR 남부 소매(대),1350.0,model:AUR|salesZone:south|marketingCampaign:MK-AUR
+PRJ-PARTS-BAL,Parts DN/Factory 갭 개선,ND-PARTS,parts,,2026-02,2026-02,완결,평균 갭 %,4.5,salesCompany:SC-US
+PRJ-SOL-LAUNCH,Solara EV 런칭 준비,KPI-SHARE,product,SOL,2026-02,,진행중,런칭 준비율 %,100.0,model:SOL|plant:US-SV

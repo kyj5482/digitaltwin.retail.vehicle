@@ -1,0 +1,2 @@
+ym,action_id,action_type,model_id,category,title,detected_ym,target_vins,applied_vins_cum,claim_per_1k_before,claim_per_1k_now,status
+2026-02,TSB-2602-MRD,TSB,MRD,공조,블로어 모터 소음 TSB,2026-02,3100,600,2.9,2.3,조치중

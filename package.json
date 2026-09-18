@@ -4,11 +4,15 @@
   "description": "미국판매법인 디지털 트윈 프로토타입 — 정적 서버(server.js) + prototypes/",
   "scripts": {
     "start": "node server.js",
-    "test": "bash prototypes/tests/run-tests.sh"
+    "test": "bash prototypes/tests/run-tests.sh",
+    "build": "node development/tools/build-entity.js && node development/tools/build-ontology.js",
+    "pipeline": "node data_new/pipeline/run.js",
+    "validate": "node data_new/pipeline/50_validate.js"
   },
   "devDependencies": {
     "playwright": "^1.62.1",
     "maplibre-gl": "^6.6.0",
-    "h3-js": "^4.3.0"
+    "h3-js": "^4.3.0",
+    "@duckdb/node-api": "^1.5.5-r.4"
   }
 }

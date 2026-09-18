@@ -1,0 +1,2202 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ============================================================================
+V10 디지털 트윈 월드 — 회사 목표 관계뷰 폐루프
+메인 씬 = 온톨로지 관계뷰: 미국판매법인(루트) 아래 재무·사업·지속경영·운영 4영역.
+노드를 클릭하면 그 노드가 중심이 되고 업스트림(상향 롤업 방향)과 다운스트림(실행·
+데이터 방향)이 카드로 펼쳐져 계속 이동한다. 딥 체인 예) 경상이익률 → 오피스 관리비 →
+전력사용량(HVAC 레버) → 절감액이 경상이익률 → 합산손익으로 상향 전파.
+운영 영역 = 9개 부문(판매·마케팅·상품·재경·서비스·품질·안전·IT·인사/총무) 워크플로우 —
+각 부문 운영 월드에서 온톨로지 기반 액션을 실행하면 온톨로지 데이터뷰가 열린다.
+자주 가는 관계뷰는 Quick Link로 바로 진입. 게이트(HITL/AI)·프로젝트·V8/V9 소환 포함.
+데이터: v7-data.js governance(ceo_tree·facility·gates·projects) — data/와 동일 소스
+============================================================================= -->
+<title>V10 디지털 트윈 월드 — 회사 목표 관계뷰 · 부문 워크플로우 · 폐루프</title>
+<style>
+:root{
+  --page:#161614;--surface:#1e1e1c;--surface2:#262623;--line:#33332f;
+  --ink:#f0efec;--muted:#a3a199;--edge:#6e6e67;--edge-hi:#79b8ff;
+  --good:#4cc38a;--warn:#eaa93e;--crit:#e5484d;--na:#57554e;
+  --hitl:#79b8ff;--ai:#58d1c9;--auto:#8f8d85;
+  --ar-fin:#79b8ff;--ar-biz:#eaa93e;--ar-esg:#4cc38a;
+  --ph-product:#b58cff;--ph-bp:#79b8ff;--ph-marketing:#eaa93e;--ph-order:#58d1c9;
+  --ph-sales:#e8e6e1;--ph-quality:#e5484d;--ph-service:#4cc38a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--page);color:var(--ink);overflow:hidden;display:flex;flex-direction:column;
+  font:13px/1.45 Pretendard,"Apple SD Gothic Neo","Segoe UI",system-ui,sans-serif;
+  font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+select{font:inherit;color:var(--ink);background:var(--surface2);border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:11.5px}
+header{height:46px;flex:0 0 46px;display:flex;align-items:center;gap:12px;padding:0 14px;
+  background:var(--surface);border-bottom:1px solid var(--line)}
+header h1{font-size:14px;font-weight:700}
+header .sub{font-size:11.5px;color:var(--muted)}
+.hBtns{margin-left:auto;display:flex;gap:6px;align-items:center}
+.hBtn{border:1px solid var(--line);border-radius:6px;padding:4px 11px;font-size:12px}
+.hBtn:hover{border-color:var(--edge)}
+.hBtn.on{border-color:var(--edge-hi);color:var(--edge-hi)}
+.gLgd{display:flex;gap:9px;font-size:10.5px;color:var(--muted);margin-right:8px}
+.gLgd span{display:inline-flex;align-items:center;gap:4px}
+.gLgd i{width:8px;height:8px;border-radius:50%;display:inline-block}
+/* 행 100% 고정 — 콘텐츠가 커도 패널·그래프가 Play 푸터 밑으로 밀리지 않게 (넘침은 각 패널 스크롤) */
+#main{flex:1;display:grid;grid-template-columns:236px 1fr 312px;grid-template-rows:100%;min-height:0}
+#rail{border-right:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px;min-height:0}
+#side{border-left:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px;min-height:0}
+.railTtl{font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin:6px 4px 8px}
+/* CEO·영역 카드 */
+.goalCard{width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);
+  border-left:3px solid var(--line);border-radius:7px;padding:9px 10px;margin-bottom:6px;transition:border-color .15s}
+.goalCard:hover{border-color:var(--edge)}
+.goalCard .nm{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px}
+.goalCard .nm .w{font-size:10px;color:var(--muted);font-weight:400}
+.goalCard .nm .lamp{margin-left:auto}
+.goalCard .v1{font-size:15px;font-weight:700;margin-top:4px}
+.goalCard .v2{font-size:10.5px;color:var(--muted);margin-top:1px}
+.goalCard .bar{height:5px;border-radius:3px;background:var(--line);margin-top:6px;overflow:hidden}
+.goalCard .bar i{display:block;height:100%;border-radius:3px}
+.lamp{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--line)}
+.lamp.on{background:var(--good);box-shadow:0 0 6px var(--good)}
+.lamp.warn{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+.lamp.crit{background:var(--crit);box-shadow:0 0 6px var(--crit)}
+.lamp.na{background:var(--na)}
+.agtCard{background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:6px 9px;margin-bottom:5px}
+.agtCard .hd{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600}
+.agtCard .hd i{width:7px;height:7px;border-radius:50%;background:var(--ai);flex:0 0 7px}
+.agtCard .hd .st{margin-left:auto;font-size:10px;color:var(--muted)}
+.agtCard .tk{font-size:10.5px;color:var(--muted);margin-top:2px}
+/* 중앙 씬 — 관계뷰 */
+#center{display:flex;flex-direction:column;min-width:0;min-height:0}
+#sceneCrumb{height:34px;flex:0 0 34px;display:flex;align-items:center;gap:3px;padding:0 14px;
+  border-bottom:1px solid var(--line);background:var(--surface);font-size:11.5px;overflow:hidden}
+#sceneCrumb button{color:var(--edge-hi);padding:2px 3px;white-space:nowrap}
+#sceneCrumb button:hover{text-decoration:underline}
+#sceneCrumb .sep{color:var(--muted)}
+#sceneCrumb .cur{font-weight:700;white-space:nowrap}
+#sceneCrumb .hint{margin-left:auto;color:var(--muted);font-size:10px;white-space:nowrap}
+#btnQL{border:1px solid var(--line);border-radius:6px;padding:2px 9px;font-size:10.5px;color:var(--muted);margin-left:10px;white-space:nowrap}
+#btnQL:hover{border-color:var(--edge-hi);color:var(--edge-hi)}
+#sceneWrap{flex:1;position:relative;min-height:0}
+#scene{width:100%;height:100%;display:block}
+/* 포커스 그래프 영역 — 씬 아래, Play 커서 연동 + 휠 확대/드래그 이동/더블클릭 리셋.
+   높이는 중앙 컬럼의 32% (최소 220 · 최대 360) — 화면이 커지면 그래프 Y축도 함께 커진다 */
+#graphPanel{flex:0 0 clamp(220px,32%,360px);display:flex;flex-direction:column;border-top:1px solid var(--line);
+  background:var(--surface);padding:8px 14px 10px}
+#graphTtl{font-size:11px;color:var(--muted);margin-bottom:5px;display:flex;gap:10px;align-items:baseline;
+  white-space:nowrap;overflow:hidden}
+#graphTtl b{color:var(--ink);font-size:12px}
+#graphTtl .cv{color:var(--edge-hi);font-weight:700}
+#graphWrap{flex:1;min-height:0;background:var(--surface2);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+#graphSvg{width:100%;height:100%;display:block}
+.gAxis{font-size:10px;fill:var(--muted)}
+.gCur{font-size:10.5px;font-weight:700;fill:var(--warn)}
+.tierLbl{font-size:10.5px;fill:var(--muted);letter-spacing:.08em}
+.gNode,.kNode,.pNode,.sNode,.nNode,.wNode,.aNode,.cNode{cursor:pointer}
+.gBox{fill:var(--surface2);stroke:var(--line);stroke-width:1.3;rx:9}
+.gBox.na{stroke-dasharray:4 3}
+g.rel:hover .gBox{stroke:var(--edge)}
+g.rel.sel .gBox,.cNode .gBox{stroke:var(--edge-hi);stroke-width:1.8}
+.gName{font-size:13px;font-weight:700;fill:var(--ink)}
+.gVal{font-size:11.5px;fill:var(--ink)}
+.gSub{font-size:10px;fill:var(--muted)}
+.kName{font-size:10.5px;font-weight:600;fill:var(--ink)}
+.kVal{font-size:10px;fill:var(--muted)}
+.kW{font-size:9px;fill:var(--muted)}
+.cName{font-size:15px;font-weight:700;fill:var(--ink)}
+.kindChip{font-size:9px;fill:var(--muted);letter-spacing:.05em}
+.gateChip{font-size:9px}
+.edgeS{fill:none;stroke:var(--line);stroke-width:1.1;opacity:.8}
+.edgeP{fill:none;stroke-width:1.3;opacity:.5}
+.edgeF{fill:none;stroke-width:1.3;opacity:.45}
+/* Quick Link 레일 */
+.qlRow{display:flex;align-items:center;width:100%;background:var(--surface2);border:1px solid var(--line);
+  border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:11.5px;gap:6px;text-align:left}
+.qlRow:hover{border-color:var(--edge-hi)}
+.qlRow i{width:7px;height:7px;border-radius:2px;flex:0 0 7px}
+.qlRow .k{color:var(--muted);font-size:9.5px;margin-left:auto;white-space:nowrap}
+.qlRow .x{color:var(--muted);font-size:11px;padding:0 2px;flex:0 0 auto}
+.qlRow .x:hover{color:var(--crit)}
+/* 부문 운영 월드 오버레이 */
+#deptWorld{position:fixed;inset:46px 0 0 0;z-index:72;background:var(--page);display:none;flex-direction:column}
+#deptWorld.open{display:flex}
+#dwTabs{display:flex;gap:4px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
+#dwTabs button{border:1px solid var(--line);border-radius:6px;padding:4px 12px;font-size:12px;color:var(--muted)}
+#dwTabs button.on{color:var(--ink);font-weight:700}
+#dwTabs button:hover{color:var(--ink)}
+/* 부문 운영 월드 본문 — 판매법인 운영 월드(V9)와 동일 구성: 레일 · 씬+트렌드 밴드 · 실행 피드 · Play 푸터 */
+#dwMain{flex:1;display:grid;grid-template-columns:236px 1fr 312px;grid-template-rows:100%;min-height:0}
+#dwRail{border-right:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px;min-height:0}
+#dwFeed{border-left:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px;min-height:0}
+#dwCenter{display:flex;flex-direction:column;min-width:0;min-height:0}
+#dwSceneWrap{flex:1;position:relative;min-height:0}
+#dwScene{width:100%;height:100%;display:block}
+#dwBand{flex:0 0 clamp(170px,28%,280px);display:flex;flex-direction:column;border-top:1px solid var(--line);
+  background:var(--surface);padding:8px 14px 10px}
+#dwTrendTtl{font-size:11px;color:var(--muted);margin-bottom:5px;display:flex;gap:10px;align-items:baseline;white-space:nowrap;overflow:hidden}
+#dwTrendTtl b{color:var(--ink);font-size:12px}
+#dwTrendTtl .cv{color:var(--edge-hi);font-weight:700}
+#dwTrendWrap{flex:1;min-height:0;background:var(--surface2);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+#dwTrend{width:100%;height:100%;display:block}
+#dwFooter{height:46px;flex:0 0 46px;display:flex;align-items:center;gap:12px;padding:0 16px;
+  background:var(--surface);border-top:1px solid var(--line)}
+#dwFooter .btn{border:1px solid var(--line);border-radius:6px;padding:4px 12px;font-size:12px}
+#dwFooter .btn:hover{border-color:var(--edge)}
+#dwYm{font-size:14px;font-weight:700;min-width:84px}
+#dwTlWrap{flex:1;display:flex;align-items:center}
+#dwTl{width:100%;accent-color:var(--edge-hi)}
+#dwFooter .note{font-size:10.5px;color:var(--muted);white-space:nowrap}
+.dwStep{width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);
+  border-left:3px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px;transition:border-color .15s}
+.dwStep:hover{border-color:var(--edge)}
+.dwStep.sel{border-color:var(--edge-hi)}
+.dwStep .nm{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.dwStep .nm .lamp{margin-left:auto}
+.dwStep .v2{font-size:10.5px;color:var(--muted);margin-top:2px}
+.actBtn{border:1px solid var(--line);border-radius:6px;padding:3px 9px;font-size:11px;color:var(--edge-hi);text-align:left}
+.actBtn:hover{border-color:var(--edge-hi);background:color-mix(in srgb,var(--edge-hi) 10%,transparent)}
+.actBtn .ty{color:var(--muted);font-size:9.5px}
+/* 우 패널 — 포커스 정보 카드 */
+.fiCard{background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px}
+.fiCard .hd{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+.fiCard .hd i{width:8px;height:8px;border-radius:2px;flex:0 0 8px}
+.fiCard .hd .k{margin-left:auto;font-size:9.5px;color:var(--muted);font-weight:400;white-space:nowrap}
+.fiCard .big{font-size:16px;font-weight:700;margin-top:5px}
+.fiCard .ctx{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.55}
+.fiCard .ctx code{color:var(--ink);font-size:10.5px}
+.fiCard table.dt{margin-top:6px}
+.fiRow{display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;
+  border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);cursor:pointer}
+.fiRow:last-child{border-bottom:none}
+.fiRow:hover .nm{color:var(--edge-hi)}
+.fiRow i{width:7px;height:7px;border-radius:50%;flex:0 0 7px}
+.fiRow .st{margin-left:auto;color:var(--muted);font-size:10px;white-space:nowrap}
+.fiBtn{border:1px solid var(--edge-hi);color:var(--edge-hi);border-radius:6px;padding:3px 9px;
+  font-size:11px;margin:5px 4px 0 0;text-align:left}
+.fiBtn:hover{background:color-mix(in srgb,var(--edge-hi) 12%,transparent)}
+.prjCard{width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);border-radius:7px;
+  padding:7px 9px;margin-bottom:6px;transition:border-color .15s}
+.prjCard:hover{border-color:var(--edge)}
+.prjCard .hd{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600}
+.prjCard .hd .st{margin-left:auto}
+.prjCard .ctx{font-size:10.5px;color:var(--muted);margin-top:3px}
+.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.badge.good{color:var(--good);border-color:var(--good)}
+.badge.warn{color:var(--warn);border-color:var(--warn)}
+.badge.crit{color:var(--crit);border-color:var(--crit)}
+.badge.hitl{color:var(--hitl);border-color:var(--hitl)}
+.badge.ai{color:var(--ai);border-color:var(--ai)}
+.badge.na{color:var(--na);border-color:var(--na)}
+#btnAddPrj{width:100%;border:1px dashed var(--edge);border-radius:7px;padding:7px;font-size:12px;color:var(--muted);margin-bottom:6px}
+#btnAddPrj:hover{color:var(--ink);border-color:var(--edge-hi)}
+#composer{background:var(--surface2);border:1px solid var(--edge-hi);border-radius:7px;padding:9px 10px;margin-bottom:6px;display:none}
+#composer.open{display:block}
+#composer .row{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11.5px}
+#composer .row label{color:var(--muted);min-width:44px;font-size:10.5px}
+#composer select{flex:1}
+#composer .impact{font-size:11px;background:var(--page);border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin:6px 0;line-height:1.55;color:var(--muted)}
+#composer .impact b{color:var(--ink)}
+#composer .links{font-size:10.5px;color:var(--muted);margin-bottom:6px;line-height:1.6}
+#composer .go{width:100%;border:1px solid var(--good);color:var(--good);border-radius:6px;padding:5px;font-size:12px}
+#composer .go:hover{background:color-mix(in srgb,var(--good) 14%,transparent)}
+footer{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:12px;padding:0 16px;
+  background:var(--surface);border-top:1px solid var(--line)}
+footer .btn{border:1px solid var(--line);border-radius:6px;padding:4px 12px;font-size:12px}
+footer .btn:hover{border-color:var(--edge)}
+footer .btn.on{border-color:var(--edge-hi);color:var(--edge-hi)}
+#tlWrap{flex:1;position:relative;height:26px;display:flex;align-items:center}
+#tl{width:100%;accent-color:var(--edge-hi)}
+#ymLbl{font-size:14px;font-weight:700;min-width:84px}
+#ymSub{font-size:11px;color:var(--muted);min-width:150px}
+table.dt{width:100%;border-collapse:collapse;font-size:11.5px}
+table.dt th{color:var(--muted);font-weight:500;text-align:left;padding:3px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.dt td{padding:3px 6px;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);white-space:nowrap}
+table.dt td.num,table.dt th.num{text-align:right}
+.dBtn{border:1px solid var(--line);border-radius:6px;padding:4px 12px;font-size:11.5px;color:var(--muted)}
+.dBtn:hover{border-color:var(--edge-hi);color:var(--edge-hi)}
+.dBtn.go{color:var(--good);border-color:var(--good)}
+.dBtn.go:hover{background:color-mix(in srgb,var(--good) 14%,transparent)}
+/* 월드 오버레이 — 제목줄은 상단 헤더 하나뿐 (브레드크럼으로 다운스트림 표현) */
+#world{position:fixed;inset:46px 0 0 0;z-index:75;background:var(--page);display:none}
+#world.open{display:block}
+#worldFrame{border:none;width:100%;height:100%;background:var(--page);transition:opacity .18s ease}
+/* 다른 문서로 소환 중 — 이전 월드의 제목줄·씬이 새 문서 로드 완료 전까지 보이지 않게 */
+#worldFrame.loading{opacity:0}
+.hCrumb{font-size:13px;font-weight:600;color:var(--edge-hi);display:none;align-items:center;gap:6px}
+.hCrumb .sep{color:var(--muted);font-weight:400}
+#btnBack{display:none}
+/* ═══ 인트로 시네마틱 — 첫 진입 시 쇼츠 페이싱의 모션그래픽 (씬 6 · 약 36초 · 클릭 = 다음 · ESC = 건너뛰기) ═══ */
+#intro{position:fixed;inset:0;z-index:120;display:none;background:
+  radial-gradient(1200px 700px at 30% 20%,rgba(121,184,255,.10),transparent 60%),
+  radial-gradient(1000px 600px at 75% 85%,rgba(76,195,138,.08),transparent 60%),#0d0d0c;
+  overflow:hidden;cursor:pointer;user-select:none}
+#intro.open{display:block}
+#introStars{position:absolute;inset:-10%;width:120%;height:120%;opacity:.5;animation:iDrift 60s linear infinite}
+@keyframes iDrift{from{transform:translate3d(0,0,0)}to{transform:translate3d(-60px,-40px,0)}}
+.iScene{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:40px 8%}
+.iScene.on{display:flex}
+.iKick{font-size:13px;letter-spacing:.42em;color:var(--edge-hi);opacity:0;margin-bottom:22px}
+.iBig{font-size:clamp(30px,4.4vw,54px);font-weight:800;line-height:1.32;opacity:0;
+  background:linear-gradient(100deg,#f0efec 30%,#79b8ff 70%,#4cc38a 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.iSub{font-size:clamp(13px,1.4vw,17px);color:var(--muted);margin-top:20px;line-height:1.8;opacity:0}
+.iSub b{color:var(--ink)}
+.iArt{width:min(680px,62vw);margin-top:34px;opacity:0}
+.on .iKick{animation:iUp .7s .1s cubic-bezier(.2,.6,.2,1) forwards}
+.on .iBig{animation:iUp .8s .35s cubic-bezier(.2,.6,.2,1) forwards}
+.on .iSub{animation:iUp .8s .9s cubic-bezier(.2,.6,.2,1) forwards}
+.on .iArt{animation:iUp .9s .6s cubic-bezier(.2,.6,.2,1) forwards}
+@keyframes iUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
+.iDraw{stroke-dasharray:1200;stroke-dashoffset:1200}
+.on .iDraw{animation:iDraw 2.1s 1.1s ease forwards}
+.on .iDraw2{animation:iDraw 1.6s 2.6s ease forwards}
+@keyframes iDraw{to{stroke-dashoffset:0}}
+.iPop{opacity:0;transform-origin:center;transform:scale(.75)}
+.on .iPop{animation:iPop .55s cubic-bezier(.3,1.4,.4,1) forwards}
+@keyframes iPop{to{opacity:1;transform:scale(1)}}
+.iOrbit{offset-rotate:0deg;animation:iOrbit 4.5s linear infinite}
+@keyframes iOrbit{from{offset-distance:0%}to{offset-distance:100%}}
+.iLampOn{animation:iLamp 1.2s 2.4s forwards}
+@keyframes iLamp{to{fill:#4cc38a}}
+#introBar{position:absolute;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2}
+#introBar i{display:block;width:64px;height:3px;border-radius:2px;background:rgba(240,239,236,.18);overflow:hidden;position:relative}
+#introBar i::after{content:'';position:absolute;inset:0;background:var(--ink);transform:scaleX(0);transform-origin:left}
+#introBar i.done::after{transform:scaleX(1)}
+#introBar i.run::after{animation:iBar linear forwards;animation-duration:var(--dur,6s)}
+@keyframes iBar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+#introSkip{position:absolute;top:14px;right:18px;z-index:2;border:1px solid rgba(240,239,236,.3);
+  border-radius:16px;padding:5px 16px;font-size:12px;color:var(--muted)}
+#introSkip:hover{color:var(--ink);border-color:var(--ink)}
+#introHint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted);opacity:.7;z-index:2}
+#introStart{margin-top:36px;border:1px solid var(--edge-hi);color:var(--edge-hi);border-radius:22px;
+  padding:10px 34px;font-size:15px;font-weight:700;opacity:0}
+.on #introStart{animation:iUp .7s 1.4s forwards}
+#introStart:hover{background:color-mix(in srgb,var(--edge-hi) 16%,transparent)}
+#btnIntro{border:1px solid var(--line);border-radius:6px;padding:4px 11px;font-size:12px;color:var(--muted)}
+#btnIntro:hover{border-color:var(--edge-hi);color:var(--edge-hi)}
+.tip{position:fixed;z-index:90;background:var(--surface2);border:1px solid var(--edge);border-radius:7px;
+  padding:7px 10px;font-size:11.5px;pointer-events:none;display:none;max-width:320px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.tip b{display:block;margin-bottom:2px}
+.tip .mut{color:var(--muted)}
+/* 실데이터 L0 패널 — data_new 서빙 API (씬이 아닌 오버레이 — 표기·구조는 기존 씬 불변) */
+#liveWrap{position:fixed;inset:0;background:rgba(10,10,9,.62);z-index:60;display:flex;align-items:center;justify-content:center}
+#livePanel{width:min(880px,92vw);max-height:84vh;display:flex;flex-direction:column;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 18px 60px rgba(0,0,0,.5)}
+#liveHead{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+#liveHead .sub{font-size:11px;color:var(--muted)}
+#liveHead button{margin-left:auto;color:var(--muted);font-size:14px}
+#liveBody{overflow:auto;padding:12px 14px}
+#liveBody h4{font-size:11.5px;color:var(--muted);margin:10px 0 6px;font-weight:600}
+.liveTbl{width:100%;border-collapse:collapse;font-size:11.5px}
+.liveTbl th,.liveTbl td{padding:4px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.liveTbl th:first-child,.liveTbl td:first-child{text-align:left}
+.liveTbl th{color:var(--muted);font-weight:600}
+.liveBtn{border:1px solid var(--line);border-radius:5px;padding:2px 8px;font-size:11px;background:var(--surface2)}
+.liveBtn.ok{color:var(--good);border-color:var(--good)}
+.liveBtn.no{color:var(--crit);border-color:var(--crit)}
+.liveBtn:disabled{opacity:.45;cursor:default}
+#liveChain{font-size:11.5px;color:var(--muted);padding:8px 2px;line-height:2}
+.liveTag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10.5px;border:1px solid var(--line);color:var(--ink);background:var(--surface2)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+::-webkit-scrollbar-thumb:hover{background:var(--edge)}
+</style>
+</head>
+<body>
+<header>
+  <h1>V10 디지털 트윈 월드</h1>
+  <span class="hCrumb" id="hdCrumb"></span>
+  <div class="hBtns">
+    <div class="gLgd">
+      <span><i style="background:var(--hitl)"></i>HITL 승인</span>
+      <span><i style="background:var(--ai)"></i>AI 위임</span>
+      <span><i style="background:var(--na)"></i>미연결</span>
+    </div>
+    <button id="btnLive" title="SAP 파이프라인 실데이터 — data_new 온톨로지 마트 · DuckDB 서빙 · 폐루프 v0" style="display:none">⛁ 실데이터 L0</button>
+    <button id="btnIntro" title="디지털 트윈 월드 인트로 다시 보기">✦ 인트로</button>
+    <button class="hBtn" id="btnBack">↩ 월드로 돌아가기</button>
+  </div>
+</header>
+<div id="main">
+  <aside id="rail">
+    <div class="railTtl">회사 목표 — 가중 달성률</div>
+    <div id="goalList"></div>
+    <div class="railTtl">Quick Link — 관계뷰 바로가기</div>
+    <div id="qlList"></div>
+    <div class="railTtl">AI 에이전트 — 이번 달 위임</div>
+    <div id="agtList"></div>
+  </aside>
+  <div id="center">
+    <div id="sceneCrumb"></div>
+    <div id="sceneWrap"><svg id="scene" viewBox="0 0 1240 584" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div id="graphPanel">
+      <div id="graphTtl"></div>
+      <div id="graphWrap"><svg id="graphSvg"></svg></div>
+    </div>
+  </div>
+  <aside id="side">
+    <div class="railTtl" id="focusTtl">포커스</div>
+    <div id="focusInfo"></div>
+    <div class="railTtl" id="prjTtl">기여 프로젝트</div>
+    <button id="btnAddPrj">＋ 새 프로젝트 (온톨로지 Top-down)</button>
+    <div id="composer"></div>
+    <div id="prjList"></div>
+  </aside>
+</div>
+<footer>
+  <button class="btn" id="btnPlay">▶ Play</button>
+  <button class="btn" id="btnSpd">×1</button>
+  <span id="ymLbl">2026-08</span>
+  <div id="tlWrap"><input type="range" id="tl" min="0" max="31" value="31" step="1"></div>
+  <span id="ymSub">실적 32개월 · 미래 시뮬은 전략 월드 V8</span>
+</footer>
+<!-- ═══ 인트로 시네마틱 — 디지털 트윈 월드가 무엇이고 어디까지 갈 수 있는지 36초로 상상하게 한다 ═══ -->
+<div id="intro">
+  <svg id="introStars"></svg>
+  <div id="introBar"></div>
+  <button id="introSkip">건너뛰기 ⏭</button>
+  <span id="introHint">클릭: 다음 · ESC: 건너뛰기</span>
+  <div class="iScene" data-sc="0">
+    <div class="iKick">DIGITAL TWIN WORLD</div>
+    <div class="iBig">회사 전체가,<br>하나의 살아있는 모델이 된다면?</div>
+    <div class="iSub">목표·조직·실행·데이터 — 흩어져 있던 회사의 모든 것이 한 화면에서 숨쉬기 시작합니다.</div>
+  </div>
+  <div class="iScene" data-sc="1">
+    <div class="iKick">ONE CONNECTED WORLD</div>
+    <div class="iBig">모든 목표와 실행이<br>하나의 관계망으로</div>
+    <svg class="iArt" viewBox="0 0 680 260">
+      <g stroke="#79b8ff" stroke-width="1.4" fill="none">
+        <path class="iDraw" d="M340 66 V96 M340 96 H130 V128 M340 96 H270 V128 M340 96 H410 V128 M340 96 H550 V128"/>
+      </g>
+      <rect class="iPop" x="270" y="26" width="140" height="40" rx="9" fill="#262623" stroke="#79b8ff" style="animation-delay:.6s"/>
+      <text x="340" y="51" text-anchor="middle" font-size="14" font-weight="700" fill="#f0efec" class="entNameTxt">미국판매법인</text>
+      <g font-size="12" font-weight="600" fill="#f0efec" text-anchor="middle">
+        <rect class="iPop" x="78"  y="128" width="104" height="36" rx="8" fill="#262623" stroke="#79b8ff" style="animation-delay:1.4s"/><text x="130" y="151">재무</text>
+        <rect class="iPop" x="218" y="128" width="104" height="36" rx="8" fill="#262623" stroke="#eaa93e" style="animation-delay:1.6s"/><text x="270" y="151">사업</text>
+        <rect class="iPop" x="358" y="128" width="104" height="36" rx="8" fill="#262623" stroke="#4cc38a" style="animation-delay:1.8s"/><text x="410" y="151">지속경영</text>
+        <rect class="iPop" x="498" y="128" width="104" height="36" rx="8" fill="#8f8d85" fill-opacity=".18" stroke="#8f8d85" style="animation-delay:2.0s"/><text x="550" y="151">운영 · 9부문</text>
+      </g>
+      <text class="iPop" x="340" y="222" text-anchor="middle" font-size="12.5" fill="#a3a199" style="animation-delay:2.5s">클릭 한 번으로 업스트림·다운스트림을 오르내리는 관계뷰</text>
+    </svg>
+  </div>
+  <div class="iScene" data-sc="2">
+    <div class="iKick">CLOSED LOOP</div>
+    <div class="iBig">현장의 실행이 데이터가 되어,<br>다시 목표로 돌아옵니다</div>
+    <svg class="iArt" viewBox="0 0 680 250">
+      <path id="iLoopP" class="iDraw" d="M340 34 C520 34 560 120 560 125 C560 130 520 216 340 216 C160 216 120 130 120 125 C120 120 160 34 340 34 Z"
+        fill="none" stroke="#4cc38a" stroke-width="1.6" stroke-dasharray="1200"/>
+      <g font-size="12.5" font-weight="700" fill="#f0efec" text-anchor="middle">
+        <text class="iPop" x="340" y="20" style="animation-delay:1.2s">회사 KPI</text>
+        <text class="iPop" x="613" y="129" style="animation-delay:1.5s">부문 실행</text>
+        <text class="iPop" x="340" y="242" style="animation-delay:1.8s">온톨로지 마트</text>
+        <text class="iPop" x="72" y="129" style="animation-delay:2.1s">상향 롤업</text>
+      </g>
+      <circle r="4" fill="#4cc38a" class="iOrbit" style="offset-path:path('M340 34 C520 34 560 120 560 125 C560 130 520 216 340 216 C160 216 120 130 120 125 C120 120 160 34 340 34 Z')"/>
+      <circle r="4" fill="#79b8ff" class="iOrbit" style="offset-path:path('M340 34 C520 34 560 120 560 125 C560 130 520 216 340 216 C160 216 120 130 120 125 C120 120 160 34 340 34 Z');animation-delay:-2.2s"/>
+    </svg>
+  </div>
+  <div class="iScene" data-sc="3">
+    <div class="iKick">LEARN &amp; FORECAST</div>
+    <div class="iBig">32개월의 실적을 학습해,<br>내일을 예측합니다</div>
+    <svg class="iArt" viewBox="0 0 680 250">
+      <rect class="iPop" x="450" y="30" width="190" height="180" rx="8" fill="rgba(121,184,255,.06)" stroke="none" style="animation-delay:2.4s"/>
+      <line x1="450" y1="30" x2="450" y2="210" stroke="#e5484d" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>
+      <path class="iDraw" d="M40 170 L100 120 L160 150 L220 90 L280 130 L340 80 L400 110 L450 74"
+        fill="none" stroke="#79b8ff" stroke-width="2.4"/>
+      <path class="iDraw2" d="M450 74 L510 66 L570 58 L636 46" fill="none" stroke="#79b8ff" stroke-width="2" stroke-dasharray="6 5" opacity=".75"/>
+      <text class="iPop" x="452" y="226" font-size="11" fill="#e5484d" style="animation-delay:1.8s">NOW</text>
+      <text class="iPop" x="636" y="34" text-anchor="end" font-size="12" font-weight="700" fill="#79b8ff" style="animation-delay:3.1s">FORECAST · 학습 모델</text>
+      <text class="iPop" x="340" y="244" text-anchor="middle" font-size="12.5" fill="#a3a199" style="animation-delay:3.3s">주행 · DTC · 기능 사용 — 차량 데이터까지 학습 피처로 (온톨로지 mlModel)</text>
+    </svg>
+  </div>
+  <div class="iScene" data-sc="4">
+    <div class="iKick">WHAT-IF LEVERS</div>
+    <div class="iBig">가상 데이터를 주입해,<br>미래를 미리 실험합니다</div>
+    <svg class="iArt" viewBox="0 0 680 250">
+      <g class="iPop" style="animation-delay:.9s">
+        <rect x="60" y="52" width="150" height="30" rx="15" fill="#262623" stroke="#33332f"/>
+        <circle class="iLampOn" cx="90" cy="67" r="10" fill="#57554e"/>
+        <text x="120" y="72" font-size="12" fill="#f0efec">전략 레버 ON</text>
+      </g>
+      <path class="iDraw" d="M60 190 L160 176 L260 182 L360 164 L450 168" fill="none" stroke="#6e6e67" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <path class="iDraw2" d="M450 168 L510 150 L570 126 L640 96" fill="none" stroke="#4cc38a" stroke-width="2.6"/>
+      <text class="iPop" x="640" y="82" text-anchor="end" font-size="12.5" font-weight="700" fill="#4cc38a" style="animation-delay:3.4s">레버가 만든 미래</text>
+      <text class="iPop" x="340" y="240" text-anchor="middle" font-size="12.5" fill="#a3a199" style="animation-delay:3.6s">관리비 · 인센티브 · 차량 데이터 — 도메인마다 전략 월드가 소환되고, 결과는 KPI로 환류</text>
+    </svg>
+  </div>
+  <div class="iScene" data-sc="5">
+    <div class="iKick">V10 · <span class="entNameTxt">미국판매법인</span></div>
+    <div class="iBig">디지털 트윈 월드</div>
+    <div class="iSub"><b>회사가 스스로를 보는 방법.</b><br>
+      관계로 탐색하고 · 데이터로 실행하고 · 학습으로 예측하고 · 레버로 실험한다.</div>
+    <button id="introStart">지금 시작하기 →</button>
+  </div>
+</div>
+<div id="deptWorld">
+  <div id="dwTabs"></div>
+  <div id="dwMain">
+    <aside id="dwRail"></aside>
+    <div id="dwCenter">
+      <div id="dwSceneWrap"><svg id="dwScene" viewBox="0 0 1000 430" preserveAspectRatio="xMidYMid meet"></svg></div>
+      <div id="dwBand">
+        <div id="dwTrendTtl"></div>
+        <div id="dwTrendWrap"><svg id="dwTrend"></svg></div>
+      </div>
+    </div>
+    <aside id="dwFeed"></aside>
+  </div>
+  <div id="dwFooter">
+    <button class="btn" id="dwPlay">▶ Play</button>
+    <span id="dwYm">2026-08</span>
+    <div id="dwTlWrap"><input type="range" id="dwTl" min="0" max="31" value="31" step="1"></div>
+    <span class="note">판매법인 운영 월드(V9)와 동일 문법 — 실적 32개월 · 액션 실행 = 온톨로지 데이터뷰</span>
+  </div>
+</div>
+<div id="world"><iframe id="worldFrame" title="world"></iframe></div>
+<!-- ═══ 실데이터 L0 — data_new 파이프라인 (온톨로지 마트 · DuckDB 서빙 · 폐루프 v0) ═══ -->
+<div id="liveWrap" style="display:none">
+  <div id="livePanel">
+    <div id="liveHead">
+      <b>⛁ 실데이터 L0 — SAP 파이프라인</b>
+      <span class="sub" id="liveMeta"></span>
+      <button id="liveClose" title="닫기 (ESC)">✕</button>
+    </div>
+    <div id="liveBody"></div>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+<script src="entity-config.js"></script><!-- 법인 프로필 — development/entity-profile.md 빌드 생성물 (없어도 기본값으로 동작) -->
+<script src="world-registry.js"></script><!-- 월드 구조 레지스트리 — development/world-registry.json 빌드 생성물 (조직·부문·소환 월드 구조의 정본) -->
+<script src="v7-data.js"></script>
+<script src="v7-ontology.js"></script>
+<script src="v7-ontology-instances.js"></script>
+<script>
+'use strict';
+/* ═══════════ PART A. 데이터 바인딩 · CEO KPI 트리 · 값 계산 ═══════════ */
+const D = window.TWIN_DATA, M = D.meta, LC = D.lifecycle, GOV = D.governance;
+const MODELS = D.models, ZONES = D.zones;
+const NOW = M.now, MONTHS = M.months, SEAS = M.seas, DS_TARGET = M.ds_target;
+const EV_CAMP = M.ev_camp;
+const MODEL_OF = Object.fromEntries(MODELS.map(m=>[m.id,m]));
+const NPF = D.npf;
+const fmt = n => Math.round(n).toLocaleString('en-US');
+const f1 = n => (Math.round(n*10)/10).toFixed(1);
+const fmtM = n => CUR + (n/1e6).toFixed(1) + 'M';   // CUR = 프로필 통화 심볼 (아래 선언)
+const fmtK = n => CUR + fmt(n/1000) + 'k';
+const $ = id => document.getElementById(id);
+const el = (tag,attrs,parent)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]); if(parent) parent.appendChild(e); return e;};
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function tableOf(t){
+  const idx = Object.fromEntries(t.cols.map((c,k)=>[c,k]));
+  const get = (row,c)=>row[idx[c]];
+  const byYm = new Map();
+  for(const r of t.rows){ const ym=r[0]; if(!byYm.has(ym)) byYm.set(ym,[]); byYm.get(ym).push(r); }
+  return {rows:t.rows, get, byYm, cols:t.cols};
+}
+const GATES = tableOf(GOV.gates), REVIEWS = tableOf(GOV.reviews);
+const PARTS = tableOf(LC.parts), VOC = tableOf(LC.voc), ACTIONS = tableOf(LC.actions);
+const FAC = tableOf(GOV.facility);
+const EN = GOV.energy;
+const CAL = Object.fromEntries(LC.calendar.map(a=>[a.id,a]));
+const AGENT_OF = Object.fromEntries(GOV.agents.map(a=>[a.id,a]));
+const mv = i => D.actual[Math.min(i,NOW)];
+const mvm = (i,mid) => mv(i).models[mid];
+
+// ── 법인 프로필 — development/entity-profile.md → tools/build-entity.js 생성물 ──
+// entity-config.js가 window.ENTITY_CONFIG를 정의하면 법인명·조직·KPI 표기를 오버라이드.
+// 없으면 기본값(미국판매법인)으로 동작 — 프로토타입 데이터는 그대로 재사용한다.
+const ENTC = window.ENTITY_CONFIG || null;
+const ENT_NAME = (ENTC && ENTC.entity && ENTC.entity.name) || '미국판매법인';
+// 통화 심볼 — 프로필 §1 통화 (미입력 시 USD). 금액 표기(fmtM·fmtK·unitFmt) 전역 적용
+const CUR = ({USD:'$',KRW:'₩',EUR:'€',JPY:'¥',CAD:'C$',MXN:'MX$',GBP:'£'})[ENTC&&ENTC.entity&&ENTC.entity.currency]||'$';
+if(ENTC && ENTC.entity && ENTC.entity.name){
+  document.title = `V10 디지털 트윈 월드 — ${ENT_NAME}`;
+  document.querySelector('header h1').textContent = `V10 디지털 트윈 월드 — ${ENT_NAME}`;
+  document.querySelectorAll('.entNameTxt').forEach(el=>el.textContent=ENT_NAME);   // 인트로 씬 법인명
+}
+
+// ── CEO KPI 트리 (governance/ceo_tree.csv와 동일 소스) ──────────────────────
+const TREE = GOV.ceo_tree;
+const T_OF = Object.fromEntries(TREE.map(n=>[n.id,n]));
+// KPI 오버라이드 — 프로필의 KPI 표(id가 ceo_tree와 일치하는 행)로 이름·약칭·가중치 교체
+if(ENTC && ENTC.kpis) for(const [kid,o] of Object.entries(ENTC.kpis)){
+  const n=T_OF[kid]; if(!n) continue;
+  if(o.name)  n.name=o.name;
+  if(o.short) n.short=o.short;
+  if(o.weight!=null && isFinite(+o.weight)) n.w=+o.weight;
+}
+const AREAS = TREE.filter(n=>n.lv==='area');
+const KPIS = TREE.filter(n=>n.lv==='kpi');
+const childrenOf = id => TREE.filter(n=>n.parent===id);
+const pathOf = id => { const p=[]; let n=T_OF[id]; while(n){ p.unshift(n); n=T_OF[n.parent]; } return p; };
+const kpiAncestor = id => pathOf(id).find(n=>n.lv==='kpi') || pathOf(id)[0];
+const areaAncestor = id => pathOf(id)[0];
+const AREA_HEX = {'AR-FIN':'#79b8ff','AR-BIZ':'#eaa93e','AR-ESG':'#4cc38a'};
+const PHASES = [
+  {id:'product',   name:'상품 준비',   hex:'#b58cff'},
+  {id:'bp',        name:'BP·FOB',     hex:'#79b8ff'},
+  {id:'marketing', name:'마케팅',      hex:'#eaa93e'},
+  {id:'order',     name:'생산 주문',   hex:'#58d1c9'},
+  {id:'sales',     name:'판매·유통',   hex:'#e8e6e1'},
+  {id:'quality',   name:'품질·VoC',    hex:'#e5484d'},
+  {id:'service',   name:'서비스·Parts',hex:'#4cc38a'},
+];
+const PHASE_OF = Object.fromEntries(PHASES.map(p=>[p.id,p]));
+
+// ── 관계뷰 그래프 — 미국판매법인(루트) + 회사 목표 트리 + 운영(부문 워크플로우) ──
+// 업스트림 = 상향 롤업 방향(이 노드가 기여하는 곳), 다운스트림 = 실행·데이터 방향.
+// 조직·부문·소환 월드 구조 = 월드 레지스트리 (world-registry.js — 정본:
+// development/world-registry.json + entity-profile.md 표기 병합. 코드 하드코딩 금지).
+const WREG = window.WORLD_REGISTRY;
+const ROOT_ID=WREG.org.root.id, OPS_ID='AR-OPS', HQ_ID=WREG.org.hq.id;
+// 조직 상위/형제 노드 — 형제 법인은 레지스트리 선언 수만큼 (planned = 트윈 미구축, 점선 카드)
+const ORG_NODES={ [HQ_ID]:{name:WREG.org.hq.name, lbl:WREG.org.hq.lbl, hex:WREG.org.hq.hex} };
+const SIB_IDS = WREG.org.siblings.map(s=>s.id);
+WREG.org.siblings.forEach(s=>{
+  ORG_NODES[s.id]={name:s.name, lbl:s.lbl, hex:s.hex, planned:!!s.planned};
+});
+const ONT = window.ONTOLOGY;
+const ACT_OF = Object.fromEntries(ONT.actionTypes.map(a=>[a.id,a]));
+const OTYPE  = Object.fromEntries(ONT.objectTypes.map(t=>[t.id,t]));
+// 부문 워크플로우: act = 게이트 원장(biz_calendar·workflow_gates) 연동 스텝,
+// 자체 스텝(id/name/…)은 부문 상시 업무. onto = 온톨로지 액션/객체 — 데이터뷰 실행 대상.
+const DEPTS = WREG.depts;   // 9부문×스텝×온톨로지 매핑 — 레지스트리가 결정 (이름·오너는 빌드 시 프로필 병합)
+const DEPT_OF = Object.fromEntries(DEPTS.map(d=>[d.id,d]));
+// 스텝 정규화: 원장 게이트 스텝은 biz_calendar에서 이름·주기·담당을 가져온다
+const CADENCE_KO = {annual:'연 1회', quarterly:'분기', monthly:'월', continuous:'상시', event:'이벤트'};
+const STEP_OF = {};
+DEPTS.forEach(d=>d.steps.forEach(s=>{
+  if(s.act){ const a=CAL[s.act]; s.id=s.act; s.name=a.name; s.cadence=a.cadence; s.owner=a.owner;
+    s.out=a.output; s.mFrom=a.m_from; s.mTo=a.m_to; s.ledger=true; }
+  else s.ledger=false;
+  s.dept=d.id;
+  STEP_OF[s.id]=s;
+}));
+// 스텝의 월별 실행 창 (연간 사이클 링) — m: 1~12
+function stepActiveMonth(s,m){
+  switch(s.cadence){
+    case 'monthly': case 'continuous': return true;
+    case 'quarterly': return m===1||m===4||m===7||m===10;
+    case 'annual': return s.mFrom ? (s.mFrom<=s.mTo ? (m>=s.mFrom&&m<=s.mTo) : (m>=s.mFrom||m<=s.mTo)) : false;
+  }
+  return false;                                    // event — 발생 시 실행 (고정 창 없음)
+}
+function kindOf(id){
+  if(id===ROOT_ID) return 'root';
+  if(id===OPS_ID) return 'ops';
+  if(ORG_NODES[id]) return 'org';
+  if(DEPT_OF[id]) return 'dept';
+  if(STEP_OF[id]) return 'step';
+  if(String(id).startsWith('ACT:')) return 'action';
+  if(T_OF[id]) return T_OF[id].lv;                       // area | kpi | node
+  return 'project';                                      // 세션 프로젝트 포함
+}
+const KIND_LBL = {root:'판매법인', ops:'운영 영역', org:'조직', area:'목표 영역', kpi:'회사 KPI', node:'다운스트림 지표',
+  dept:'부문 워크플로우', step:'워크플로우 스텝', action:'온톨로지 액션', project:'프로젝트'};
+function parentOf(id){
+  switch(kindOf(id)){
+    case 'root': return HQ_ID;
+    case 'org': return id===HQ_ID ? null : HQ_ID;
+    case 'ops': case 'area': return ROOT_ID;
+    case 'dept': return OPS_ID;
+    case 'step': return STEP_OF[id].dept;
+    case 'action': return id.split(':')[1];
+    case 'project': { const p=projects.find(x=>x.id===id); return p ? p.goal : ROOT_ID; }
+    default: { const n=T_OF[id]; return n.parent || ROOT_ID; }
+  }
+}
+function relUp(id){
+  if(kindOf(id)==='dept') return [OPS_ID, ...DEPT_OF[id].kpis];
+  const p=parentOf(id);
+  return p ? [p] : [];
+}
+function relDown(id, i){
+  switch(kindOf(id)){
+    case 'org': return id===HQ_ID ? [ROOT_ID,...SIB_IDS] : [];
+    case 'root': return ['AR-FIN','AR-BIZ','AR-ESG',OPS_ID];
+    case 'ops': return DEPTS.map(d=>d.id);
+    case 'dept': return DEPT_OF[id].steps.map(s=>s.id);
+    case 'step': return STEP_OF[id].onto.map((o,k)=>'ACT:'+id+':'+k);
+    case 'action': case 'project': return [];
+    default: {
+      const kids=childrenOf(id).map(c=>c.id);
+      const dps=DEPTS.filter(d=>d.kpis.includes(id)).map(d=>d.id);
+      const prjs=projects.filter(p=>p.goal===id && p.start<=i).map(p=>p.id);
+      return kids.concat(dps, prjs);
+    }
+  }
+}
+function lineageOf(id){
+  const path=[]; let cur=id, guard=0;
+  while(cur && guard++<12){ path.unshift(cur); cur=parentOf(cur); }
+  return path;
+}
+function nodeName(id){
+  switch(kindOf(id)){
+    case 'root': return ENT_NAME;
+    case 'org': return ORG_NODES[id].name;
+    case 'ops': return '운영';
+    case 'dept': return DEPT_OF[id].name;
+    case 'step': return STEP_OF[id].name;
+    case 'action': { const o=ontoEntry(id); return o.world ? '전략 월드 — 오피스 관리비'
+      : (o.act ? ACT_OF[o.act].name : OTYPE[o.type].name+' 객체'); }
+    case 'project': { const p=projects.find(x=>x.id===id); return p ? p.name : id; }
+    default: return T_OF[id].name;
+  }
+}
+function nodeHex(id){
+  switch(kindOf(id)){
+    case 'org': return ORG_NODES[id].hex;
+    case 'root': case 'ops': return '#79b8ff';
+    case 'dept': return DEPT_OF[id].hex;
+    case 'step': case 'action': { const s=STEP_OF[kindOf(id)==='step'?id:id.split(':')[1]]; return DEPT_OF[s.dept].hex; }
+    case 'project': { const p=projects.find(x=>x.id===id); return PHASE_OF[TMPL_PHASE[p.tmpl]||'sales'].hex; }
+    default: return AREA_HEX[areaAncestor(id)?.id] || '#79b8ff';
+  }
+}
+function ontoEntry(actId){ const [,sid,k]=actId.split(':'); return STEP_OF[sid].onto[+k]; }
+// 부문의 이번 달 게이트 요약 (원장 스텝만)
+function deptGates(deptId, i){
+  const acts=DEPT_OF[deptId].steps.filter(s=>s.ledger).map(s=>s.id);
+  return gatesAt(i).filter(g=>acts.includes(g.act));
+}
+// 스텝의 이번 달 상태 요약
+function stepStatus(stepId, i){
+  const s=STEP_OF[stepId];
+  if(!s.ledger) return CADENCE_KO[s.cadence]+' 운영';
+  const chain=gatesAt(i).filter(g=>g.act===s.id);
+  if(!chain.length) return '창 대기';
+  const cur=chain.find(c=>['검토대기','실행중','반려'].includes(c.status))||chain[chain.length-1];
+  return cur.gate+' '+cur.status;
+}
+
+// ── 시설 에너지 + HVAC 전략 레버 (온톨로지 leaf → 상향 전파) ────────────────
+const hvacLever = {peak:0, pre:0, applied:false};   // 피크 +°C · 예냉 -°C (조정은 전략 월드에서)
+const facRows = i => FAC.byYm.get(MONTHS[i]) || [];
+const energyCostRaw = i => facRows(i).reduce((s,r)=>s+FAC.get(r,'cost_usd'),0);
+const hvacPeakKwh = i => facRows(i).reduce((s,r)=>s+FAC.get(r,'kwh_peak_hvac'),0);   // 항온존 제외
+function hvacSavings(i, peak, pre){
+  peak = peak??hvacLever.peak; pre = pre??hvacLever.pre;
+  if(!peak && !pre) return 0;
+  const hp = hvacPeakKwh(i);
+  const seasonF = EN.cool_months.includes(i%12+1) ? 1 : EN.offseason_factor;
+  const s1 = hp*EN.degc_sens*peak*EN.rate_peak;                                      // 피크 설정 +°C
+  const s2 = hp*EN.precool_shift*(pre/2)*(EN.rate_peak-(1+EN.precool_penalty)*EN.rate_off); // 예냉 이동
+  return (s1+s2)*seasonF;
+}
+const leverSave = i => hvacLever.applied ? hvacSavings(i) : 0;
+
+// ── bind 키 → 월별 값 (온톨로지 데이터에서 한 단계씩 롤업) ─────────────────
+const msum = (i,f) => Object.entries(mv(i).models).reduce((s,[mid,m])=>s+f(m,MODEL_OF[mid]),0);
+const isSUV = md => md.seg.includes('SUV') && !md.ev;
+function industryOf(i){
+  const y = Math.floor(i/12);
+  return Object.entries(EN.ind_base).reduce((s,[seg,b])=>
+    s + b*SEAS[i%12]*(1+0.03*y)*(seg.includes('EV')?(1+0.18*y):1), 0);
+}
+function partsProfit(i){                             // k$ → $ 는 사용처에서
+  return (PARTS.byYm.get(MONTHS[i])||[]).reduce((s,r)=>
+    s+(PARTS.get(r,'cp_sales_kusd')+PARTS.get(r,'warranty_sales_kusd')
+      +PARTS.get(r,'campaign_sales_kusd'))*PARTS.get(r,'sc_margin_pct')/100, 0);
+}
+const revOf = i => msum(i,(m,md)=>m.ws*md.msrp*NPF*0.9);      // 도매 인보이스 ≈ MSRP×NPF×0.9
+const opexOf = i => energyCostRaw(i) - leverSave(i) + EN.opex_lease + EN.opex_fixed_etc;
+const recurAmt = i => msum(i,m=>m.op) + partsProfit(i)*1000 - opexOf(i);
+const captiveOf = i => msum(i,m=>m.retail)*EN.captive_pen*EN.captive_unit;
+function bindVal(key, i){
+  switch(key){
+    case 'ws':     return msum(i,m=>m.ws);
+    case 'ord':    return msum(i,m=>m.ws);
+    case 'op':     return msum(i,m=>m.op);
+    case 'asp':    return msum(i,(m,md)=>m.retail*(md.msrp*NPF-m.inc))/msum(i,m=>m.retail);
+    case 'mixprem':return msum(i,(m,md)=>m.retail*md.msrp*(NPF-0.92))/msum(i,m=>m.retail);
+    case 'incunit':return msum(i,m=>m.retail*m.inc)/msum(i,m=>m.retail);
+    case 'recur':  return recurAmt(i)/revOf(i)*100;
+    case 'comb':   return recurAmt(i)+captiveOf(i);
+    case 'combr':  return (recurAmt(i)+captiveOf(i))/revOf(i)*100;
+    case 'rev':    return revOf(i);
+    case 'opex':   return opexOf(i);
+    case 'energy': return energyCostRaw(i)-leverSave(i);
+    case 'lease':  return GOV.zones.reduce((s,z)=>s+z.rent,0);      // 구역 임차 계약 합
+    case 'parts':  return partsProfit(i);
+    case 'freight':return msum(i,(m,md)=>m.ws*D.freight[md.plant]);
+    case 'captive':return captiveOf(i);
+    case 'suv':    return msum(i,(m,md)=>isSUV(md)?m.retail:0);
+    case 'suvinc': return msum(i,(m,md)=>isSUV(md)?m.retail*m.inc:0)/Math.max(1,msum(i,(m,md)=>isSUV(md)?m.retail:0));
+    case 'share':  return msum(i,m=>m.retail)/industryOf(i)*100;
+    case 'industry':return industryOf(i);
+    case 'ev':     return msum(i,(m,md)=>md.ev?m.retail:0);
+    case 'm_TRN': case 'm_VST': case 'm_AUR': case 'm_LUM': return mvm(i,key.slice(2)).retail;
+    case 'ds':     { const st=msum(i,m=>m.stock), rt=msum(i,m=>m.retail); return st/Math.max(rt/30.4,1); }
+    case 'csisvc': return D.csi_internal[Math.min(i,NOW)].service;
+    case 'csidlv': return D.csi_internal[Math.min(i,NOW)].delivery;
+    case 'voc':    { const rows=VOC.byYm.get(MONTHS[i])||[]; const cnt=rows.reduce((s,r)=>s+VOC.get(r,'voc_cnt'),0);
+                     const uio=MODELS.reduce((s,m)=>s+260000*m.share*(1+0.03*i/12),0); return cnt/(uio/1000); }
+    case 'camp':   { const rows=(ACTIONS.byYm.get(MONTHS[i])||[]).filter(r=>ACTIONS.get(r,'target_vins')>0);
+                     if(!rows.length) return 100;
+                     return rows.reduce((s,r)=>s+ACTIONS.get(r,'applied_vins_cum')/ACTIONS.get(r,'target_vins'),0)/rows.length*100; }
+    case 'brand':  { const mkt=msum(i,m=>m.mkt);
+                     return 55 + 10*Math.log(1+mkt/15) + (D.csi_internal[Math.min(i,NOW)].total-90)*0.8; }
+    case 'adstock':{ const mkt=msum(i,m=>m.mkt); return 50 + mkt*0.32; }
+  }
+  return null;
+}
+// 기준값: 판매·이익 계열 = BP / 비용 계열 = 전년 동월 / 지수 = 고정 목표
+function bindRef(node, i){
+  const bp = D.bp[i] ? Object.entries(D.bp[i].models) : [];
+  const bsum = f => bp.reduce((s,[mid,m])=>s+f(m,MODEL_OF[mid]),0);
+  const bpRev = bsum((m,md)=>m.ws*md.msrp*NPF*0.9);
+  const OPEX_BUDGET = 2_950_000;                       // 관리비 예산 (연간 계획)
+  switch(node.bind){
+    case 'ws': case 'ord': return bsum(m=>m.ws);
+    case 'op':     return bsum(m=>m.op);
+    case 'suv':    return bsum((m,md)=>isSUV(md)?m.retail:0);
+    case 'ev':     return bsum((m,md)=>md.ev?m.retail:0);
+    case 'm_TRN': case 'm_VST': case 'm_AUR': case 'm_LUM':
+      return D.bp[i] ? D.bp[i].models[node.bind.slice(2)].retail : 0;
+    case 'recur':  return 2.2;                           // 판매법인 경상이익률 목표 (유통업 마진 구조)
+    case 'comb':   return bsum(m=>m.op) + partsProfit(i)*1000 + bsum(m=>m.retail)*EN.captive_pen*EN.captive_unit - OPEX_BUDGET;
+    case 'combr':  { const c=bsum(m=>m.op)+partsProfit(i)*1000+bsum(m=>m.retail)*EN.captive_pen*EN.captive_unit-OPEX_BUDGET;
+                     return c/bpRev*100; }
+    case 'rev':    return bpRev;
+    case 'share':  return 9.0;
+    case 'ds':     return DS_TARGET;
+    case 'csisvc': case 'csidlv': return 90;
+    case 'brand':  return 75;
+    case 'camp':   return 90;
+    case 'adstock':return 78;
+    case 'asp': case 'mixprem': return i>=12 ? bindVal(node.bind,i-12)*1.02 : bindVal(node.bind,i);
+    default:       return i>=12 ? bindVal(node.bind,i-12) : bindVal(node.bind,i);   // 비용 계열: 전년 동월
+  }
+}
+// 달성률(0~1.3) — 미연결(bind='')은 null
+function attain(node, i){
+  if(!node.bind) return null;
+  const v = bindVal(node.bind,i), r = bindRef(node,i);
+  if(v==null || !isFinite(v) || !r) return null;
+  let a;
+  if(node.dir==='~') a = 1 - Math.abs(v-r)/r;
+  else if(node.dir==='-') a = r/Math.max(v,1e-9);
+  else a = v/r;
+  return Math.max(0, Math.min(1.3, a));
+}
+function areaScore(areaId, i){   // 가중 달성률 + 커버리지 (미연결 KPI 제외 가중 평균)
+  const ks = childrenOf(areaId);
+  let wa=0, ws_=0, wAll=0;
+  ks.forEach(k=>{ wAll+=k.w; const a=attain(k,i); if(a!=null){ wa+=k.w*a; ws_+=k.w; } });
+  return {score: ws_?wa/ws_:null, covered: ws_, total: wAll, nNa: ks.filter(k=>attain(k,i)==null).length};
+}
+function ceoScore(i){
+  let wa=0, ws_=0, nNa=0;
+  AREAS.forEach(a=>{ const s=areaScore(a.id,i); if(s.score!=null){ wa+=a.w*s.score; ws_+=a.w; } nNa+=s.nNa; });
+  return {score: ws_?wa/ws_:null, nNa};
+}
+const lampOf = a => a==null ? 'na' : (a>=0.98?'on':(a>=0.92?'warn':'crit'));
+function valFmt(node, i){
+  if(!node.bind) return '미연결';
+  return unitFmt(node, bindVal(node.bind,i));
+}
+function refFmt(node, i){ return unitFmt(node, bindRef(node,i)); }
+function unitFmt(node, v){
+  if(v==null || !isFinite(v)) return '—';
+  switch(node.unit){
+    case '$':   return Math.abs(v)>=1e6 ? fmtM(v) : (Math.abs(v)>=1e4 ? fmtK(v) : CUR+fmt(v));
+    case 'k$':  return CUR+f1(v/1000)+'M';
+    case '%':   return f1(v)+'%';
+    case '점':  return f1(v)+'점';
+    case '일':  return f1(v)+'일';
+    case '/1k': return f1(v)+'/1k';
+    case '대':  return fmt(v)+'대';
+  }
+  return f1(v);
+}
+// 세션에서 데이터 수집 프로젝트가 신설된 미연결 노드 → '수집중' 배지
+const dataProjects = new Set();
+
+/* ═══════════ PART B. 게이트 원장 (세션 결재 오버라이드) ═══════════ */
+const gateOverride = new Map();
+const gkey = (ym,act,g) => ym+'|'+act+'|'+g;
+function gatesAt(i){
+  const ym = MONTHS[i];
+  return (GATES.byYm.get(ym)||[]).map(r=>({ym, act:r[1], phase:r[2], seq:r[3], gate:r[4], name:r[5],
+    typ:r[6], owner:r[7], status:gateOverride.get(gkey(ym,r[1],r[4])) || r[8]}));
+}
+function pendingGates(i){ return gatesAt(i).filter(g=>g.status==='검토대기' && g.typ==='hitl'); }
+function approveGate(actId, gateId, reject){
+  const ym = MONTHS[cursor];
+  const chain = gatesAt(cursor).filter(g=>g.act===actId);
+  const k = chain.findIndex(g=>g.gate===gateId);
+  if(k<0) return false;
+  gateOverride.set(gkey(ym,actId,gateId), reject?'반려':'승인');
+  if(!reject) for(let j=k+1;j<chain.length;j++){
+    const g = chain[j];
+    if(g.typ==='hitl'){ gateOverride.set(gkey(ym,actId,g.gate),'검토대기'); break; }
+    gateOverride.set(gkey(ym,actId,g.gate),'실행완료');
+  }
+  seek(cursor);
+  return true;
+}
+const GATE_ST_BADGE = {'승인':'good','실행완료':'ai','실행중':'ai','검토대기':'warn','반려':'crit','예정':''};
+
+/* ═══════════ PART C. 프로젝트 (원장 + 세션 추가) ═══════════ */
+const ODB = window.buildOntologyInstances ? buildOntologyInstances(D) : null;
+const projects = GOV.projects.map(p=>({...p, added:false}));
+const sessionReviews = [];
+let prjSeq = 0;
+function prjReviews(pid, i){
+  const rows = REVIEWS.rows.filter(r=>r[1]===pid && MONTHS.indexOf(r[0])<=i)
+    .map(r=>({ym:r[0], metric:r[4], expect:r[5], actual:r[6], verdict:r[7]}));
+  return rows.concat(sessionReviews.filter(r=>r.pid===pid).map(r=>({ym:r.ym,metric:r.metric,expect:r.expect,actual:'—',verdict:'측정중'})));
+}
+function prjLatest(p, i){ const rs = prjReviews(p.id, i); return rs.length ? rs[rs.length-1] : null; }
+function resolveLink(key){
+  if(ODB && ODB.objects[key]){
+    const o = ODB.objects[key];
+    const nlinks = (ODB.linksFrom[key]||[]).length + (ODB.linksTo[key]||[]).length;
+    return {key, title:o.title, links:nlinks, found:true};
+  }
+  return {key, title:key.split(':')[1], links:0, found:false};
+}
+// 컴포저 템플릿 기대 임팩트 — V8 시뮬레이션과 동일 계열 수식 (탄력·adstock·수렴·HVAC)
+function tmplImpact(tmpl, mid, zid, i){
+  const md = MODEL_OF[mid] || MODELS[0];
+  const m = mvm(i, md.id);
+  const zshare = zid ? (ZONES.find(z=>z.id===zid)||{share:1}).share : 1;
+  switch(tmpl){
+    case 'incent': { const dr = m.retail*zshare*0.048;
+      return {metric:`${md.id} 소매 증분(대/월)`, expect:Math.round(dr),
+        note:`인센티브 +$300 → 탄력 기반 소매 <b>+${fmt(dr)}대/월</b> · 이익 트레이드오프 −${fmtM(m.retail*zshare*300)}`}; }
+    case 'media': { const dr = m.retail*zshare*0.03;
+      return {metric:`${md.id} 소매 증분(대/월)`, expect:Math.round(dr),
+        note:`매체 +$0.5M (adstock 0.5 로그 체감) → 소매 <b>+${fmt(dr)}대/월</b> · 인지 리치 +8%p`}; }
+    case 'order': return {metric:'셀 DS 편차(일)', expect:10,
+      note:`DoS Weight 재배분 → 과잉/부족 셀 DS가 목표 ${DS_TARGET}일 밴드로 <b>±10일 내 수렴</b> (재고 수렴 0.5/월)`};
+    case 'quality': return {metric:'클레임/1k', expect:0.5,
+      note:`TSB/OTA 조치 → 클레임 3개월 내 <b>0.5/1k 이하</b> 소멸 → 내부 지수 +1.5점 회복`};
+    case 'parts': return {metric:'DN/Factory 갭 %', expect:4.5,
+      note:`가격 개정 → 갭 <b>4.5% 이하</b> → 워런티 블렌디드 마진 +0.8pt`};
+    case 'facility': { const sv = hvacSavings(i,2,2);
+      return {metric:'월 전력비 절감 $', expect:Math.round(sv),
+        note:`HVAC 피크 +2°C · 예냉 −2°C → <b>${fmtK(sv)}/월 절감</b> → 관리비 → 경상이익률 상향`}; }
+    case 'data': return {metric:'데이터 커버리지 %', expect:100,
+      note:`미연결 지표의 수집 파이프라인 구축 → 온톨로지 바인딩 → <b>레버 신설 가능</b> 상태로 전환`};
+    default: return {metric:'런칭 준비율 %', expect:100, note:'게이트 G1~G4 통과 → 런칭 준비율 100%'};
+  }
+}
+function addProject(opt){
+  const tmpl = GOV.templates.find(t=>t.id===opt.tmpl) || GOV.templates[0];
+  const imp = tmplImpact(tmpl.id, opt.model, opt.zone, cursor);
+  prjSeq++;
+  const links = [];
+  if(opt.model) links.push('model:'+opt.model);
+  if(opt.zone) links.push('salesZone:'+opt.zone);
+  if(tmpl.id==='facility') links.push('facility:FC-EAST','facility:FC-WEST');
+  if(tmpl.id==='quality') links.push('qualityCampaign:OTA-2606-LUM');
+  if(tmpl.id==='parts'||tmpl.id==='data') links.push('salesCompany:SC-US');
+  const goal = opt.goal || tmpl.goal || 'AR-FIN';
+  const p = {id:'PRJ-NEW-'+prjSeq,
+    name:opt.name || `${tmpl.name}${opt.model?' — '+opt.model:''}${opt.zone?'·'+opt.zone:''}`,
+    goal, tmpl:tmpl.id, model:opt.model||'', start:cursor, end:null,
+    status:'구성중', metric:imp.metric, expect:imp.expect, links, lower:'', added:true};
+  projects.push(p);
+  sessionReviews.push({pid:p.id, ym:MONTHS[cursor], metric:imp.metric, expect:imp.expect});
+  if(tmpl.id==='data') dataProjects.add(goal);
+  seek(cursor);
+  return p;
+}
+
+/* ═══════════ PART D. 중앙 씬 — 온톨로지 관계뷰 (업스트림 · 포커스 · 다운스트림) ═══════════ */
+let cursor = NOW, selId = null, focusId = ROOT_ID;
+const scene = $('scene'), tip = $('tip');
+const TMPL_PHASE = {order:'order', incent:'sales', media:'marketing', quality:'quality', parts:'service', product:'product', facility:'service', data:'quality'};
+const PRJ_ST_BADGE = {'완결':'good','진행중':'warn','구성중':'ai'};
+
+function tipShow(e, html){ tip.innerHTML=html; tip.style.display='block';
+  const r=tip.getBoundingClientRect();
+  tip.style.left=Math.min(e.clientX+14, innerWidth-r.width-10)+'px';
+  tip.style.top=Math.min(e.clientY+12, innerHeight-r.height-10)+'px'; }
+function tipHide(){ tip.style.display='none'; }
+function ortho(x1,y1,x2,y2,my){ return `M${x1} ${y1} V${my} H${x2} V${y2}`; }
+
+// 관계뷰 레이아웃 — 업스트림 행(상단) · 포커스 카드(중앙) · 다운스트림 행(하단)
+// 씬 설계 공간: 폭 1240 고정, 높이(SH)는 컨테이너 종횡비에 맞춰 계산 — 레터박스 없이
+// Y축 영역 전체를 채운다. 티어 Y는 SH에 비례 배치, 리사이즈 시 재계산.
+const UP_Y=34, UP_H=54, C_H=106, C_W=330, DN_H=104, CX=620;
+let SH=584, C_Y=176, DN_Y=386;
+function layoutScene(){
+  const wrap=$('sceneWrap');
+  const w=wrap.clientWidth||1240, h=wrap.clientHeight||584;
+  SH=Math.round(Math.min(820, Math.max(430, 1240*h/Math.max(w,1))));
+  DN_Y=SH-DN_H-16;
+  C_Y=Math.round((UP_Y+UP_H+DN_Y)/2-C_H/2);
+}
+const KIND_CLS={root:'gNode',ops:'gNode',area:'gNode',kpi:'kNode',node:'nNode',
+  dept:'sNode',step:'wNode',project:'pNode',action:'aNode'};
+const trunc=(s,n)=>String(s).length>n?String(s).slice(0,n-1)+'…':String(s);
+const lampFill=l=>l==='na'?'var(--na)':(l==='on'?'var(--good)':(l==='warn'?'var(--warn)':'var(--crit)'));
+
+// 카드 본문 — 종류별 요약 2줄 + 램프 + (있으면) 달성률 바
+const kindLbl = id => kindOf(id)==='org' ? ORG_NODES[id].lbl : KIND_LBL[kindOf(id)];
+function cardInfo(id,i){
+  switch(kindOf(id)){
+    case 'org': {
+      if(ORG_NODES[id].planned)
+        return {sub1:'트윈 미구축', sub2:'데이터 연결 계획 — 온톨로지 planned 선언 대상',
+          lamp:'var(--na)', na:true, bar:null};
+      const cs=ceoScore(i);
+      return {sub1:`관할 판매법인 3 · 트윈 구축 1 (미국)`,
+        sub2:`${ENT_NAME} 종합 ${cs.score!=null?f1(cs.score*100)+'%':'—'} — 권역 롤업은 트윈 확장 대상`,
+        lamp:lampFill(lampOf(cs.score)), bar:cs.score};
+    }
+    case 'root': { const cs=ceoScore(i);
+      return {sub1:`회사 종합 가중 달성률 ${cs.score!=null?f1(cs.score*100)+'%':'—'}`,
+        sub2:`영역 4 · KPI ${KPIS.length} · 부문 ${DEPTS.length}${cs.nNa?` · 미연결 KPI ${cs.nNa}`:''}`,
+        lamp:lampFill(lampOf(cs.score)), bar:cs.score}; }
+    case 'ops': { const gr=gatesAt(i), pend=gr.filter(g=>g.status==='검토대기').length;
+      return {sub1:`부문 ${DEPTS.length} · 이번 달 게이트 ${gr.length}건`,
+        sub2:`검토대기 ${pend} · AI 위임 ${gr.filter(g=>g.typ==='ai').length} — 부문 워크플로우`,
+        lamp:pend?'var(--warn)':'var(--good)', bar:null}; }
+    case 'area': { const s=areaScore(id,i);
+      return {sub1:s.score!=null?`가중 달성률 ${f1(s.score*100)}%`:'데이터 미연결',
+        sub2:`KPI ${childrenOf(id).length}개 · 연결 ${f1(s.covered/s.total*100)}%${s.nNa?` · 미연결 ${s.nNa}`:''}`,
+        lamp:lampFill(lampOf(s.score)), w:T_OF[id].w, bar:s.score}; }
+    case 'kpi': case 'node': { const n=T_OF[id], a=attain(n,i);
+      const na=!n.bind && !hasBoundDesc(id);
+      const sub2 = n.bind ? `기준 ${refFmt(n,i)} · 달성률 ${a!=null?f1(a*100)+'%':'—'}`
+        : (dataProjects.has(id)?'수집중 — 데이터 수집 프로젝트':(hasBoundDesc(id)?'부분 연결 (하위 일부 바인딩)':'미연결 — 프로젝트 신설 대상'));
+      return {sub1:valFmt(n,i), sub2, lamp:lampFill(lampOf(a)), na, w:n.lv==='kpi'?n.w:0, bar:n.bind?a:null}; }
+    case 'dept': { const d=DEPT_OF[id], gr=deptGates(id,i), pend=gr.filter(g=>g.status==='검토대기').length;
+      return {sub1:`스텝 ${d.steps.length} · 이번 달 게이트 ${gr.length}건${pend?` · 검토대기 ${pend}`:''}`,
+        sub2:`기여 KPI: ${d.kpis.map(k=>T_OF[k]?(T_OF[k].short||T_OF[k].name):k).join(' · ')}`,
+        lamp:pend?'var(--warn)':'var(--good)', bar:null}; }
+    case 'step': { const s=STEP_OF[id], st=stepStatus(id,i);
+      const lamp = s.ledger ? (st.includes('검토대기')?'var(--warn)':(st.includes('반려')?'var(--crit)':'var(--good)'))
+        : (s.typ==='hitl'?'var(--hitl)':(s.typ==='ai'?'var(--ai)':'var(--auto)'));
+      return {sub1:`${CADENCE_KO[s.cadence]||s.cadence} · ${s.owner}`,
+        sub2:st+(s.ledger?'':` · ${s.typ==='hitl'?'HITL':(s.typ==='ai'?'AI 위임':'자동')}`),
+        lamp, na:!s.onto.length, bar:null}; }
+    case 'action': { const o=ontoEntry(id);
+      return {sub1:o.world?'전략 월드 소환 (레버·시뮬)':(o.act?OTYPE[ACT_OF[o.act].objectType].name+' 객체':OTYPE[o.type].name+' 객체'),
+        sub2:'클릭: 온톨로지 데이터뷰 실행', lamp:'var(--edge-hi)', bar:null}; }
+    default: { const p=projects.find(x=>x.id===id), lt=prjLatest(p,i);
+      const st=p.end!=null&&i>p.end?'완결':(p.added?'구성중':p.status);
+      return {sub1:`${st}${lt?' · '+lt.verdict:''}`, sub2:p.metric, lamp:'var(--ai)', bar:null}; }
+  }
+}
+function tipHtml(id,i){
+  const k=kindOf(id), info=cardInfo(id,i), dn=relDown(id,i).length;
+  const hint = k==='action'?'클릭: 온톨로지 데이터뷰 실행'
+    : (dn?`다운스트림 ${dn}개 — 클릭: 관계뷰 이동`:'클릭: 관계뷰 이동');
+  return `<b>${esc(nodeName(id))} — ${kindLbl(id)}</b>${esc(info.sub1||'')}<br>${esc(info.sub2||'')}<span class="mut"><br>${hint}</span>`;
+}
+function clickCard(id){
+  if(kindOf(id)==='action') runOntoAction(id);
+  else gotoFocus(id);
+}
+function drawCard(parent,id,x,y,w,h,i){
+  const kind=kindOf(id), info=cardInfo(id,i);
+  const g=el('g',{class:'rel '+(KIND_CLS[kind]||'nNode')+(selId===id?' sel':'')},parent);
+  g.dataset.nid=id; cardGeom[id]={x,y,w,h};             // FLIP 애니메이션용 지오메트리
+  el('rect',{x,y,width:w,height:h,rx:8,class:'gBox'+(info.na?' na':'')},g);
+  el('rect',{x,y,width:3,height:h,rx:1.5,fill:nodeHex(id),opacity:.9},g);
+  const maxCh=Math.max(4,Math.floor((w-(info.w?38:18))/10.5));
+  el('text',{x:x+10,y:y+17,class:'kName'},g).textContent=trunc(nodeName(id),maxCh);
+  if(info.w) el('text',{x:x+w-8,y:y+16,class:'kW','text-anchor':'end'},g).textContent=info.w+'%';
+  el('text',{x:x+10,y:y+34,class:'gVal',style:'font-size:10.5px'},g).textContent=trunc(info.sub1||'',Math.floor((w-16)/9));
+  if(h>=70){
+    el('text',{x:x+10,y:y+50,class:'kVal',fill:info.na?'var(--na)':''},g).textContent=trunc(info.sub2||'',Math.floor((w-16)/8.6));
+    const dn=relDown(id,i).length;
+    if(dn && kind!=='action') el('text',{x:x+10,y:y+h-11,class:'kVal'},g).textContent=`↳ 다운스트림 ${dn}`;
+    if(kind==='action') el('text',{x:x+10,y:y+h-11,class:'kVal',fill:'var(--edge-hi)'},g).textContent='◈ 데이터뷰 실행';
+  }
+  el('circle',{cx:x+w-11,cy:y+h-12,r:3.5,fill:info.lamp},g);
+  g.addEventListener('click',()=>clickCard(id));
+  g.addEventListener('mousemove',e=>tipShow(e,tipHtml(id,i)));
+  g.addEventListener('mouseleave',tipHide);
+  return g;
+}
+function chipBtn(parent,x,y,label,fn){
+  const g=el('g',{class:'rel',style:'cursor:pointer'},parent);
+  const w=label.length*9.8+24;
+  el('rect',{x,y,width:w,height:22,rx:11,fill:'var(--surface2)',stroke:'var(--edge-hi)','stroke-width':1},g);
+  el('text',{x:x+11,y:y+15,class:'gSub',fill:'var(--edge-hi)'},g).textContent=label;
+  g.addEventListener('click',fn);
+  return g;
+}
+// 포커스 바로가기 — 실제 구현된 월드가 있는 객체에만 칩을 노출한다.
+// 객체별로 운영/전략 월드가 구축되는 대로 아래 매핑에 추가 (온톨로지 진입은 워크플로우 액션 경유).
+function focusShortcuts(id){
+  const k=kindOf(id), out=[];
+  if(k==='dept') out.push({lbl:'◎ 부문 운영 월드', fn:()=>openDeptWorld(id)});
+  if(k==='step') out.push({lbl:'◎ 운영 월드 — '+DEPT_OF[STEP_OF[id].dept].name, fn:()=>openDeptWorld(STEP_OF[id].dept)});
+  if(id===ROOT_ID||id===OPS_ID) out.push({lbl:'◎ 운영 월드 V9', fn:()=>openWorld('v9')});
+  if(id===ROOT_ID) out.push({lbl:'⚙ 전략 월드 V8', fn:()=>openWorld('v8')});
+  if(id==='ND-OPEX'||id==='ND-ENERGY')
+    out.push({lbl:'⚡ 전략 월드 — 관리비', fn:()=>openWorld('opex',`#i=${cursor}&peak=${hvacLever.peak}&pre=${hvacLever.pre}`)});
+  if(id==='DEPT-IT' || (k==='step'&&STEP_OF[id].dept==='DEPT-IT'))
+    out.push({lbl:'⚡ 전략 월드 — 차량 데이터', fn:()=>openWorld('vdata',`#i=${cursor}`)});
+  if(id==='DEPT-SVC'||id==='DEPT-QLT'||id==='KPI-CSIS'||(k==='step'&&['DEPT-SVC','DEPT-QLT'].includes(STEP_OF[id].dept)))
+    out.push({lbl:'◎ 차량 트윈 — VIN', fn:()=>openWorld('vintwin',`#i=${cursor}`)});
+  return out;
+}
+function drawCenter(parent,id,i){
+  const kind=kindOf(id), info=cardInfo(id,i);
+  const x=CX-C_W/2, y=C_Y;
+  const g=el('g',{class:'cNode'},parent);
+  g.dataset.nid=id; cardGeom[id]={x,y,w:C_W,h:C_H};     // FLIP 애니메이션용 지오메트리
+  el('rect',{x,y,width:C_W,height:C_H,rx:11,class:'gBox'+(info.na?' na':'')},g);
+  el('rect',{x,y,width:C_W,height:3,rx:1.5,fill:nodeHex(id),opacity:.9},g);
+  el('text',{x:x+14,y:y+27,class:'cName'},g).textContent=trunc(nodeName(id),19);
+  el('text',{x:x+C_W-12,y:y+22,class:'kindChip','text-anchor':'end'},g).textContent=
+    kindLbl(id)+(info.w?` · 가중치 ${info.w}%`:'');
+  el('text',{x:x+14,y:y+50,class:'gVal'},g).textContent=trunc(info.sub1||'',34);
+  el('text',{x:x+14,y:y+68,class:'gSub'},g).textContent=trunc(info.sub2||'',42);
+  if(info.bar!=null){
+    el('rect',{x:x+14,y:y+80,width:C_W-70,height:5,rx:2.5,fill:'var(--line)'},g);
+    el('rect',{x:x+14,y:y+80,width:Math.min(1,info.bar)*(C_W-70),height:5,rx:2.5,fill:nodeHex(id)},g);
+  }
+  el('circle',{cx:x+C_W-16,cy:y+C_H-15,r:4,fill:info.lamp},g);
+  g.addEventListener('mousemove',e=>
+    tipShow(e,`<b>${esc(nodeName(id))} — ${kindLbl(id)}</b>${esc(info.sub1||'')}<br>${esc(info.sub2||'')}<span class="mut"><br>상세 = 우측 패널 · 시계열 = 하단 그래프</span>`));
+  g.addEventListener('mouseleave',tipHide);
+  // 바로가기 칩 — 실제 구현된 운영/전략 월드만 (헤더 버튼 대체, 객체별 점진 확장)
+  focusShortcuts(id).forEach((s,k)=>chipBtn(parent,x+C_W+14,y+2+k*28,s.lbl,s.fn));
+}
+
+let particles = [];
+// FLIP 씬 전환 애니메이션 (온톨로지 관계뷰와 동일한 감각) — 포커스가 바뀔 때만:
+// 이전 씬에도 있던 카드는 옛 위치→새 위치로 슬라이드(클릭 카드→중앙, 중앙→업스트림),
+// 새로 나타나는 카드·칩과 엣지·파티클은 이동이 끝나갈 때 페이드 인. Play(월 이동)는 애니메이션 없음.
+let cardGeom={}, prevGeom={}, lastFocusRendered=null, animInfo={moved:0,entered:0};
+function animateScene(gNode,gEdge,gPart){
+  animInfo={moved:0,entered:0};
+  const EASE='cubic-bezier(.33,.1,.2,1)';
+  gNode.querySelectorAll(':scope > g').forEach(g=>{
+    const id=g.dataset.nid;
+    const np=id?cardGeom[id]:null, pp=id?prevGeom[id]:null;
+    if(np&&pp){
+      const dx=(pp.x+pp.w/2)-(np.x+np.w/2), dy=(pp.y+pp.h/2)-(np.y+np.h/2);
+      if(Math.abs(dx)+Math.abs(dy)<1) return;
+      animInfo.moved++;
+      g.style.transform=`translate(${dx}px,${dy}px)`;                 // First: 옛 위치에서 시작
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        g.style.transition=`transform .38s ${EASE}`;                  // Play: 새 위치로 슬라이드
+        g.style.transform='translate(0,0)';
+      }));
+    } else {
+      animInfo.entered++;
+      g.style.opacity='0';
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        g.style.transition='opacity .32s ease .05s';   // 이동과 겹치게 빠른 페이드 — 중간 프레임 공백 방지
+        g.style.opacity='1';
+      }));
+    }
+  });
+  [gEdge,gPart].forEach(l=>{
+    l.style.opacity='0';
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      l.style.transition='opacity .3s ease .15s';
+      l.style.opacity='1';
+    }));
+  });
+}
+function renderScene(i){
+  const doAnim = lastFocusRendered!==null && lastFocusRendered!==focusId;
+  lastFocusRendered=focusId;
+  prevGeom=cardGeom; cardGeom={};
+  scene.innerHTML=''; particles=[];
+  const gEdge=el('g',{},scene), gNode=el('g',{},scene), gPart=el('g',{},scene);
+  const up=relUp(focusId), down=relDown(focusId,i);
+  el('text',{x:28,y:20,class:'tierLbl'},scene).textContent =
+    up.length?'업스트림 — 상향 롤업 (클릭: 이동)':'업스트림 — 최상위';
+  el('text',{x:28,y:C_Y-10,class:'tierLbl'},scene).textContent='포커스';
+  el('text',{x:28,y:DN_Y-10,class:'tierLbl'},scene).textContent =
+    down.length?'다운스트림 — 실행 · 데이터 (클릭: 이동)':'다운스트림';
+  // 업스트림 행 + 상향(롤업) 엣지: 포커스 → 업스트림
+  const uw=200, ugap=16, ux0=CX-(up.length*uw+(up.length-1)*ugap)/2;
+  up.forEach((uid,k)=>{
+    const x=ux0+k*(uw+ugap);
+    drawCard(gNode,uid,x,UP_Y,uw,UP_H,i);
+    const p=el('path',{d:ortho(CX,C_Y,x+uw/2,UP_Y+UP_H,(C_Y+UP_Y+UP_H)/2),class:'edgeP',stroke:'var(--good)'},gEdge);
+    particles.push({path:p,len:p.getTotalLength(),t:(k*0.31)%1,speed:.0035,color:'#4cc38a',r:2});
+  });
+  drawCenter(gNode,focusId,i);
+  // 다운스트림 행 (최대 9 + 넘침 타일) + 실행→포커스 엣지
+  const MAXD=9, show=down.slice(0,MAXD), more=down.length-show.length;
+  const n=show.length+(more>0?1:0);
+  if(n){
+    const gap=12, w=Math.min(200,Math.max(118,(1240-56-(n-1)*gap)/n));
+    const x0=Math.max(28, CX-(n*w+(n-1)*gap)/2);
+    show.forEach((did,k)=>{
+      const x=x0+k*(w+gap);
+      drawCard(gNode,did,x,DN_Y,w,DN_H,i);
+      const hex=nodeHex(did);
+      const p=el('path',{d:ortho(x+w/2,DN_Y,CX,C_Y+C_H,(DN_Y+C_Y+C_H)/2),class:'edgeP',stroke:hex},gEdge);
+      particles.push({path:p,len:p.getTotalLength(),t:(k*0.37)%1,speed:.004,color:hex,r:2});
+    });
+    if(more>0){
+      const x=x0+show.length*(w+gap);
+      const g=el('g',{class:'nNode'},gNode);
+      el('rect',{x,y:DN_Y,width:w,height:DN_H,rx:8,class:'gBox na'},g);
+      el('text',{x:x+10,y:DN_Y+20,class:'kName'},g).textContent=`외 ${more}개`;
+      el('text',{x:x+10,y:DN_Y+38,class:'kVal'},g).textContent='우측 패널 기여 프로젝트 참조';
+    }
+  } else {
+    el('text',{x:CX,y:DN_Y+40,class:'gSub','text-anchor':'middle'},gNode).textContent =
+      kindOf(focusId)==='action' ? '' :
+      '연결된 다운스트림 없음 — 데이터 수집 프로젝트 신설 대상 (우측 패널에서 신설)';
+  }
+  // 폐루프 피드백 채널 (우측): 실행 실적이 업스트림으로 돌아온다
+  const fx=1226;
+  const fb=el('path',{d:`M${fx} ${DN_Y+DN_H-24} V${UP_Y+26} H${Math.min(1160,ux0+up.length*(uw+ugap))}`,
+    class:'edgeF',stroke:'var(--good)','stroke-dasharray':'5 4'},gEdge);
+  el('text',{x:fx-4,y:(C_Y+DN_Y)/2,class:'tierLbl','text-anchor':'middle',
+    transform:`rotate(-90 ${fx-4} ${(C_Y+DN_Y)/2})`,fill:'var(--good)'},gEdge).textContent='실적 피드백';
+  for(let k=0;k<3;k++) particles.push({path:fb,len:fb.getTotalLength(),t:k/3,speed:.0022,color:'#4cc38a',r:2});
+  // 레버 적용 배지
+  if(hvacLever.applied){
+    const g=el('g',{},gNode);
+    el('rect',{x:CX-160,y:C_Y+C_H+22,width:320,height:19,rx:9,
+      fill:'color-mix(in srgb,var(--good) 14%,transparent)',stroke:'var(--good)','stroke-width':1},g);
+    el('text',{x:CX-150,y:C_Y+C_H+35.5,class:'gSub',fill:'var(--good)'},g).textContent=
+      `⚡ HVAC 레버 적용 중 — 이번 달 절감 ${fmtK(hvacSavings(i))} → 경상이익률 반영`;
+  }
+  particles.forEach(p=>{p.dot=el('circle',{r:p.r,fill:p.color,opacity:.85},gPart);});
+  if(doAnim) animateScene(gNode,gEdge,gPart);
+}
+// ── 포커스 그래프 (씬 아래) — 포커스 대상의 32개월 시계열 + FORECAST, Play 커서 연동 ──
+// 예측 = 학습 모델 v0 (시즌 지수 + 선형 추세, 32개월 실적을 학습) — 온톨로지 mlModel
+// ML-KPI-FCST-V0 레지스트리가 서빙 주체. 가상 데이터 주입(레버)은 전략 월드에서 미래를 재생성.
+function fitForecastV0(va){
+  const pts=va.map((v,j)=>[j,v]).filter(([,v])=>v!=null&&isFinite(v));
+  if(pts.length<18) return null;
+  const mean=pts.reduce((s,[,v])=>s+v,0)/pts.length;
+  if(!isFinite(mean)||mean===0) return null;
+  const bym=Array.from({length:12},()=>[]);
+  pts.forEach(([j,v])=>bym[j%12].push(v));
+  const seas=bym.map(a=>a.length?a.reduce((s,v)=>s+v,0)/a.length/mean:1);
+  let n=0,sx=0,sy=0,sxy=0,sxx=0;
+  pts.forEach(([j,v])=>{ const y=v/(seas[j%12]||1); n++; sx+=j; sy+=y; sxy+=j*y; sxx+=j*j; });
+  const b=(n*sxy-sx*sy)/((n*sxx-sx*sx)||1), a=(sy-b*sx)/n;
+  return j=>(a+b*j)*(seas[j%12]||1);
+}
+function withFc(s){
+  const fit=fitForecastV0(s.va);
+  if(fit) s.fc=Array.from({length:12},(_,k)=>fit(NOW+1+k));
+  return s;
+}
+function seriesOf(id){
+  const k=kindOf(id);
+  if(k==='kpi'||k==='node'){
+    const n=T_OF[id];
+    if(!n.bind) return null;
+    const va=[],vr=[];
+    for(let j=0;j<=NOW;j++){ va.push(bindVal(n.bind,j)); vr.push(bindRef(n,j)); }
+    return withFc({label:`${n.name} — 실적 vs 기준`, refLbl:n.dir==='-'?'기준(전년 동월)':'기준(BP·목표)',
+      vf:v=>unitFmt(n,v), va, vr});
+  }
+  if(k==='area'||k==='root'||(k==='org'&&!ORG_NODES[id].planned)){
+    const va=[],vr=[];
+    for(let j=0;j<=NOW;j++){ const s=k==='area'?areaScore(id,j):ceoScore(j);
+      va.push(s.score!=null?s.score*100:null); vr.push(100); }
+    return withFc({label:`${nodeName(id)} — 가중 달성률`, refLbl:'목표 100%', vf:v=>f1(v)+'%', va, vr});
+  }
+  if(k==='ops'||k==='dept'){
+    const va=[],vr=[];
+    for(let j=0;j<=NOW;j++){ const gr=k==='ops'?gatesAt(j):deptGates(id,j);
+      va.push(gr.filter(g=>['승인','실행완료','실행중'].includes(g.status)).length); vr.push(gr.length); }
+    return {label:`${nodeName(id)} — 월 게이트 처리`, refLbl:'전체 게이트', vf:v=>fmt(v)+'건', va, vr};
+  }
+  if(k==='step'){
+    const s=STEP_OF[id];
+    if(!s.ledger) return null;
+    const va=[],vr=[];
+    for(let j=0;j<=NOW;j++){ const gr=gatesAt(j).filter(g=>g.act===id);
+      va.push(gr.filter(g=>['승인','실행완료','실행중'].includes(g.status)).length); vr.push(gr.length); }
+    return {label:`${s.name} — 월 게이트 처리`, refLbl:'전체 게이트', vf:v=>fmt(v)+'건', va, vr};
+  }
+  if(k==='project'){
+    const p=projects.find(x=>x.id===id);
+    const rows=prjReviews(id,NOW);
+    if(!rows.length) return null;
+    const va=Array(NOW+1).fill(null), vr=Array(NOW+1).fill(null);
+    rows.forEach(r=>{ const j=MONTHS.indexOf(r.ym); if(j<0||j>NOW) return;
+      const a=parseFloat(r.actual); if(isFinite(a)) va[j]=a;
+      const e=parseFloat(r.expect); if(isFinite(e)) vr[j]=e; });
+    return {label:`${p.name} — 실측 vs 기대 (${p.metric})`, refLbl:'기대', vf:v=>f1(v), va, vr};
+  }
+  if(k==='action') return seriesOf(id.split(':')[1]);
+  return null;
+}
+// 그래프 캔버스 — 실제 픽셀 크기 기준 viewBox (전략 월드 차트와 동일 문법) + 줌/팬/리셋
+let GW=1240, GH=200, graphZoom=null, graphHit=null, dwHit=null;
+function initGraph(){
+  const svg=$('graphSvg');
+  const measure=()=>{ GW=Math.max(600, svg.clientWidth||1240); GH=Math.max(140, svg.clientHeight||200); };
+  measure();
+  svg.setAttribute('viewBox',`0 0 ${GW} ${GH}`);
+  graphZoom=enableZoomPan(svg,GW,GH);          // 휠 확대 · 드래그 이동 · 더블클릭 리셋 (씬과 동일)
+  // 패널 리사이즈(창 크기 변화 포함) → 실제 픽셀 크기로 뷰박스 재계산 — 레터박스 없이 항상 꽉 차게
+  let rafR=0;
+  new ResizeObserver(()=>{ if(rafR) return; rafR=requestAnimationFrame(()=>{ rafR=0;
+    const w0=GW,h0=GH; measure();
+    if(w0!==GW||h0!==GH){ graphZoom.setBase(GW,GH); renderGraph(cursor); }
+  });}).observe($('graphWrap'));
+}
+function renderGraph(i){
+  const svg=$('graphSvg'), ttl=$('graphTtl');
+  svg.innerHTML=''; graphHit=null;
+  const s=seriesOf(focusId), name=nodeName(focusId);
+  const zoomHint='<span style="margin-left:auto">실선 실적 · 점선 기준 · 세로선 Play 커서 · 호버 값 · 클릭 이동 · 휠 확대/더블클릭 리셋</span>';
+  if(!s){
+    ttl.innerHTML=`<b>${esc(name)}</b><span>시계열 데이터 미연결 — 데이터 수집 프로젝트 신설 대상</span>`;
+    el('text',{x:GW/2,y:GH/2,class:'gAxis','text-anchor':'middle'},svg).textContent=
+      '시계열 데이터 미연결 — 우측 패널에서 데이터 수집 프로젝트를 신설하면 바인딩된다';
+    return;
+  }
+  const r=drawSeriesChart(svg,s,i,GW,GH);
+  if(!r){ ttl.innerHTML=`<b>${esc(name)}</b><span>데이터 없음</span>`; return; }
+  graphHit={s, geom:r.geom};
+  const fcSpan=s.fc?`<span>+12M 예측 <span style="color:var(--edge-hi)">${esc(s.vf(s.fc[s.fc.length-1]))}</span> · 학습 v0 — 레버는 전략 월드</span>`:'';
+  ttl.innerHTML=`<b>${esc(s.label)}</b>
+    <span>${MONTHS[i]} <span class="cv">${r.cur!=null&&isFinite(r.cur)?esc(s.vf(r.cur)):'—'}</span></span>
+    <span>${esc(s.refLbl)} ${r.ref!=null&&isFinite(r.ref)?esc(s.vf(r.ref)):'—'}</span>${fcSpan}${zoomHint}`;
+}
+// 시계열 차트 공용 렌더러 — 포커스 그래프·부문 운영 월드 트렌드 밴드가 같은 문법을 쓴다
+function drawSeriesChart(svg,s,i,W,H){
+  const FH=s.fc?s.fc.length:0;                        // FORECAST 구간 (학습 v0)
+  const all=s.va.concat(s.vr,s.fc||[]).filter(v=>v!=null&&isFinite(v));
+  if(!all.length) return null;
+  const PL=64,PR=16,PT=14,PB=24;
+  const mn0=Math.min(...all), mx0=Math.max(...all);
+  const pad=(mx0-mn0)*0.08 || Math.abs(mx0)*0.05 || 1;
+  const mn=mn0-pad, mx=mx0+pad, sp=mx-mn;
+  const X=j=>PL+j/Math.max(NOW+FH,1)*(W-PL-PR), Y=v=>H-PB-(v-mn)/sp*(H-PT-PB);
+  // Y 그리드 4단 + 라벨 (건수 등 반올림으로 같은 라벨이 겹치면 생략)
+  let prevLbl=null;
+  for(let k=0;k<=4;k++){
+    const v=mn+sp*k/4, y=Y(v);
+    el('line',{x1:PL,y1:y,x2:W-PR,y2:y,stroke:'var(--line)','stroke-width':1,opacity:k?0.55:0.9},svg);
+    const lbl=s.vf(v);
+    if(lbl!==prevLbl){ el('text',{x:PL-7,y:y+3.5,class:'gAxis','text-anchor':'end'},svg).textContent=lbl; prevLbl=lbl; }
+  }
+  // X 라벨 — 4개월 간격 + 눈금
+  for(let j=0;j<=NOW+FH;j+=4){
+    el('line',{x1:X(j),y1:H-PB,x2:X(j),y2:H-PB+4,stroke:'var(--edge)','stroke-width':1},svg);
+    el('text',{x:X(j),y:H-8,class:'gAxis','text-anchor':'middle'},svg).textContent=MONTHS[j].slice(2);
+  }
+  // FORECAST 구간 — NOW 분리선 + 학습 v0 예측 (점선, 미래 배경 워터마크)
+  if(FH){
+    el('rect',{x:X(NOW),y:PT,width:X(NOW+FH)-X(NOW),height:H-PT-PB,fill:'rgba(121,184,255,.045)'},svg);
+    el('line',{x1:X(NOW),y1:PT,x2:X(NOW),y2:H-PB,stroke:'var(--crit)','stroke-width':1,opacity:.5,'stroke-dasharray':'3 3','vector-effect':'non-scaling-stroke'},svg);
+    el('text',{x:X(NOW)+4,y:H-PB-6,class:'gAxis',fill:'var(--crit)'},svg).textContent='NOW';
+    const last=s.va[NOW];
+    let d=(last!=null&&isFinite(last))?`M${X(NOW).toFixed(1)} ${Y(last).toFixed(1)}`:'';
+    s.fc.forEach((v,k)=>{ if(v==null||!isFinite(v)) return; d+=(d?'L':'M')+X(NOW+1+k).toFixed(1)+' '+Y(v).toFixed(1); });
+    el('path',{d,fill:'none',stroke:'var(--edge-hi)','stroke-width':1.5,'stroke-dasharray':'5 4',opacity:.6,'vector-effect':'non-scaling-stroke'},svg);
+    el('text',{x:X(NOW+FH)-4,y:PT+10,class:'gAxis','text-anchor':'end',fill:'var(--edge-hi)',opacity:.8},svg)
+      .textContent='FORECAST · 학습 v0 (시즌+추세)';
+  }
+  const pth=a=>{ let d='',pen=false;
+    a.forEach((v,j)=>{ if(v==null||!isFinite(v)){pen=false;return;}
+      d+=(pen?'L':'M')+X(j).toFixed(1)+' '+Y(v).toFixed(1); pen=true; });
+    return d; };
+  el('path',{d:pth(s.vr),fill:'none',stroke:'var(--edge)','stroke-width':1,'stroke-dasharray':'4 3','vector-effect':'non-scaling-stroke'},svg);
+  el('path',{d:pth(s.va),fill:'none',stroke:'var(--edge-hi)','stroke-width':1.8,'vector-effect':'non-scaling-stroke'},svg);
+  // Play 커서 — 세로선 + 월 라벨 + 현재값 마커
+  el('line',{x1:X(i),y1:PT,x2:X(i),y2:H-PB,stroke:'var(--warn)','stroke-width':1.2,opacity:.85,'vector-effect':'non-scaling-stroke'},svg);
+  el('text',{x:Math.min(X(i)+4,W-PR-46),y:PT+9,class:'gCur'},svg).textContent=MONTHS[i];
+  const cur=s.va[i], ref=s.vr[i];
+  if(cur!=null&&isFinite(cur)){
+    el('circle',{cx:X(i),cy:Y(cur),r:4,fill:'var(--edge-hi)',stroke:'var(--page)','stroke-width':1.5},svg);
+    el('text',{x:Math.min(X(i)+7,W-PR-60),y:Y(cur)-7,class:'gAxis',fill:'var(--edge-hi)'},svg).textContent=s.vf(cur);
+  }
+  return {cur,ref,geom:{PL,PR,PT,PB,W,H,maxJ:NOW+FH}};
+}
+// 시계열 차트 호버 — 크로스헤어 + 월별 값 툴팁 + 클릭 = 해당 월 이동 (포커스 그래프·부문 트렌드 공용)
+function attachSeriesHover(svg,getHit){
+  const idxOf=e=>{ const h=getHit(); if(!h) return null;
+    const g=h.geom, vb=svg.viewBox.baseVal, r=svg.getBoundingClientRect();
+    if(!r.width||!vb.width) return null;
+    const ux=vb.x+(e.clientX-r.left)/r.width*vb.width;
+    return Math.max(0,Math.min(g.maxJ,Math.round((ux-g.PL)/(g.W-g.PL-g.PR)*Math.max(g.maxJ,1))));
+  };
+  svg.addEventListener('mousemove',e=>{
+    const h=getHit(), j=idxOf(e);
+    if(j==null){ tipHide(); return; }
+    const g=h.geom, s=h.s;
+    svg.querySelector('.cxHv')?.remove();
+    const x=g.PL+j/Math.max(g.maxJ,1)*(g.W-g.PL-g.PR);
+    el('line',{class:'cxHv',x1:x,y1:g.PT,x2:x,y2:g.H-g.PB,
+      stroke:'var(--edge)','stroke-width':1,'stroke-dasharray':'2 3','vector-effect':'non-scaling-stroke'},svg);
+    const fv=v=>v!=null&&isFinite(v)?esc(s.vf(v)):'—';
+    const body = j<=NOW
+      ? `실적 ${fv(s.va[j])} · ${esc(s.refLbl)} ${fv(s.vr[j])}`
+      : `예측(학습 v0) ${fv(s.fc?s.fc[j-NOW-1]:null)}`;
+    tipShow(e,`<b>${MONTHS[j]}${j>NOW?' · FORECAST':''}</b>${body}<span class="mut"><br>클릭: 해당 월로 이동 (실적 구간)</span>`);
+  });
+  svg.addEventListener('mouseleave',()=>{ tipHide(); svg.querySelector('.cxHv')?.remove(); });
+  svg.addEventListener('click',e=>{ const j=idxOf(e); if(j!=null) seek(Math.min(NOW,j)); });
+}
+// 관계뷰 이동 — 노드를 중심으로 업/다운스트림 재배치 + 씬·그래프·우 패널 동시 갱신
+function refreshFocusViews(){
+  renderScene(cursor); renderCrumb(); renderGraph(cursor);
+  renderFocusPanel(cursor); renderPrjList(cursor);
+}
+function gotoFocus(id){
+  focusId=id; selId=id;
+  refreshFocusViews();
+}
+function renderCrumb(){
+  const host=$('sceneCrumb');
+  const path=lineageOf(focusId);
+  let html='';
+  path.forEach((id,k)=>{
+    if(k) html+='<span class="sep">›</span>';
+    html += k===path.length-1 ? `<span class="cur">${esc(nodeName(id))}</span>`
+      : `<button data-nav="${id}">${esc(nodeName(id))}</button>`;
+  });
+  const saved=quickLinks.includes(focusId);
+  html+=`<button id="btnQL"${saved?' disabled style="opacity:.55;cursor:default"':''}>${saved?'★ 저장됨':'★ Quick Link 저장'}</button>`;
+  html+=`<span class="hint">카드 클릭: 이동 · ESC: 상위 · 상세: 우측 패널 · 시계열: 하단 그래프</span>`;
+  host.innerHTML=html;
+  host.querySelectorAll('button[data-nav]').forEach(b=>b.addEventListener('click',()=>gotoFocus(b.dataset.nav)));
+  if(!saved) $('btnQL').addEventListener('click',()=>{ addQuickLink(focusId); renderCrumb(); });
+}
+// 워크플로우 스텝의 온톨로지 액션 실행 → 온톨로지 데이터뷰 (탐색기 딥링크)
+function runOntoAction(id){
+  const o=ontoEntry(id); if(!o) return;
+  if(o.world==='opex'){ openWorld('opex',`#i=${cursor}&peak=${hvacLever.peak}&pre=${hvacLever.pre}`); return; }
+  if(o.world==='vdata'){ openWorld('vdata',`#i=${cursor}`); return; }
+  if(o.act) openWorld('onto','#act:'+o.act);
+  else if(o.type) openWorld('onto','#focus:'+o.type);
+}
+// 하위에 bound 자손이 있는지 (folder의 미연결 판정)
+function hasBoundDesc(id){
+  return childrenOf(id).some(c=>c.bind || hasBoundDesc(c.id));
+}
+// 씬 확대(휠)·이동(드래그)·초기화(더블클릭) — 드래그 후 클릭 오발동은 캡처 단계에서 차단
+function enableZoomPan(svg, W, H){
+  const vb={x:0,y:0,w:W,h:H};
+  // 확대 상태에서는 뷰포트를 콘텐츠 영역 안으로 클램프 — 드래그로 전체가 화면 밖으로 나가지 않게
+  const apply=()=>{
+    if(vb.w<=W) vb.x=Math.max(0,Math.min(W-vb.w,vb.x));
+    if(vb.h<=H) vb.y=Math.max(0,Math.min(H-vb.h,vb.y));
+    svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  };
+  const pt=e=>{const r=svg.getBoundingClientRect();
+    return {x:vb.x+(e.clientX-r.left)/r.width*vb.w, y:vb.y+(e.clientY-r.top)/r.height*vb.h};};
+  svg.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const k=e.deltaY>0?1.12:1/1.12, p=pt(e);
+    const nw=Math.min(W*1.4, Math.max(W*0.15, vb.w*k)), nh=nw*H/W;
+    vb.x=p.x-(p.x-vb.x)*nw/vb.w; vb.y=p.y-(p.y-vb.y)*nh/vb.h; vb.w=nw; vb.h=nh; apply();
+  },{passive:false});
+  let pan=null, moved=false;
+  // 드래그 추적은 항상(드래그 후 클릭 오발동 차단용) — 실제 이동(팬)은 확대 중일 때만
+  svg.addEventListener('pointerdown',e=>{
+    pan={x:e.clientX,y:e.clientY,vx:vb.x,vy:vb.y,go:vb.w<W-0.5}; moved=false;});
+  window.addEventListener('pointermove',e=>{
+    if(!pan) return;
+    if(!(e.buttons&1)){ pan=null; return; }   // pointerup 유실(창 밖·iframe 경계에서 릴리스) → 팬 고착 방지
+    if(Math.abs(e.clientX-pan.x)+Math.abs(e.clientY-pan.y)>4) moved=true;
+    if(!moved || !pan.go) return;
+    const r=svg.getBoundingClientRect();
+    vb.x=pan.vx-(e.clientX-pan.x)*vb.w/r.width;
+    vb.y=pan.vy-(e.clientY-pan.y)*vb.h/r.height;
+    apply();
+  });
+  window.addEventListener('pointerup',()=>{pan=null; setTimeout(()=>moved=false,0);});
+  svg.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();}},true);
+  svg.addEventListener('dblclick',()=>{vb.x=0;vb.y=0;vb.w=W;vb.h=H;apply();});
+  // 기준 크기 갱신 (컨테이너 리사이즈 대응) — 줌은 초기화
+  const setBase=(nw,nh)=>{W=nw;H=nh;vb.x=0;vb.y=0;vb.w=nw;vb.h=nh;apply();};
+  return {view:()=>({...vb}), setBase};
+}
+let raf=null;
+function tickParticles(){
+  for(const p of particles){
+    p.t=(p.t+p.speed)%1;
+    const pt=p.path.getPointAtLength(p.t*p.len);
+    p.dot.setAttribute('cx',pt.x); p.dot.setAttribute('cy',pt.y);
+  }
+  for(const p of dwParticles){                       // 부문 운영 월드 씬 파티클
+    p.t=(p.t+p.speed)%1;
+    const pt=p.path.getPointAtLength(p.t*p.len);
+    p.dot.setAttribute('cx',pt.x); p.dot.setAttribute('cy',pt.y);
+  }
+  raf=requestAnimationFrame(tickParticles);
+}
+
+/* ═══════════ PART E. 좌우 패널 — Quick Link · 회사 목표 · AI 위임 · 결재함 · 프로젝트 ═══════════ */
+// Quick Link — 자주 가는 관계뷰 바로가기 (세션 간 유지: localStorage)
+const QL_KEY='v10_quicklinks';
+const QL_DEFAULT=[ROOT_ID,'AR-FIN','AR-BIZ','AR-ESG',OPS_ID,'ND-ENERGY','DEPT-SLS'];
+let quickLinks;
+try{ quickLinks=JSON.parse(localStorage.getItem(QL_KEY)||'null'); }catch(e){ quickLinks=null; }
+if(!Array.isArray(quickLinks) || !quickLinks.length) quickLinks=[...QL_DEFAULT];
+quickLinks = quickLinks.filter(id=>{ try{ return !!nodeName(id); }catch(e){ return false; } });
+function saveQL(){ try{ localStorage.setItem(QL_KEY, JSON.stringify(quickLinks)); }catch(e){} }
+function addQuickLink(id){
+  if(!quickLinks.includes(id)) { quickLinks.push(id); saveQL(); }
+  renderQuickLinks();
+}
+function removeQuickLink(id){
+  quickLinks=quickLinks.filter(x=>x!==id); saveQL(); renderQuickLinks(); renderCrumb();
+}
+function renderQuickLinks(){
+  const host=$('qlList'); host.innerHTML='';
+  quickLinks.forEach(id=>{
+    const c=document.createElement('button');
+    c.className='qlRow';
+    c.innerHTML=`<i style="background:${nodeHex(id)}"></i>${esc(nodeName(id))}
+      <span class="k">${kindLbl(id)||''}</span><span class="x" title="삭제">✕</span>`;
+    c.addEventListener('click',e=>{
+      if(e.target.classList.contains('x')){ e.stopPropagation(); removeQuickLink(id); return; }
+      gotoFocus(id);
+    });
+    host.appendChild(c);
+  });
+}
+function renderGoals(i){
+  const host=$('goalList'); host.innerHTML='';
+  const cs = ceoScore(i);
+  const cLamp = lampOf(cs.score);
+  const ceo=document.createElement('button');
+  ceo.className='goalCard';
+  ceo.style.borderLeftColor='var(--edge-hi)';
+  ceo.innerHTML=`<div class="nm">회사 종합<span class="lamp ${cLamp}"></span></div>
+    <div class="v1">${cs.score!=null?f1(cs.score*100)+'%':'—'}</div>
+    <div class="v2">14 KPI 가중 달성률${cs.nNa?` · 미연결 ${cs.nNa}개 → 프로젝트`:''}</div>
+    <div class="bar"><i style="width:${Math.min(100,(cs.score||0)*100)}%;background:var(--edge-hi)"></i></div>`;
+  ceo.addEventListener('click',()=>gotoFocus(ROOT_ID));
+  host.appendChild(ceo);
+  AREAS.forEach(ar=>{
+    const s=areaScore(ar.id,i), lamp=lampOf(s.score);
+    const c=document.createElement('button');
+    c.className='goalCard'+(selId===ar.id?' sel':'');
+    c.style.borderLeftColor=AREA_HEX[ar.id];
+    c.innerHTML=`<div class="nm">${ar.name}<span class="w">${ar.w}%</span><span class="lamp ${lamp}"></span></div>
+      <div class="v1">${s.score!=null?f1(s.score*100)+'%':'—'}</div>
+      <div class="v2">KPI ${childrenOf(ar.id).length}개${s.nNa?` · 미연결 ${s.nNa}`:' · 전체 연결'}</div>
+      <div class="bar"><i style="width:${Math.min(100,(s.score||0)*100)}%;background:${AREA_HEX[ar.id]}"></i></div>`;
+    c.addEventListener('click',()=>gotoFocus(ar.id));
+    host.appendChild(c);
+  });
+  // 운영 카드 — 부문 워크플로우 허브
+  const gr=gatesAt(i), pend=gr.filter(g=>g.status==='검토대기').length;
+  const ops=document.createElement('button');
+  ops.className='goalCard'+(selId===OPS_ID?' sel':'');
+  ops.style.borderLeftColor='#8f8d85';
+  ops.innerHTML=`<div class="nm">운영<span class="w">부문 ${DEPTS.length}</span><span class="lamp ${pend?'warn':'on'}"></span></div>
+    <div class="v1">게이트 ${gr.length}건</div>
+    <div class="v2">검토대기 ${pend} · AI 위임 ${gr.filter(g=>g.typ==='ai').length} — 부문 워크플로우</div>`;
+  ops.addEventListener('click',()=>gotoFocus(OPS_ID));
+  host.appendChild(ops);
+}
+function renderAgents(i){
+  const host=$('agtList'); host.innerHTML='';
+  const gr=gatesAt(i);
+  GOV.agents.forEach(a=>{
+    const mine=gr.filter(g=>g.owner===a.id);
+    const done=mine.filter(g=>['실행완료','실행중'].includes(g.status)).length;
+    const c=document.createElement('div');
+    c.className='agtCard';
+    c.innerHTML=`<div class="hd"><i></i>${esc(a.name)}<span class="st">${mine.length?`${done}/${mine.length} 실행`:'대기'}</span></div>
+      <div class="tk">${esc(a.task)} · 채택률 ${a.acc}%</div>`;
+    host.appendChild(c);
+  });
+}
+// ── 우 패널: 포커스 정보 — 관계뷰 중심 노드의 상세 (Play 커서 월 기준) ──────
+function renderFocusPanel(i){
+  $('focusTtl').textContent=`포커스 — ${nodeName(focusId)} · ${MONTHS[i]}`;
+  const host=$('focusInfo'), k=kindOf(focusId), info=cardInfo(focusId,i);
+  let html=`<div class="fiCard"><div class="hd"><i style="background:${nodeHex(focusId)}"></i>${esc(nodeName(focusId))}
+    <span class="k">${kindLbl(focusId)}</span></div>`;
+  if(k==='kpi'||k==='node'){
+    const n=T_OF[focusId], a=attain(n,i);
+    html+=`<div class="big">${valFmt(n,i)}</div>
+      <div class="ctx">기준 ${refFmt(n,i)} · 달성률 <b>${a!=null?f1(a*100)+'%':'—'}</b>${n.lv==='kpi'?` · 가중치 ${n.w}%`:''}</div>`;
+    const tgt=ENTC&&ENTC.kpis&&ENTC.kpis[focusId]&&ENTC.kpis[focusId].target;   // 프로필 §3 BP 목표(연)
+    if(tgt) html+=`<div class="ctx">BP 목표(연) <b>${esc(tgt)}</b> — 법인 프로필</div>`;
+    if(n.bind && BIND_DEF[n.bind]) html+=`<div class="ctx">${BIND_DEF[n.bind]}</div>`;
+    else if(!n.bind) html+=`<div class="ctx">${esc(info.sub2||'')}</div>`;
+    if(!n.bind && !hasBoundDesc(focusId) && !dataProjects.has(focusId))
+      html+=`<button class="fiBtn" data-dcp="1">＋ 데이터 수집 프로젝트 신설 — 파이프라인 → 바인딩</button>`;
+  } else {
+    html+=`<div class="big" style="font-size:13.5px">${esc(info.sub1||'')}</div>
+      <div class="ctx">${esc(info.sub2||'')}</div>`;
+  }
+  html+='</div>';
+  // 종류별 부가 정보 — 모두 커서 월(i) 기준이라 Play를 따라간다
+  if(k==='root'||(k==='org'&&focusId===HQ_ID)){
+    html+='<div class="fiCard"><div class="hd">영역 달성률</div>'+AREAS.map(ar=>{
+      const s=areaScore(ar.id,i);
+      return `<div class="fiRow" data-nav="${ar.id}"><i style="background:${AREA_HEX[ar.id]}"></i><span class="nm">${esc(ar.name)}</span>
+        <span class="st">${s.score!=null?f1(s.score*100)+'%':'—'} · ${ar.w}%</span></div>`;}).join('')+'</div>';
+  }
+  if(k==='ops'){
+    html+='<div class="fiCard"><div class="hd">부문 게이트 현황</div>'+DEPTS.map(d=>{
+      const gr=deptGates(d.id,i), pend=gr.filter(g=>g.status==='검토대기').length;
+      return `<div class="fiRow" data-nav="${d.id}"><i style="background:${d.hex}"></i><span class="nm">${esc(d.name)}</span>
+        <span class="st">게이트 ${gr.length}${pend?` · 대기 ${pend}`:''}</span></div>`;}).join('')+'</div>';
+  }
+  if(k==='dept'){
+    const d=DEPT_OF[focusId];
+    html+='<div class="fiCard"><div class="hd">워크플로우 스텝</div>'+d.steps.map(s=>
+      `<div class="fiRow" data-nav="${s.id}"><i style="background:${d.hex}"></i><span class="nm">${esc(s.name)}</span>
+        <span class="st">${esc(stepStatus(s.id,i))}</span></div>`).join('')+'</div>';
+    html+='<div class="fiCard"><div class="hd">기여 KPI</div>'+d.kpis.map(kid=>{
+      const n=T_OF[kid], a=n?attain(n,i):null;
+      return `<div class="fiRow" data-nav="${kid}"><i style="background:${nodeHex(kid)}"></i><span class="nm">${esc(n?n.name:kid)}</span>
+        <span class="st">${n?valFmt(n,i):''}${a!=null?` · ${f1(a*100)}%`:''}</span></div>`;}).join('')+'</div>';
+  }
+  if(k==='step'){
+    const s=STEP_OF[focusId];
+    const chain=s.ledger?gatesAt(i).filter(g=>g.act===focusId):[];
+    if(chain.length) html+='<div class="fiCard"><div class="hd">게이트 체인</div>'+chain.map(g=>{
+      const canAct=i===NOW && g.typ==='hitl' && g.status==='검토대기';
+      return `<div class="fiRow" style="cursor:default"><i style="background:${g.typ==='hitl'?'var(--hitl)':(g.typ==='ai'?'var(--ai)':'var(--auto)')}"></i>
+       <span class="nm">${g.gate} ${esc(g.name)}</span>
+       <span class="st">${canAct?`<button class="dBtn" style="padding:0 7px;color:var(--good);border-color:var(--good)" data-ok="${g.act}|${g.gate}">승인</button>`:g.status}</span></div>`;
+    }).join('')+'</div>';
+    if(s.onto.length) html+='<div class="fiCard"><div class="hd">온톨로지 액션 — 실행: 데이터뷰</div>'+
+      s.onto.map((o,kk)=>`<button class="fiBtn" data-act="ACT:${focusId}:${kk}">◈ ${o.world?'전략 월드 — 오피스 관리비'
+        :(o.act?esc(ACT_OF[o.act].name):esc(OTYPE[o.type].name)+' 객체')}</button>`).join('')+'</div>';
+  }
+  if(k==='project'){
+    const rows=prjReviews(focusId,i);
+    if(rows.length) html+='<div class="fiCard"><div class="hd">리뷰 원장 — 기대 vs 실측</div>'+
+      '<table class="dt"><tr><th>월</th><th class="num">기대</th><th class="num">실측</th><th>판정</th></tr>'+
+      rows.map(r=>`<tr><td>${r.ym}</td><td class="num">${r.expect}</td><td class="num">${r.actual}</td><td>${r.verdict}</td></tr>`).join('')+'</table></div>';
+  }
+  // 전력사용량 — 시설 원장 요약 (구역 상세·레버는 전략 월드 — 관리비)
+  if(focusId==='ND-ENERGY'){
+    const rows=facRows(i), byBld={};
+    rows.forEach(r=>{ const b=FAC.get(r,'building');
+      (byBld[b]=byBld[b]||{n:0,cost:0}); byBld[b].n++; byBld[b].cost+=FAC.get(r,'cost_usd'); });
+    html+='<div class="fiCard"><div class="hd">시설 원장 — '+MONTHS[i]+'</div>'+
+      Object.entries(byBld).map(([b,v])=>
+        `<div class="fiRow" style="cursor:default"><i style="background:var(--edge-hi)"></i><span class="nm">${esc(b)}</span>
+         <span class="st">구역 ${v.n} · ${fmtK(v.cost)}</span></div>`).join('')+
+      `<div class="ctx">항온존(서버실)은 레버 제외 · 구역×온도 상세와 레버는 [⚡ 전략 월드 — 관리비]</div>`;
+    if(hvacLever.applied)
+      html+=`<div class="ctx" style="color:var(--good)">⚡ HVAC 레버 적용 중 — 피크 +${hvacLever.peak}°C · 예냉 −${hvacLever.pre}°C · 이번 달 절감 ${fmtK(hvacSavings(i))}</div>`;
+    html+='</div>';
+  }
+  host.innerHTML=html;
+  host.querySelectorAll('[data-nav]').forEach(b=>b.addEventListener('click',()=>gotoFocus(b.dataset.nav)));
+  host.querySelectorAll('[data-act]').forEach(b=>b.addEventListener('click',()=>runOntoAction(b.dataset.act)));
+  host.querySelectorAll('[data-ok]').forEach(b=>b.addEventListener('click',()=>{
+    const [a,g]=b.dataset.ok.split('|'); approveGate(a,g);
+  }));
+  const dcp=host.querySelector('[data-dcp]');
+  if(dcp) dcp.addEventListener('click',()=>addProject({tmpl:'data', goal:focusId}));
+}
+// 기여 프로젝트 — 포커스 노드(하위 포함)에 기여하는 프로젝트만
+function focusPrjScope(){
+  const k=kindOf(focusId);
+  if(k==='area'||k==='kpi'||k==='node') return new Set([focusId,...descendantsOf(focusId)]);
+  if(k==='dept'||k==='step'||k==='action'){
+    const did=k==='dept'?focusId:(k==='step'?STEP_OF[focusId].dept:STEP_OF[focusId.split(':')[1]].dept);
+    const s=new Set();
+    DEPT_OF[did].kpis.forEach(kid=>{ s.add(kid); descendantsOf(kid).forEach(x=>s.add(x)); });
+    return s;
+  }
+  return null;                                    // root·ops·org·project = 전체
+}
+function renderPrjList(i){
+  const host=$('prjList'); host.innerHTML='';
+  const scope=focusPrjScope();
+  const list=projects.filter(p=>p.start<=i && (!scope || scope.has(p.goal)));
+  $('prjTtl').textContent=`기여 프로젝트 — ${scope?nodeName(focusId):'전체'} · ${list.length}건`;
+  if(!list.length)
+    host.innerHTML='<div class="fiCard"><div class="ctx">이 노드에 기여하는 프로젝트 없음 — [＋ 새 프로젝트]로 Top-down 구성</div></div>';
+  list.forEach(p=>{
+    const lt=prjLatest(p,i);
+    const st=p.end!=null&&i>p.end?'완결':(p.added?'구성중':p.status);
+    const vb=lt?(lt.verdict==='달성'?'good':(lt.verdict==='측정중'?'ai':'warn')):'';
+    const gp=pathOf(p.goal).map(n=>n.short||n.name).join(' › ');
+    const c=document.createElement('button');
+    c.className='prjCard';
+    c.innerHTML=`<div class="hd">${esc(p.name)}<span class="st badge ${PRJ_ST_BADGE[st]||''}">${st}</span></div>
+      <div class="ctx">${esc(gp)} · ${esc(p.metric)}${lt?` — 실측 <b>${lt.actual}</b> <span class="badge ${vb}">${lt.verdict}</span>`:''}</div>`;
+    c.addEventListener('click',()=>gotoFocus(p.id));
+    host.appendChild(c);
+  });
+}
+// ── 프로젝트 컴포저 ──────────────────────────────────
+function buildComposer(presetGoal){
+  const c=$('composer');
+  const tmplOpts=GOV.templates.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  const goalOpts=TREE.map(n=>{
+    const depth=pathOf(n.id).length-1;
+    return `<option value="${n.id}">${'· '.repeat(depth)}${n.name}</option>`;}).join('');
+  const mdlOpts='<option value="">—</option>'+MODELS.map(m=>`<option value="${m.id}">${m.id} ${m.name||''}</option>`).join('');
+  const znOpts='<option value="">전체</option>'+ZONES.map(z=>`<option value="${z.id}">${z.id}</option>`).join('');
+  c.innerHTML=`
+    <div class="row"><label>템플릿</label><select id="cTmpl">${tmplOpts}</select></div>
+    <div class="row"><label>KPI/노드</label><select id="cGoal">${goalOpts}</select></div>
+    <div class="row"><label>차종</label><select id="cModel">${mdlOpts}</select></div>
+    <div class="row"><label>지역</label><select id="cZone">${znOpts}</select></div>
+    <div class="impact" id="cImpact"></div>
+    <div class="links" id="cLinks"></div>
+    <button class="go" id="cGo">＋ 프로젝트 추가 — 씬·리뷰 원장에 반영</button>`;
+  const refresh=(keepGoal)=>{
+    const tmpl=$('cTmpl').value, mid=$('cModel').value, zid=$('cZone').value;
+    const t=GOV.templates.find(x=>x.id===tmpl);
+    if(!keepGoal && t.goal) $('cGoal').value=t.goal;
+    const imp=tmplImpact(tmpl,mid,zid,cursor);
+    $('cImpact').innerHTML=`<b>기대 임팩트</b> — ${imp.note}<br><span style="opacity:.75">측정 지표: ${imp.metric} · 기대 ${imp.expect}</span>`;
+    const links=(mid?['model:'+mid]:[]).concat(zid?['salesZone:'+zid]:[])
+      .concat(tmpl==='facility'?['facility:FC-EAST','facility:FC-WEST']:[]).map(resolveLink);
+    $('cLinks').innerHTML='연계 객체 (온톨로지): '+(links.length?links.map(l=>
+      `<span class="badge ${l.found?'good':''}">${esc(l.title)}${l.found?` · 링크 ${l.links}`:' (계획)'}</span>`).join(' '):'—');
+  };
+  ['cTmpl','cModel','cZone'].forEach(id=>$(id).addEventListener('change',()=>refresh(id!=='cTmpl')));
+  $('cGo').addEventListener('click',()=>{
+    const p=addProject({tmpl:$('cTmpl').value, goal:$('cGoal').value, model:$('cModel').value, zone:$('cZone').value});
+    c.classList.remove('open');
+    gotoFocus(p.id);
+  });
+  refresh(false);
+  if(presetGoal){ $('cGoal').value=presetGoal; refresh(true); }
+}
+$('btnAddPrj').addEventListener('click',()=>{
+  buildComposer(T_OF[focusId]?focusId:undefined);       // 포커스 노드를 목표로 프리셋
+  $('composer').classList.toggle('open');
+});
+
+/* ═══════════ PART F. 지표 정의(BIND_DEF) · 하위 트리 헬퍼 ═══════════ */
+const BIND_DEF={
+  asp:'ASP = Σ소매×(MSRP×믹스계수 − 인센티브) ÷ Σ소매 — <code>vin_retail</code>·<code>price_incentive</code>',
+  recur:'경상이익률 = (영업이익 + Parts 손익 − 오피스 관리비) ÷ 도매 매출 — <code>financials_pnl</code>·<code>parts_pnl</code>·<code>facility_energy</code>',
+  comb:'합산손익 = 경상이익 + 금융법인(캡티브) 손익 — 캡티브 = 소매 × 침투율 55% × 대당 $620',
+  combr:'합산손익률 = 합산손익 ÷ 도매 매출',
+  ws:'도매판매량 — 도매 시점 매출 인식 (<code>vin_wholesale</code>) · 기준 = BP',
+  suv:'볼륨 SUV(내연) 소매 = Terron + Vista — <code>agg_kpi</code> seg 필터 · 기준 = BP',
+  share:'시장점유율 = 자사 소매 ÷ 산업 수요 — <code>market_industry</code> 기저 미러 · 목표 9.0%',
+  ev:'친환경(EV) 소매 = Aurora + Lumen — 기준 = BP',
+  csisvc:'내부 지수 서비스 요소 (서비스 지연 기반) — <code>csi_internal</code> · 목표 90점',
+  csidlv:'내부 지수 인도 요소 (DS 페널티 기반) — <code>csi_internal</code> · 목표 90점',
+  brand:'브랜드트래커 = 55 + 10·ln(1+매체/15) + (내부지수−90)×0.8 — 파생 지수 · 목표 75점',
+  energy:'전력사용량 = Σ(피크 kWh×$0.29 + 비피크×$0.115) — <code>facility_energy</code> (동관/서관×층) · 온톨로지: facility·energyMeter',
+  opex:'오피스 관리비 = 전력 + 임차·시설 + 소모품(미연결 추정) — 경상이익률의 차감 항목',
+  parts:'Parts 손익 = 채널(CP/워런티/캠페인) 매출 × 블렌디드 마진 — <code>parts_pnl</code>',
+  voc:'VoC 발생률 = Σ건수 ÷ UIO(천대) — <code>voc_category</code>',
+  camp:'품질 캠페인 커버리지 = 적용 VIN ÷ 대상 VIN — <code>quality_actions</code>',
+  ds:'재고 일수 = 재고 ÷ 소매 속도 — 목표 60일 밴드',
+};
+function descendantsOf(id){
+  const out=[];
+  childrenOf(id).forEach(c=>{ out.push(c.id); out.push(...descendantsOf(c.id)); });
+  return out;
+}
+// ── 시설 뷰 (전력사용량 leaf — 3층 × 구역 그레인, 레버 조정은 전략 월드에서) ──
+
+/* ═══════════ PART G. 레버 세션 · 월드 오버레이 · 타임라인 · 초기화 ═══════════ */
+function setLever(id, v){
+  if(id==='peak') hvacLever.peak=v; else hvacLever.pre=v;
+  seek(cursor);
+}
+function applyLever(on){
+  hvacLever.applied=!!on && (hvacLever.peak>0 || hvacLever.pre>0);
+  if(on && !hvacLever.peak && !hvacLever.pre){ hvacLever.peak=2; hvacLever.pre=2; hvacLever.applied=true; }
+  seek(cursor);
+}
+const WORLDS = WREG.worlds;   // 소환 월드 카탈로그 — 레지스트리가 결정 (경로 하드코딩 금지)
+let worldKey=null, deptWorldId=null;
+// 제목줄은 하나 — 헤더 브레드크럼으로 열린 오버레이 스택(부문 운영 월드 › 소환 월드)을 표현
+function updateCrumb(){
+  const parts=[];
+  if(deptWorldId) parts.push('◎ 운영 월드 — '+DEPT_OF[deptWorldId].name);
+  if($('world').classList.contains('open') && worldKey) parts.push(WORLDS[worldKey].ttl);
+  if(parts.length){
+    $('hdCrumb').innerHTML=parts.map(p=>`<span class="sep">›</span> ${esc(p)}`).join(' ');
+    $('hdCrumb').style.display='flex';
+    $('btnBack').style.display='inline-block';
+  } else {
+    $('hdCrumb').style.display='none';
+    $('btnBack').style.display='none';
+  }
+}
+// 소환 월드 iframe — 다른 문서로 바뀔 때는 load 완료까지 숨겨 이전 월드의
+// 제목줄이 보였다가 재로드되며 바뀌는 플래시를 막는다. (같은 문서 + 해시만
+// 변경되는 재소환은 각 월드가 자체 베일로 상태를 선적용한다 — v7 탐색기 dlVeil)
+$('worldFrame').addEventListener('load',()=>$('worldFrame').classList.remove('loading'));
+function openWorld(k, hash){
+  const w=WORLDS[k]; if(!w) return;
+  const wf=$('worldFrame');
+  const next = hash!=null ? w.src.split('#')[0]+hash : w.src;
+  if(hash!=null || worldKey!==k){
+    const sameDoc = (wf.getAttribute('src')||'').split('#')[0] === next.split('#')[0];
+    if(!sameDoc) wf.classList.add('loading');
+    wf.src = next;
+  }
+  worldKey=k;
+  $('world').classList.add('open');
+  updateCrumb();
+}
+// ── 부문 운영 월드 — 판매법인 운영 월드(V9)와 동일 구성요소로 조직별 생성:
+//    상단 부문 탭 · 좌 레일(스텝 카드) · 중앙 씬(스테이션 체인+파티클+폐루프 리턴 채널)
+//    · 트렌드 밴드(공용 시계열 차트) · 우 실행 피드(게이트 승인·온톨로지 액션) · Play 푸터
+let dwSel=null, dwParticles=[];
+function openDeptWorld(id){
+  if(!DEPT_OF[id]) return;
+  if(deptWorldId!==id) dwSel=null;
+  deptWorldId=id;
+  $('deptWorld').classList.add('open');     // 먼저 열어야 씬·트렌드의 실제 크기를 잰다
+  renderDeptWorld();
+  updateCrumb();
+}
+function closeDeptWorld(){
+  deptWorldId=null; dwParticles=[];
+  $('deptWorld').classList.remove('open');
+  updateCrumb();
+}
+function dwSelect(id){ dwSel = dwSel===id ? null : id; renderDeptWorld(); }
+function renderDeptWorld(){
+  if(!deptWorldId) return;
+  const d=DEPT_OF[deptWorldId], i=cursor;
+  renderDwTabs(d,i); renderDwRail(d,i); renderDwScene(d,i); renderDwTrend(d,i); renderDwFeed(d,i);
+  $('dwYm').textContent=MONTHS[i];
+  $('dwTl').value=cursor;
+}
+function renderDwTabs(d,i){
+  $('dwTabs').innerHTML=DEPTS.map(x=>{
+    const pend=deptGates(x.id,i).filter(g=>g.status==='검토대기').length;
+    return `<button data-d="${x.id}" class="${x.id===deptWorldId?'on':''}"
+      style="${x.id===deptWorldId?`border-color:${x.hex}`:''}">${esc(x.name)}${pend?` <span style="color:var(--warn)">●${pend}</span>`:''}</button>`;
+  }).join('');
+  $('dwTabs').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>openDeptWorld(b.dataset.d)));
+}
+function renderDwRail(d,i){
+  const host=$('dwRail'); host.innerHTML='';
+  host.insertAdjacentHTML('beforeend',`<div class="railTtl">${esc(d.name)} 워크플로우 — 스텝 ${d.steps.length}</div>`);
+  d.steps.forEach(s=>{
+    const st=stepStatus(s.id,i);
+    const lamp=!s.onto.length?'na':(s.ledger?(st.includes('검토대기')?'warn':(st.includes('반려')?'crit':'on')):'on');
+    const c=document.createElement('button');
+    c.className='dwStep'+(dwSel===s.id?' sel':'');
+    c.style.borderLeftColor=d.hex;
+    c.innerHTML=`<div class="nm">${esc(s.name)}<span class="lamp ${lamp}"></span></div>
+      <div class="v2">${CADENCE_KO[s.cadence]||s.cadence} · ${esc(s.owner)} · ${esc(st)}</div>`;
+    c.addEventListener('click',()=>dwSelect(s.id));
+    host.appendChild(c);
+  });
+  const kpiBtns=d.kpis.map(k=>`<button class="dBtn" style="padding:1px 8px;margin:3px 3px 0 0" data-kpi="${k}">${esc(T_OF[k]?T_OF[k].name:k)}</button>`).join('');
+  host.insertAdjacentHTML('beforeend',
+    `<div class="railTtl" style="margin-top:12px">기여 KPI — 관계뷰로 이동</div>
+     <div class="fiCard"><div class="ctx">${esc(d.desc)}</div><div>${kpiBtns}</div></div>`);
+  host.querySelectorAll('[data-kpi]').forEach(b=>b.addEventListener('click',()=>{ closeDeptWorld(); gotoFocus(b.dataset.kpi); }));
+  // 연간 사이클 링 — 스텝별 12개월 실행 창 (V9 연간 링 문법)
+  host.insertAdjacentHTML('beforeend',
+    `<div class="railTtl" style="margin-top:12px">연간 사이클 링 — 월별 실행 창</div>
+     <div class="fiCard" style="padding:4px 4px 2px">
+       <svg id="dwRing" viewBox="0 0 204 204" style="width:100%;display:block"></svg>
+       <div class="ctx" style="font-size:10px;margin:0 5px 5px">바깥→안 = 스텝 순서 · 채운 점 = 실행 창 · 호버: 스텝 · 클릭: 선택</div>
+     </div>`);
+  drawDwRing(d,i);
+}
+// 연간 사이클 링: 12시 = 1월, 시계 방향 · 방사선 = 현재(커서) 월 · 링 = 스텝(바깥부터)
+function drawDwRing(d,i){
+  const svg=$('dwRing'); if(!svg) return;
+  const cx=102, cy=102, curM=i%12+1;
+  const ang=m=>((m-1)/12)*2*Math.PI-Math.PI/2;
+  const a0=ang(curM);
+  el('line',{x1:cx+Math.cos(a0)*32,y1:cy+Math.sin(a0)*32,x2:cx+Math.cos(a0)*90,y2:cy+Math.sin(a0)*90,
+    stroke:'var(--warn)','stroke-width':2,opacity:.5},svg);
+  for(let m=1;m<=12;m++){
+    const a=ang(m);
+    el('text',{x:cx+Math.cos(a)*97,y:cy+Math.sin(a)*97+3,class:'gAxis','text-anchor':'middle',
+      fill:m===curM?'var(--warn)':'var(--muted)','font-weight':m===curM?'700':'400'},svg).textContent=m;
+  }
+  d.steps.forEach((s,k)=>{
+    const r=86-k*13;
+    const g=el('g',{style:'cursor:pointer'},svg);
+    el('circle',{cx,cy,r,fill:'none',stroke:'var(--line)','stroke-width':.6,opacity:.6},g);
+    for(let m=1;m<=12;m++){
+      const a=ang(m), on=stepActiveMonth(s,m), cur=m===curM;
+      el('circle',{cx:cx+Math.cos(a)*r, cy:cy+Math.sin(a)*r,
+        r:on?(cur?4.2:3):1.6,
+        fill:on?d.hex:'var(--line)',
+        stroke:cur&&on?'var(--ink)':'none','stroke-width':1,
+        opacity:(dwSel&&dwSel!==s.id)?.3:(on?.95:.55)},g);
+    }
+    g.addEventListener('click',()=>dwSelect(s.id));
+    g.addEventListener('mousemove',e=>tipShow(e,
+      `<b>${esc(s.name)}</b>${CADENCE_KO[s.cadence]||s.cadence}${s.cadence==='annual'&&s.mFrom?` · ${s.mFrom}~${s.mTo}월 창`:''}${s.cadence==='event'?' · 이벤트 발생 시 (고정 창 없음)':''}<span class="mut"><br>클릭: 스텝 선택</span>`));
+    g.addEventListener('mouseleave',tipHide);
+  });
+  const actCnt=d.steps.filter(s=>stepActiveMonth(s,curM)).length;
+  el('text',{x:cx,y:cy-2,class:'kName','text-anchor':'middle',style:'font-size:12px'},svg).textContent=MONTHS[i];
+  el('text',{x:cx,y:cy+13,class:'kVal','text-anchor':'middle'},svg).textContent=`실행 창 ${actCnt}/${d.steps.length}`;
+}
+// 중앙 씬 — 스테이션 체인 + 진행 파티클 + 폐루프 리턴 채널 (V9 씬 문법)
+function renderDwScene(d,i){
+  const svg=$('dwScene'); svg.innerHTML=''; dwParticles=[];
+  const gE=el('g',{},svg), gN=el('g',{},svg), gP=el('g',{},svg);
+  el('text',{x:24,y:24,class:'tierLbl'},svg).textContent=
+    `${d.name} 운영 워크플로우 — ${MONTHS[i]} · 스테이션 클릭: 스텝 선택 (트렌드·피드 연동)`;
+  const n=d.steps.length;
+  const w=Math.min(224,(1000-48-(n-1)*46)/n), gap=46;
+  const x0=(1000-(n*w+(n-1)*gap))/2, y=110, h=176;
+  const xs=[];
+  d.steps.forEach((s,k)=>{
+    const x=x0+k*(w+gap); xs.push(x);
+    const g=el('g',{class:'rel wNode'+(dwSel===s.id?' sel':'')},gN);
+    el('rect',{x,y,width:w,height:h,rx:9,class:'gBox'+(s.onto.length?'':' na')},g);
+    el('rect',{x,y,width:w,height:3,rx:1.5,fill:d.hex,opacity:.85},g);
+    el('text',{x:x+10,y:y+21,class:'kName'},g).textContent=trunc(s.name,Math.floor((w-18)/10.5));
+    el('text',{x:x+10,y:y+37,class:'kVal'},g).textContent=`${CADENCE_KO[s.cadence]||s.cadence} · ${s.owner}`;
+    const chain=s.ledger? gatesAt(i).filter(g2=>g2.act===s.id) : [];
+    let cy=y+58;
+    if(chain.length){
+      chain.slice(0,4).forEach(g2=>{
+        const col=g2.typ==='hitl'?'var(--hitl)':(g2.typ==='ai'?'var(--ai)':'var(--auto)');
+        const done=['승인','실행완료'].includes(g2.status);
+        el('circle',{cx:x+16,cy:cy-3.5,r:3.2,fill:col,opacity:done?.5:1},g);
+        el('text',{x:x+25,y:cy,class:'gateChip',fill:g2.status==='검토대기'?'var(--warn)':(done?'var(--muted)':'var(--ink)')},g)
+          .textContent=trunc(`${g2.gate} ${g2.name} — ${g2.status}`,Math.floor((w-34)/8.6));
+        cy+=15;
+      });
+    } else {
+      el('text',{x:x+16,y:cy,class:'gateChip',fill:'var(--muted)'},g).textContent=
+        stepStatus(s.id,i)+(s.ledger?'':` · ${s.typ==='hitl'?'HITL':(s.typ==='ai'?'AI 위임':'자동')}`);
+    }
+    el('text',{x:x+10,y:y+h-12,class:'kVal',fill:s.onto.length?'var(--edge-hi)':'var(--na)'},g)
+      .textContent=s.onto.length?`◈ 온톨로지 액션 ${s.onto.length} — 피드에서 실행`:'액션 없음 — 수집 프로젝트 대상';
+    g.addEventListener('click',()=>dwSelect(s.id));
+    g.addEventListener('mousemove',e=>tipShow(e,
+      `<b>${esc(s.name)}</b>${esc(stepStatus(s.id,i))} · ${CADENCE_KO[s.cadence]||s.cadence} · ${esc(s.owner)}<span class="mut"><br>클릭: 스텝 선택 — 트렌드·피드 연동</span>`));
+    g.addEventListener('mouseleave',tipHide);
+    if(k){                                        // 진행 엣지 + 파티클
+      const p=el('path',{d:`M${xs[k-1]+w} ${y+h/2} H${x}`,class:'edgeP',stroke:d.hex},gE);
+      dwParticles.push({path:p,len:p.getTotalLength(),t:(k*0.4)%1,speed:.006,color:d.hex,r:2});
+    }
+  });
+  // 폐루프 피드백 — 하단 리턴 채널 (점선), 실적이 온톨로지 마트를 거쳐 KPI로 롤업
+  const fy=y+h+56;
+  const fb=el('path',{d:`M${xs[n-1]+w/2} ${y+h} V${fy} H${xs[0]+w/2} V${y+h}`,
+    class:'edgeF',stroke:'var(--good)','stroke-dasharray':'5 4'},gE);
+  el('text',{x:500,y:fy+18,class:'tierLbl','text-anchor':'middle',fill:'var(--good)'},gE)
+    .textContent='실적 피드백 — 액션 실행 → 온톨로지 마트 → leaf 지표 → 회사 KPI 롤업 (폐루프)';
+  for(let k=0;k<2;k++) dwParticles.push({path:fb,len:fb.getTotalLength(),t:k/2,speed:.003,color:'#4cc38a',r:2});
+  dwParticles.forEach(p=>{p.dot=el('circle',{r:p.r,fill:p.color,opacity:.85},gP);});
+}
+// 트렌드 밴드 — 선택 스텝(원장이면 게이트 처리) 또는 부문 합계 시계열
+function renderDwTrend(d,i){
+  const svg=$('dwTrend'), ttl=$('dwTrendTtl');
+  svg.innerHTML=''; dwHit=null;
+  const W=Math.max(400,svg.clientWidth||1000), H=Math.max(110,svg.clientHeight||150);
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const target=dwSel||deptWorldId;
+  let s=seriesOf(target), note='';
+  if(!s && dwSel){ s=seriesOf(deptWorldId); note=` · ${nodeName(dwSel)}: 시계열 미연결 → 부문 합계`; }
+  if(!s){ ttl.innerHTML=`<b>${esc(nodeName(target))}</b><span>시계열 없음</span>`; return; }
+  const r=drawSeriesChart(svg,s,i,W,H);
+  if(!r){ ttl.innerHTML=`<b>${esc(s.label)}</b><span>데이터 없음</span>`; return; }
+  dwHit={s, geom:r.geom};
+  ttl.innerHTML=`<b>${esc(s.label)}</b>
+    <span>${MONTHS[i]} <span class="cv">${r.cur!=null&&isFinite(r.cur)?esc(s.vf(r.cur)):'—'}</span></span>
+    <span>${esc(s.refLbl)} ${r.ref!=null&&isFinite(r.ref)?esc(s.vf(r.ref)):'—'}</span>
+    <span style="margin-left:auto">실선 실적 · 점선 기준 · 세로선 Play 커서 · 호버 값 · 클릭 이동${esc(note)}</span>`;
+}
+// 우 실행 피드 — 이번 달 게이트(HITL 승인) + 온톨로지 액션 실행 (스텝 선택 시 필터)
+function renderDwFeed(d,i){
+  const host=$('dwFeed'); host.innerHTML='';
+  const steps = dwSel ? d.steps.filter(s=>s.id===dwSel) : d.steps;
+  host.insertAdjacentHTML('beforeend',
+    `<div class="railTtl">이번 달 실행 업무 — ${MONTHS[i]}${dwSel?` · ${esc(STEP_OF[dwSel].name)}`:''}</div>`);
+  steps.forEach(s=>{
+    const chain=s.ledger?gatesAt(i).filter(g=>g.act===s.id):[];
+    let html=`<div class="fiCard"><div class="hd"><i style="background:${d.hex}"></i>${esc(s.name)}
+      <span class="k">${CADENCE_KO[s.cadence]||s.cadence}${s.out?` · ${esc(s.out)}`:''}</span></div>`;
+    if(chain.length) html+=chain.map(g=>{
+      const col=g.typ==='hitl'?'var(--hitl)':(g.typ==='ai'?'var(--ai)':'var(--auto)');
+      const canAct=i===NOW && g.typ==='hitl' && g.status==='검토대기';
+      return `<div class="fiRow" style="cursor:default"><i style="background:${col}"></i>
+        <span class="nm">${g.gate} ${esc(g.name)}</span>
+        <span class="st">${canAct?`<button class="dBtn" style="padding:0 7px;color:var(--good);border-color:var(--good)" data-ok="${g.act}|${g.gate}">승인</button>`
+          :`<span class="badge ${GATE_ST_BADGE[g.status]||''}">${g.status}</span>`}</span></div>`;
+    }).join('');
+    else html+=`<div class="ctx">${esc(stepStatus(s.id,i))} — 게이트 창 대기 또는 상시 운영</div>`;
+    const acts=s.onto.map((o,k)=>{
+      const label = o.world ? '⚡ 전략 월드 — 오피스 관리비'
+        : (o.act ? esc(ACT_OF[o.act].name) : esc(OTYPE[o.type].name)+' 객체');
+      const ty = o.act ? esc(OTYPE[ACT_OF[o.act].objectType].name) : (o.world?'레버·시뮬':'관계망');
+      return `<button class="actBtn" data-act="ACT:${s.id}:${k}">◈ ${label} <span class="ty">— ${ty}</span></button>`;
+    }).join('');
+    html+=`<div style="display:flex;flex-direction:column;gap:4px;margin-top:7px">${acts
+      ||'<span style="font-size:10.5px;color:var(--na)">온톨로지 액션 없음 — 수집 프로젝트 대상</span>'}</div></div>`;
+    host.insertAdjacentHTML('beforeend',html);
+  });
+  host.insertAdjacentHTML('beforeend',
+    `<div class="fiCard"><div class="ctx">폐루프: 액션 실행 → 온톨로지 마트 기록 → leaf 지표 → KPI → 영역 → 회사 종합.
+     승인 게이트(HITL)는 <code>governance/workflow_gates</code> 원장을 공유한다.</div></div>`);
+  host.querySelectorAll('[data-act]').forEach(b=>b.addEventListener('click',()=>runOntoAction(b.dataset.act)));
+  host.querySelectorAll('[data-ok]').forEach(b=>b.addEventListener('click',()=>{
+    const [a,g]=b.dataset.ok.split('|'); approveGate(a,g);
+  }));
+}
+// 도메인 전략 월드 → 트윈 월드 환류 (Seamless: 시뮬 결과가 레버·프로젝트로 돌아온다)
+window.addEventListener('message', e=>{
+  const d=e.data||{};
+  if(d.type==='v10-opex-apply'){
+    hvacLever.peak=+d.peak||0; hvacLever.pre=+d.pre||0;
+    hvacLever.applied=hvacLever.peak>0||hvacLever.pre>0;
+    closeWorld(); gotoFocus('ND-OPEX'); seek(cursor);
+  }
+  if(d.type==='v10-opex-project'){
+    closeWorld(); addProject({tmpl:'facility', name:d.name||''}); gotoFocus('ND-OPEX');
+  }
+  if(d.type==='v10-vdata-project'){                      // 차량 데이터 레버 → 데이터 프로젝트 환류
+    closeWorld();
+    addProject({tmpl:'data', goal:d.goal||'KPI-CSIS', name:d.name||'차량 데이터 레버'});
+    gotoFocus('DEPT-IT');
+  }
+  if(d.type==='v11-svc-project'){                        // 차량 트윈 AI 사전 진단 → 서비스/품질 조치 환류
+    closeWorld();
+    addProject({tmpl:d.tmpl==='quality'?'quality':'data', goal:d.goal||'KPI-CSIS',
+      name:d.name||'차량 트윈 AI 진단 조치', model:d.model||''});
+    gotoFocus('DEPT-SVC');
+  }
+});
+function closeWorld(){ $('world').classList.remove('open'); updateCrumb(); }
+// 월드 소환은 포커스 옆 바로가기 칩에서 — 헤더에는 [↩ 월드로 돌아가기]만 남긴다
+// ↩ = 최상단 오버레이부터 닫기 (소환 월드 → 부문 운영 월드 → 메인)
+$('btnBack').addEventListener('click',()=>{
+  if($('world').classList.contains('open')) closeWorld();
+  else closeDeptWorld();
+});
+
+function seek(i){
+  cursor=Math.max(0,Math.min(NOW,i));
+  $('tl').value=cursor;
+  $('ymLbl').textContent=MONTHS[cursor];
+  renderScene(cursor); renderGoals(cursor); renderAgents(cursor);
+  renderGraph(cursor); renderFocusPanel(cursor); renderPrjList(cursor);
+  if(deptWorldId) renderDeptWorld();
+}
+let playing=null, speed=1;
+$('tl').addEventListener('input',e=>seek(+e.target.value));
+function stopPlay(){ clearInterval(playing); playing=null;
+  $('btnPlay').textContent='▶ Play'; $('btnPlay').classList.remove('on');
+  $('dwPlay').textContent='▶ Play'; }
+function stepPlay(){ if(cursor>=NOW) return stopPlay(); seek(cursor+1); }
+$('btnPlay').addEventListener('click',()=>{
+  if(playing) return stopPlay();
+  if(cursor>=NOW) cursor=-1;
+  $('btnPlay').textContent='❚❚ 정지'; $('btnPlay').classList.add('on');
+  $('dwPlay').textContent='❚❚ 정지';
+  playing=setInterval(stepPlay,800/speed);
+});
+// 부문 운영 월드 푸터 — 메인 타임라인과 커서 공유 (V9 문법의 Play)
+$('dwTl').addEventListener('input',e=>seek(+e.target.value));
+$('dwPlay').addEventListener('click',()=>$('btnPlay').click());
+$('btnSpd').addEventListener('click',()=>{
+  speed=speed===1?2:(speed===2?4:1); $('btnSpd').textContent='×'+speed;
+  if(playing){ clearInterval(playing); playing=setInterval(stepPlay,800/speed); }
+});
+/* ═══ 인트로 시네마틱 플레이어 — 첫 진입 자동 재생 (localStorage) · ✦ 인트로로 재생 ═══ */
+const INTRO_DUR=[5200,6200,6200,6600,6600,6800];
+let introTimer=null, introIdx=-1;
+(function buildIntro(){
+  let s=7;                                                   // 시드 고정 별 배경
+  const rnd=()=>{ s=(s*16807)%2147483647; return s/2147483647; };
+  const svg=$('introStars');
+  svg.setAttribute('viewBox','0 0 1200 800');
+  for(let k=0;k<46;k++)
+    el('circle',{cx:(rnd()*1200).toFixed(0),cy:(rnd()*800).toFixed(0),r:(0.7+rnd()*1.8).toFixed(1),
+      fill:rnd()>0.75?'#79b8ff':'#f0efec',opacity:(0.12+rnd()*0.4).toFixed(2)},svg);
+  $('introBar').innerHTML=INTRO_DUR.map(()=>'<i></i>').join('');
+})();
+function introScene(k){
+  clearTimeout(introTimer);
+  introIdx=k;
+  document.querySelectorAll('#intro .iScene').forEach((sc,j)=>{
+    sc.classList.remove('on');
+    if(j===k){ void sc.offsetWidth; sc.classList.add('on'); }        // reflow → 애니메이션 재시작
+  });
+  document.querySelectorAll('#introBar i').forEach((b,j)=>{
+    b.classList.remove('run','done');
+    if(j<k) b.classList.add('done');
+    else if(j===k){ b.style.setProperty('--dur',INTRO_DUR[k]+'ms'); void b.offsetWidth; b.classList.add('run'); }
+  });
+  introTimer=setTimeout(()=>{ if(k+1<INTRO_DUR.length) introScene(k+1); else introClose(); },INTRO_DUR[k]);
+}
+function introShow(){ $('intro').classList.add('open'); introScene(0); }
+function introClose(){
+  clearTimeout(introTimer); introTimer=null; introIdx=-1;
+  $('intro').classList.remove('open');
+  try{ localStorage.setItem('v10_intro_seen','1'); }catch(e){}
+}
+$('introSkip').addEventListener('click',e=>{ e.stopPropagation(); introClose(); });
+$('intro').addEventListener('click',e=>{
+  if(e.target.id==='introStart') return introClose();
+  if(e.target.id==='introSkip') return;
+  if(introIdx+1<INTRO_DUR.length) introScene(introIdx+1); else introClose();
+});
+$('btnIntro').addEventListener('click',introShow);
+
+/* ═══════════ 실데이터 L0 — data_new 서빙 API 배선 (폐루프 v0) ═══════════
+   상대 경로 ../api/* — server.js 가 시멘틱 레이어 선언(datasource)만 참조해 DuckDB 로 서빙.
+   API 미가용(정적 배포·파일 열기)이면 버튼이 나타나지 않고 기존 동작은 불변(폴백 규칙). */
+const LIVE={on:false, health:null};
+async function liveFetch(p,opt){
+  const r=await fetch('../api'+p,opt);
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+  return j;
+}
+(async()=>{ try{
+  const h=await liveFetch('/health');
+  if(h.ok){ LIVE.on=true; LIVE.health=h; $('btnLive').style.display=''; }
+}catch(e){} })();
+
+async function liveOpen(){
+  $('liveWrap').style.display='flex';
+  $('liveBody').innerHTML='<div style="color:var(--muted)">불러오는 중…</div>';
+  try{
+    const [h,kpi,claims,pulse,market,dealers]=await Promise.all([
+      liveFetch('/health'), liveFetch('/kpi/monthly'),
+      liveFetch('/objects/warrantyClaim?status=PEND&limit=8'),
+      liveFetch('/pulse/daily?days=14'),
+      liveFetch('/objects/marketSnapshot?limit=200'),
+      liveFetch('/dealers/score?limit=5')]);
+    LIVE.health=h;
+    $('liveMeta').textContent=`semantic ${h.semanticVersion} · ${h.entity} · DuckDB 서빙 · 원장 ${h.ledgerEvents}건`;
+    renderLive(kpi,claims,pulse,market,dealers);
+  }catch(e){ $('liveBody').innerHTML=`<div style="color:var(--crit)">API 오류: ${esc(e.message)}</div>`; }
+}
+function liveClose(){ $('liveWrap').style.display='none'; }
+function renderLive(kpi,claims,pulse,market,dealers){
+  // 일 펄스 — 어제와 오늘이 다른 화면 (1-DAU 재방문 루프의 심박)
+  const pd=pulse.rows, last=pd[pd.length-1], prev=pd[pd.length-2];
+  const delta=(a,b)=>{const d=a-b; return d===0?'—':(d>0?'▲'+fmt(d):'▼'+fmt(-d));};
+  let h=`<h4>☀ 일 펄스 — 기준일 ${esc(pulse.asof)} (일 그레인 원장 · 최근 ${pulse.days}일)</h4>
+  <div id="pulseSum" style="font-size:12px;margin:2px 0 6px">
+    소매 <b>${fmt(last.retail_units)}대</b> (전일 ${delta(last.retail_units,prev.retail_units)}) ·
+    도매 <b>${fmt(last.wholesale_units)}대</b> (${delta(last.wholesale_units,prev.wholesale_units)}) ·
+    VoC <b>${fmt(last.voc_count)}건</b> (${delta(last.voc_count,prev.voc_count)}) ·
+    인센티브 소진 평균 <b>${CUR}${fmt(last.avg_incentive_usd)}</b>/대</div>
+  <table class="liveTbl" id="pulseTbl"><tr><th>일자</th><th>소매</th><th>도매</th><th>VoC</th><th>평균 인센티브</th></tr>`;
+  for(const r of pd.slice(-7).reverse())
+    h+=`<tr><td>${esc(r.d)}</td><td>${fmt(r.retail_units)}대</td><td>${fmt(r.wholesale_units)}대</td>
+      <td>${fmt(r.voc_count)}건</td><td>${CUR}${fmt(r.avg_incentive_usd)}</td></tr>`;
+  h+=`</table>
+  <h4>L0 KPI 월 집계 — kpi_monthly.parquet (시점 규칙: 마감월만 · 최근 6개월)</h4>
+  <table class="liveTbl"><tr><th>월</th><th>도매</th><th>소매</th><th>ASP</th><th>매출총이익</th><th>관리비</th><th>VoC</th></tr>`;
+  for(const r of kpi.rows.slice(-6).reverse())
+    h+=`<tr><td>${esc(r.ym)}</td><td>${fmt(r.wholesale_units)}대</td><td>${fmt(r.retail_units)}대</td>
+      <td>${CUR}${fmt(r.asp_usd)}</td><td>${fmtK(r.gross_profit_usd)}</td><td>${fmtK(r.opex_usd)}</td><td>${fmt(r.voc_count)}건</td></tr>`;
+  // 시장 축 — SAAR·점유율·경쟁 인센티브 (marketSnapshot 마트 — 경쟁·시장 축)
+  h+=`</table>
+  <h4>◫ 시장 축 — SAAR·자사 점유율·경쟁 인센티브 (marketSnapshot · 외부 구독 데이터 · 최근 6개월)</h4>
+  <table class="liveTbl" id="marketTbl"><tr><th>월</th><th>SAAR</th><th>자사 점유율</th><th>SUV 세그</th><th>경쟁 평균 인센티브</th><th>경쟁 런칭</th></tr>`;
+  for(const r of market.rows.slice(-6).reverse())
+    h+=`<tr><td>${esc(r.ym)}</td><td>${(r.saar_units/1e6).toFixed(1)}M</td><td>${f1(r.own_share_pct)}%</td>
+      <td>${f1(r.seg_suv_share_pct)}%</td><td>${CUR}${fmt(r.comp_avg_incentive_usd)}</td><td>${fmt(r.comp_launch_cnt)}건</td></tr>`;
+  // 딜러 스코어 — 소매·인센티브·VoC율 (딜러 경제 v0 — evaluateDealer 근거)
+  h+=`</table>
+  <h4>◈ 딜러 스코어 TOP ${dealers.rows.length} — 소매·인센티브·VoC율 (evaluateDealer 근거 데이터)</h4>
+  <table class="liveTbl" id="dealerTbl"><tr><th>딜러</th><th>소매 누계</th><th>평균 인센티브</th><th>VoC</th><th>VoC율</th></tr>`;
+  for(const r of dealers.rows)
+    h+=`<tr><td>${esc(r.title)} <span style="color:var(--muted)">${esc(r.dealer_id)}</span></td>
+      <td>${fmt(r.retail_units)}대</td><td>${CUR}${fmt(r.avg_incentive_usd)}</td><td>${fmt(r.voc_count)}건</td><td>${f1(r.voc_rate*100)}%</td></tr>`;
+  h+=`</table>
+  <h4>폐루프 v0 — 보증클레임 결재 (HITL 게이트) · PEND ${fmt(claims.count)}건 — 결재 → 액션 원장 append → 재조회 반영</h4>
+  <table class="liveTbl"><tr><th>클레임</th><th>월</th><th>딜러</th><th>결함군</th><th>금액</th><th>VIN 폐루프 체인</th><th>결재</th></tr>`;
+  for(const c of claims.rows)
+    h+=`<tr data-cid="${esc(c.object_id)}"><td>${esc(c.object_id)}</td><td>${esc(c.ym)}</td><td>${esc(c.dealer_id)}</td>
+      <td>${esc(c.defect_group)}</td><td>${CUR}${fmt(c.claim_amount_usd)}</td>
+      <td style="text-align:left"><button class="liveBtn" data-vin="${esc(c.vin)}">…${esc(String(c.vin).slice(-8))} 체인</button></td>
+      <td><button class="liveBtn ok" data-dec="APPR">승인</button> <button class="liveBtn no" data-dec="REJ">반려</button></td></tr>`;
+  h+=`</table><div id="liveChain"></div>
+  <div style="margin-top:6px;font-size:11px;color:var(--muted)">
+    원장: data_new/ledger/action_log.jsonl (append-only) · 조회는 시멘틱 레이어 datasource 만 참조 (semantic-layer.json)</div>`;
+  $('liveBody').innerHTML=h;
+  $('liveBody').querySelectorAll('[data-vin]').forEach(b=>b.addEventListener('click',async()=>{
+    $('liveChain').textContent='체인 조회 중…';
+    try{ const r=await liveFetch('/vin/'+encodeURIComponent(b.dataset.vin)+'/chain');
+      $('liveChain').innerHTML=`<b>${esc(r.vin)}</b> — `+
+        r.chain.map(s=>`<span class="liveTag">${esc(s.step)} · ${esc(s.id)}</span>`).join(' → ');
+    }catch(e){ $('liveChain').textContent='체인 오류: '+e.message; }
+  }));
+  $('liveBody').querySelectorAll('[data-dec]').forEach(b=>b.addEventListener('click',async()=>{
+    const cid=b.closest('tr').dataset.cid;
+    b.closest('tr').querySelectorAll('[data-dec]').forEach(x=>x.disabled=true);
+    try{
+      await liveFetch('/actions/approveWarrantyClaim',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({objectId:cid,decision:b.dataset.dec,actor:'v10-world'})});
+      await liveOpen();                                    // 원장 반영 재조회 — 폐루프 확인
+    }catch(e){ $('liveChain').textContent='결재 오류: '+e.message; }
+  }));
+}
+$('btnLive').addEventListener('click',liveOpen);
+$('liveClose').addEventListener('click',liveClose);
+$('liveWrap').addEventListener('click',e=>{ if(e.target.id==='liveWrap') liveClose(); });
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape' && $('liveWrap').style.display!=='none') liveClose();
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if($('intro').classList.contains('open')) return introClose();      // 인트로가 최상단
+  if($('world').classList.contains('open')) return closeWorld();      // 소환 월드
+  if($('deptWorld').classList.contains('open')) return closeDeptWorld();
+  if($('composer').classList.contains('open')) return $('composer').classList.remove('open');
+  const p=parentOf(focusId);                                          // 관계뷰: 한 단계 위로
+  if(p) gotoFocus(p);
+});
+
+buildComposer();
+layoutScene();
+scene.setAttribute('viewBox',`0 0 1240 ${SH}`);
+const sceneView = enableZoomPan(scene, 1240, SH);
+// 씬 영역 리사이즈 → 설계 높이 재계산 (그래프 패널과 동일 원칙 — 항상 꽉 차게)
+{ let rafS=0;
+  new ResizeObserver(()=>{ if(rafS) return; rafS=requestAnimationFrame(()=>{ rafS=0;
+    const o=SH; layoutScene();
+    if(SH!==o){ sceneView.setBase(1240,SH); renderScene(cursor); }
+  });}).observe($('sceneWrap'));
+}
+initGraph();
+attachSeriesHover($('graphSvg'), ()=>graphHit);   // 포커스 그래프 — 호버 값·클릭 이동 (전략 월드 차트와 동일)
+attachSeriesHover($('dwTrend'), ()=>dwHit);       // 부문 운영 월드 트렌드 밴드도 같은 문법
+const dwSceneView = enableZoomPan($('dwScene'), 1000, 430);   // 내부 씬도 줌/팬 (V9와 동일)
+renderQuickLinks();
+renderCrumb();
+seek(NOW);
+tickParticles();
+try{ if(!localStorage.getItem('v10_intro_seen')) introShow(); }catch(e){}   // 첫 진입 = 인트로
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){ cancelAnimationFrame(raf); raf=null; }
+  else if(!raf) tickParticles();
+});
+
+// 테스트 훅
+window._v10={seek, cursor:()=>cursor, bindVal, bindRef:(id,i)=>bindRef(T_OF[id]||{bind:id},i??cursor),
+  attain:(id,i)=>attain(T_OF[id],i??cursor), areaScore, ceoScore,
+  gatesAt, pendingGates, approveGate, addProject, projects:()=>projects, prjReviews,
+  openWorld, closeWorld, tmplImpact, resolveLink,
+  hvacSavings, setLever, applyLever, hvacLever, facRows, dataProjects,
+  view:()=>sceneView.view(), graphView:()=>graphZoom&&graphZoom.view(), animInfo:()=>({...animInfo}),
+  gotoFocus, focus:()=>focusId, kindOf, parentOf, relUp, relDown, lineageOf, nodeName,
+  openDeptWorld, closeDeptWorld, deptWorld:()=>deptWorldId, runOntoAction,
+  dwSelect, dwSel:()=>dwSel, dwView:()=>dwSceneView.view(),
+  introShow, introClose, introIdx:()=>introIdx, fitForecastV0,
+  deptGates, stepStatus, quickLinks:()=>[...quickLinks], addQuickLink, removeQuickLink,
+  focusShortcuts, seriesOf,
+  liveOpen, liveClose, liveState:()=>({on:LIVE.on, open:$('liveWrap').style.display!=='none'}),
+  DEPTS, STEP_OF, TREE, T_OF, AREAS, KPIS, PHASES, pathOf, childrenOf};
+</script>
+</body>
+</html>

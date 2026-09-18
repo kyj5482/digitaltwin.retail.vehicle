@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--
+  pipeline-overview.html — data_new 파이프라인 진행 방향 시각화
+  RAW(SAP 모사 Parquet) → STAGING → ONTOLOGY(객체·링크·KPI) → SEMANTIC(관계·액션 선언)
+  → SERVING(DuckDB) → 월드(트윈) · 그리고 액션 실행이 원장으로 돌아오는 폐루프.
+  수치는 pipeline/run.js · 90_benchmark.js 실측값. 문서: data_new/README.md
+-->
+<title>데이터 파이프라인 — SAP Raw → 온톨로지 → 시멘틱 → DuckDB 서빙</title>
+<style>
+:root{
+  --bg:#161614; --panel:#1e1e1c; --panel2:#262623; --line:#33332f; --edge:#4a4a44;
+  --ink:#f0efec; --muted:#a3a199; --dim:#6e6e67;
+  --raw:#79b8ff; --stg:#58d1c9; --ont:#eaa93e; --sem:#b58cff; --srv:#4cc38a; --wld:#e8e6e1;
+  --warn:#eaa93e; --good:#4cc38a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:13px/1.55 'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;min-height:100vh}
+header{padding:18px 26px 10px;border-bottom:1px solid var(--line)}
+h1{font-size:19px;font-weight:800}
+h1 small{color:var(--muted);font-weight:400;font-size:12.5px;margin-left:10px}
+.sub{color:var(--muted);font-size:12.5px;margin-top:3px}
+#wrap{max-width:1480px;margin:0 auto;padding:14px 26px 40px}
+#dagWrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 4px 2px;margin-top:12px;overflow-x:auto}
+#dag{display:block;min-width:1240px;width:100%}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:11.5px;margin:10px 2px 0}
+.lgd i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+/* 노드·엣지 (SVG) */
+.lyrTtl{font-size:12.5px;font-weight:800;fill:var(--ink)}
+.lyrSub{font-size:10px;fill:var(--muted)}
+.nd{cursor:pointer}
+.nd rect{fill:var(--panel2);stroke-width:1.1;rx:7}
+.nd:hover rect{fill:#2e2e2b}
+.nd .nm{font-size:11px;font-weight:700;fill:var(--ink)}
+.nd .ct{font-size:9.5px;fill:var(--muted)}
+.grpBox{fill:none;stroke:var(--line);stroke-dasharray:3 3;rx:9}
+.grpLbl{font-size:9.5px;fill:var(--dim);font-weight:700;letter-spacing:.4px}
+.eg{fill:none;stroke:var(--edge);stroke-width:1.1}
+.eg.hi{stroke-width:1.8}
+.loop{fill:none;stroke:var(--srv);stroke-width:1.4;stroke-dasharray:6 5;opacity:.75}
+.loopLbl{font-size:10.5px;fill:var(--srv);font-weight:700}
+.flowDot{fill:var(--srv)}
+/* 툴팁 */
+#tip{position:fixed;display:none;max-width:360px;background:#111110;border:1px solid var(--edge);border-radius:9px;
+     padding:10px 12px;font-size:11.5px;z-index:50;pointer-events:none;box-shadow:0 8px 26px rgba(0,0,0,.55)}
+#tip b{display:block;font-size:12.5px;margin-bottom:3px}
+#tip .m{color:var(--muted)}
+#tip code{background:var(--panel2);border-radius:4px;padding:0 4px;font-size:10.5px}
+/* 하단 패널 */
+.panels{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-top:14px}
+.pnl{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 17px}
+.pnl h2{font-size:14px;font-weight:800;margin-bottom:8px}
+.pnl h2 .tag{font-size:10px;font-weight:700;color:var(--bg);background:var(--good);border-radius:4px;padding:1px 7px;margin-left:8px;vertical-align:2px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:11px}
+td .x{color:var(--good);font-weight:800}
+.verdict{margin-top:10px;padding:9px 12px;border-left:3px solid var(--good);background:rgba(76,195,138,.07);border-radius:0 7px 7px 0;font-size:12.3px}
+.pnl ol{margin:4px 0 0 18px;color:var(--muted);font-size:12.3px}
+.pnl ol b{color:var(--ink)}
+.pnl code{background:var(--panel2);border-radius:4px;padding:1px 5px;font-size:11px}
+.note{color:var(--dim);font-size:10.5px;margin-top:8px}
+@media (max-width:1000px){.panels{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>데이터 파이프라인 — SAP Raw → 온톨로지 → 시멘틱 레이어 → DuckDB 서빙
+    <small>data_new/ · 실행: <code style="background:var(--panel2);padding:1px 6px;border-radius:4px">node data_new/pipeline/run.js</code></small></h1>
+  <div class="sub">SAP 판매법인 원천을 그대로 모사한 Raw(Parquet)에서 출발해, 표준화 → 온톨로지 객체·링크 → 의미 선언 → 적재 없는 서빙까지.
+    월드의 액션 실행은 원장으로 되돌아오는 폐루프다. 노드에 마우스를 올리면 스키마·행수가 보인다.</div>
+</header>
+<div id="wrap">
+  <div id="dagWrap"><svg id="dag"></svg>
+    <div class="lgd">
+      <span><i style="background:var(--raw)"></i>RAW — SAP 추출</span>
+      <span><i style="background:var(--stg)"></i>STAGING — 표준화</span>
+      <span><i style="background:var(--ont)"></i>ONTOLOGY — 인스턴스 마트</span>
+      <span><i style="background:var(--sem)"></i>SEMANTIC — 의미 선언</span>
+      <span><i style="background:var(--srv)"></i>SERVING — DuckDB</span>
+      <span><i style="background:var(--wld)"></i>월드 — 소비·실행</span>
+      <span style="color:var(--srv)">- - 폐루프: 액션 실행 → 원장 append → 재적재</span>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="pnl">
+      <h2>저장 포맷 판단 — CSV vs Parquet <span class="tag">Parquet 채택</span></h2>
+      <table>
+        <tr><th>항목 (도매 원장 형태 200만 행 · 5회 중앙값)</th><th>CSV</th><th>Parquet·ZSTD</th><th>배율</th></tr>
+        <tr><td>파일 크기</td><td>111.9 MB</td><td>14.0 MB</td><td class="x">8.0×</td></tr>
+        <tr><td>집계 — GROUP BY 월×모델</td><td>170.5 ms</td><td>18.4 ms</td><td class="x">9.3×</td></tr>
+        <tr><td>단일 컬럼 SUM (컬럼 프루닝)</td><td>120.0 ms</td><td>4.8 ms</td><td class="x">25×</td></tr>
+        <tr><td>월 필터 (로우그룹 통계 스킵)</td><td>138.3 ms</td><td>5.0 ms</td><td class="x">28×</td></tr>
+      </table>
+      <div class="verdict"><b>사람이 쓰는 파일은 CSV, 기계가 읽는 파일은 Parquet.</b><br>
+        파이프라인 전 구간(raw·staging·ontology)은 Parquet + DuckDB — 스키마 내장·컬럼 프루닝·
+        통계 스킵·1/8 크기. CSV는 git diff로 리뷰하고 사람이 편집하는 소량 마스터
+        (dim_*.csv · ceo_tree.csv)에만 유지한다. 근거: <code>pipeline/90_benchmark.js</code></div>
+    </div>
+    <div class="pnl">
+      <h2>서빙 실측 — 적재 없는 DuckDB 질의</h2>
+      <table>
+        <tr><th>질의 (40_serve.sql)</th><th>레벨</th><th>응답</th></tr>
+        <tr><td>Q1 월별 KPI 롤업 (좌 레일·관계뷰 값)</td><td>L0</td><td>~4 ms</td></tr>
+        <tr><td>Q2 VIN 폐루프 체인 — 매입→도매→출하→소매→VoC</td><td>L3</td><td>~10 ms</td></tr>
+        <tr><td>Q3 딜러 스코어 (소매·인센티브·VoC율)</td><td>L2</td><td>~12 ms</td></tr>
+        <tr><td>Q4 모델×월 도매 추이 (링크 순회)</td><td>L1</td><td>~5 ms</td></tr>
+      </table>
+      <ol>
+        <li><b>레벨별 계약</b> — L0은 마감월 KPI만, 드릴할 때 하위 레벨 마트를 읽는다.</li>
+        <li><b>시멘틱 경유</b> — 프런트·백엔드는 파일 경로가 아니라 <code>semantic-layer.json</code>의 선언으로 접근.</li>
+        <li><b>백엔드</b> — server.js에 DuckDB 질의 핸들러를 얹는 얇은 API로 충분.</li>
+      </ol>
+      <div class="note">전체 파이프라인(생성→표준화→온톨로지→데모)은 1초 이내 · 시드 고정 결정적.</div>
+    </div>
+  </div>
+</div>
+<div id="tip"></div>
+
+<script>
+'use strict';
+/* ── 스펙 — 레이어·노드·엣지 (수치는 run.js 실측 행수) ─────────────────────── */
+const LAYERS=[
+ {id:'raw', x:70,  w:150, c:'var(--raw)', ttl:'① RAW', sub:'SAP 모사 추출 · Parquet'},
+ {id:'stg', x:300, w:172, c:'var(--stg)', ttl:'② STAGING', sub:'표준화 · ym 파티션'},
+ {id:'ont', x:552, w:168, c:'var(--ont)', ttl:'③ ONTOLOGY', sub:'객체·링크·KPI 마트'},
+ {id:'sem', x:800, w:168, c:'var(--sem)', ttl:'④ SEMANTIC', sub:'관계·액션 선언 · json'},
+ {id:'srv', x:1048,w:150, c:'var(--srv)', ttl:'⑤ SERVING', sub:'DuckDB · 적재 없음'},
+ {id:'wld', x:1268,w:150, c:'var(--wld)', ttl:'월드', sub:'소비 · 액션 실행'},
+];
+const NODES=[
+ // RAW — SAP 모듈별 (grp = 점선 묶음)
+ {id:'kna1', lyr:'raw', grp:'마스터', nm:'KNA1·MARA·T001W·CSKS', ct:'딜러 61 · 자재 18 · CC 20',
+  tip:'<b>마스터 (SAP)</b>KNA1 딜러(KUNNR·NAME1·ZZZONE) / MARA 자재=모델×트림(MATNR·ZZMODEL·ZZTRIM·ZZMSRP) / T001W 플랜트 / CSKS 코스트센터(부문×사옥).<span class="m">실환경: 초기 전량 + 변경분 CDC</span>'},
+ {id:'vlc', lyr:'raw', grp:'VMS', nm:'VLCVEHICLE', ct:'차량 원장 · VIN 3,078',
+  tip:'<b>VLCVEHICLE (SAP VMS)</b>VIN 그레인 차량 원장 — VHVIN·MATNR·WERKS·ZZPRODDT·ZZSTATUS(WHSL/RTLD)·ZZDEALER.<span class="m">온톨로지 중심 객체 vehicle의 원천</span>'},
+ {id:'mm', lyr:'raw', grp:'MM', nm:'EKKO · EKPO', ct:'매입 PO 160 · 품목 3,078',
+  tip:'<b>EKKO/EKPO (MM)</b>본사 인터컴퍼니 매입 — EBELN·LIFNR(HQ-NA)·NETPR(매입가)·ZZVIN. 품목 1건 = VIN 1대.'},
+ {id:'sd', lyr:'raw', grp:'SD', nm:'SD 오더·납품·빌링', ct:'VBAK·LIKP·VBRK +품목 ×3',
+  tip:'<b>SD 체인</b>판매오더(VBAK/VBAP: AUART=ZVEH·KWMENG·NETWR·ZZVIN) → 납품(LIKP/LIPS: WADAT_IST) → 빌링(VBRK/VBRP: FKDAT·NETWR).<span class="m">도매의 원천 — 오더=월×딜러 배치, 품목=VIN</span>'},
+ {id:'rdr', lyr:'raw', grp:'I/F', nm:'ZSD_RDR', ct:'소매 RDR · 2,889 (DMS)',
+  tip:'<b>ZSD_RDR (커스텀 인터페이스)</b>딜러 DMS 소매실적 수신 — ZZVIN·ZZRTLDT·ZZPRICE·ZZINCENT·ZZCUSTID.<span class="m">SAP 외 원천도 같은 Raw 레이어로 합류</span>'},
+ {id:'qm', lyr:'raw', grp:'QM', nm:'QMEL', ct:'품질통지 794 (Z1 VoC·Q1 클레임)',
+  tip:'<b>QMEL (QM)</b>품질통지 — QMART(Z1=VoC/Q1=보증클레임)·QMGRP(결함군)·ZZVIN·ZZCLAIMAMT·ZZSTATUS.'},
+ {id:'fi', lyr:'raw', grp:'FI', nm:'BKPF · BSEG', ct:'전표 35 · 라인 1,987',
+  tip:'<b>BKPF/BSEG (FI)</b>회계전표 — SAKNR(계정: 466000 전력·470000 임차·476000 소모품·400100 매출·500100 원가)·KOSTL·SHKZG·DMBTR.'},
+ // STAGING
+ {id:'s_dim', lyr:'stg', nm:'stg_dealer · stg_material', ct:'차원 표준화',
+  tip:'<b>차원 스테이징</b>KUNNR→dealer_id, MATNR→model_id/trim_id 등 업무 용어 개명 + 타입 확정.'},
+ {id:'s_veh', lyr:'stg', nm:'stg_vehicle', ct:'VIN 3,078',
+  tip:'<b>stg_vehicle</b>vin·model/trim·plant_id·prod_ym·status·dealer_id·msrp_usd.'},
+ {id:'s_tx', lyr:'stg', nm:'stg_* 거래 원장 4종', ct:'매입·도매·출하·소매 · 그레인=VIN',
+  tip:'<b>거래 스테이징</b>헤더+품목 결합으로 그레인=업무 단위(VIN·건). 도매는 오더+빌링 결합(invoice_id·invoice_date). ym 파티션 컬럼 부여.'},
+ {id:'s_q', lyr:'stg', nm:'stg_quality_notification', ct:'VoC 481 · 클레임 313',
+  tip:'<b>stg_quality_notification</b>notif_type(voc/warranty_claim)·defect_group·claim_amount_usd·claim_status.'},
+ {id:'s_fi', lyr:'stg', nm:'stg_fi_posting', ct:'월×CC×계정 1,987',
+  tip:'<b>stg_fi_posting</b>차/대변 부호 반영 amount_usd — 관리비·손익의 단일 원천.'},
+ // ONTOLOGY
+ {id:'o_obj', lyr:'ont', nm:'objects/ — 10 타입', ct:'dealer·model·trim·vehicle·매입·도매·출하·소매·VoC·클레임',
+  tip:'<b>객체 인스턴스</b>object_id+title+속성. 타입 id는 v7-ontology.js와 동일 체계 — 탐색기가 그대로 소비 가능.<span class="m">vehicle 3,078 · wholesale 3,078 · retailSale 2,889 · vocTicket 481 · warrantyClaim 313 …</span>'},
+ {id:'o_lnk', lyr:'ont', nm:'links/ — 15 타입', ct:'from_id → to_id · 28,000+ 엣지',
+  tip:'<b>링크 인스턴스</b>wsOfVehicle·rsByDealer·wsCostBasis(도매↔매입 원가근거)·vocOfVehicle·claimPaidBySc … VIN 하나로 매입→도매→출하→소매→VoC가 이어진다.'},
+ {id:'o_kpi', lyr:'ont', nm:'kpi_monthly', ct:'L0 큐브 · 마감월 32',
+  tip:'<b>kpi_monthly (L0)</b>월×지표: 도매/소매 대수·매출·ASP·관리비·매출총이익·VoC. <span class="m">시점 규칙: 마감월(NOW=2026-08)까지만 — 미마감 원장은 노출 안 함</span>'},
+ // SEMANTIC
+ {id:'m_obj', lyr:'sem', nm:'objectTypes · linkTypes', ct:'타입 ↔ 마트 바인딩 25건',
+  tip:'<b>타입 선언</b>각 타입의 sapSource(원천)·datasource(마트 경로)·level(L0~L3)·primaryKey. 프런트·백엔드는 경로가 아닌 이 선언으로 접근.'},
+ {id:'m_act', lyr:'sem', nm:'actionTypes — 8', ct:'HITL/AI 게이트 · 원장 매핑',
+  tip:'<b>액션 선언</b>invoiceWholesale(AI)·approveWarrantyClaim(HITL)·closeMonthlyFinance(HITL) … 액션 실행 = 해당 원장 append → 폐루프.'},
+ {id:'m_kpi', lyr:'sem', nm:'kpiBindings', ct:'ceo_tree.bind ↔ 큐브 필드',
+  tip:'<b>KPI 바인딩</b>ws→wholesale_units, asp→asp_usd, opex→opex_usd … data/governance/ceo_tree.csv의 bind 값이 참조하는 필드 계약.'},
+ // SERVING
+ {id:'duck', lyr:'srv', nm:'DuckDB :memory:', ct:'Q1~Q4 · 4~12ms 응답',
+  tip:'<b>적재 없는 서빙</b>Parquet를 파일 그대로 질의 — L0 KPI 롤업 4ms, VIN 체인 10ms, 딜러 스코어 12ms.<span class="m">server.js에 질의 핸들러를 얹는 얇은 API로 충분</span>'},
+ // WORLD
+ {id:'wtwin', lyr:'wld', nm:'트윈 월드 V10', ct:'관계뷰 · 부문 월드 · Play',
+  tip:'<b>디지털 트윈 월드</b>L0 KPI(좌 레일·관계뷰) — kpi_monthly. 드릴 시 하위 레벨 마트 로드 (레벨별 계약).'},
+ {id:'wexp', lyr:'wld', nm:'온톨로지 탐색기', ct:'객체·링크 순회 · 데이터뷰',
+  tip:'<b>탐색기</b>objects/·links/ 인스턴스를 시멘틱 선언으로 순회 — VIN 체인 드릴 = Q2.'},
+];
+const EDGES=[
+ ['kna1','s_dim'],['vlc','s_veh'],['mm','s_tx'],['sd','s_tx'],['rdr','s_tx'],['qm','s_q'],['fi','s_fi'],
+ ['s_dim','o_obj'],['s_veh','o_obj'],['s_tx','o_obj'],['s_q','o_obj'],
+ ['s_veh','o_lnk'],['s_tx','o_lnk'],['s_q','o_lnk'],['s_dim','o_lnk'],
+ ['s_tx','o_kpi'],['s_fi','o_kpi'],['s_q','o_kpi'],
+ ['o_obj','m_obj'],['o_lnk','m_obj'],['o_obj','m_act'],['o_kpi','m_kpi'],
+ ['m_obj','duck'],['m_act','duck'],['m_kpi','duck'],
+ ['duck','wtwin'],['duck','wexp'],
+];
+
+/* ── 레이아웃 — 레이어 열 고정, 노드 세로 적층 (Sugiyama 계층 배치) ─────────── */
+const NH=44, GAP=13, TOP=56;
+const L_OF=Object.fromEntries(LAYERS.map(l=>[l.id,l]));
+const byLyr={}; NODES.forEach(n=>{(byLyr[n.lyr]=byLyr[n.lyr]||[]).push(n);});
+let maxY=0;
+for(const l of LAYERS){
+  const list=byLyr[l.id]||[];
+  const h=list.length*NH+(list.length-1)*GAP;
+  const colH=Math.max(...LAYERS.map(x=>(byLyr[x.id]||[]).length))*(NH+GAP)-GAP;
+  let y=TOP+(colH-h)/2;
+  for(const n of list){ n.x=l.x; n.y=y; n.w=l.w; y+=NH+GAP; maxY=Math.max(maxY,y); }
+}
+const H=maxY+66, W=1460;
+const svg=document.getElementById('dag');
+svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+const el=(t,a,p)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',t);for(const k in a)e.setAttribute(k,a[k]);(p||svg).appendChild(e);return e};
+
+/* 레이어 제목 */
+for(const l of LAYERS){
+  el('text',{x:l.x+l.w/2,y:24,'text-anchor':'middle',class:'lyrTtl'}).textContent=l.ttl;
+  el('text',{x:l.x+l.w/2,y:38,'text-anchor':'middle',class:'lyrSub'}).textContent=l.sub;
+}
+/* 엣지 — 직교(elbow): 출발/도착 레이어 사이 중앙 세로 채널, 채널 내 레인 분산 */
+const N_OF=Object.fromEntries(NODES.map(n=>[n.id,n]));
+const chanLane={};
+for(const [a,b] of EDGES){
+  const s=N_OF[a], t=N_OF[b];
+  const x1=s.x+s.w, y1=s.y+NH/2, x2=t.x, y2=t.y+NH/2;
+  const key=s.lyr+'>'+t.lyr;
+  chanLane[key]=(chanLane[key]||0)+1;
+  const mid=x1+(x2-x1)*0.5+((chanLane[key]%5)-2)*7;   // 레인 오프셋으로 겹침 완화
+  el('path',{class:'eg',d:`M${x1} ${y1} H${mid} V${y2} H${x2}`,'marker-end':'url(#arr)'});
+}
+/* 화살촉 */
+const defs=el('defs',{});
+const mk=el('marker',{id:'arr',viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'7',markerHeight:'7',orient:'auto'},defs);
+el('path',{d:'M0 0 L8 4 L0 8 Z',fill:'var(--edge)'},mk);
+
+/* 폐루프 리턴 채널 — 월드 액션 실행 → 원장 append → RAW 재적재 */
+const ly=H-30, wq=N_OF['wtwin'], rq=N_OF['sd'];
+const lx1=wq.x+wq.w/2, lx2=rq.x+rq.w/2;
+el('path',{class:'loop',d:`M${lx1} ${wq.y+NH} V${ly} H${lx2} V${rq.y+NH+8}`,'marker-end':'url(#arrG)'});
+const mkG=el('marker',{id:'arrG',viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'7',markerHeight:'7',orient:'auto'},defs);
+el('path',{d:'M0 0 L8 4 L0 8 Z',fill:'var(--srv)'},mkG);
+el('text',{x:(lx1+lx2)/2,y:ly-7,'text-anchor':'middle',class:'loopLbl'}).textContent='폐루프 — 액션 실행(HITL/AI 게이트) → 원장 append → 재적재 → KPI 환류';
+/* 루프 파티클 */
+const dot=el('circle',{r:3,class:'flowDot'});
+const loopPath=svg.querySelector('.loop');
+const LP=loopPath.getTotalLength();
+let t0=performance.now();
+(function anim(t){
+  const p=loopPath.getPointAtLength(LP*(((t-t0)/5200)%1));
+  dot.setAttribute('cx',p.x); dot.setAttribute('cy',p.y);
+  requestAnimationFrame(anim);
+})(t0);
+
+/* 노드 + 모듈 그룹 라벨 + 툴팁 */
+const tip=document.getElementById('tip');
+for(const n of NODES){
+  const g=el('g',{class:'nd'});
+  el('rect',{x:n.x,y:n.y,width:n.w,height:NH,stroke:L_OF[n.lyr].c},g);
+  if(n.grp) el('text',{x:n.x+2,y:n.y-3,class:'grpLbl'},g).textContent=n.grp;
+  const nm=el('text',{x:n.x+9,y:n.y+18,class:'nm'},g); nm.textContent=n.nm;
+  const ct=el('text',{x:n.x+9,y:n.y+33,class:'ct'},g); ct.textContent=n.ct;
+  g.addEventListener('mousemove',e=>{
+    tip.innerHTML=n.tip; tip.style.display='block';
+    const r=tip.getBoundingClientRect();
+    tip.style.left=Math.min(e.clientX+14,innerWidth-r.width-12)+'px';
+    tip.style.top=Math.min(e.clientY+14,innerHeight-r.height-12)+'px';
+  });
+  g.addEventListener('mouseleave',()=>tip.style.display='none');
+}
+</script>
+</body>
+</html>

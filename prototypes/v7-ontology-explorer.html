@@ -217,12 +217,20 @@ body.embed header{display:none}
 ::-webkit-scrollbar-thumb{background:#3a3a36;border-radius:5px}
 ::-webkit-scrollbar-track{background:transparent}
 html{scrollbar-color:#3a3a36 transparent}
+/* 딥링크 베일 — 해시 상태(#focus:/#act:) 적용이 끝날 때까지 기본 뷰를 가리는 커버.
+   V10 트윈 월드에서 링크로 진입·재소환될 때 이전/기본 제목줄이 잠깐 보였다가
+   다시 바뀌는 재로드 플래시 방지 — 상태가 선적용된 뒤에만 페인트를 보여준다. */
+#dlVeil{position:fixed;inset:0;background:var(--bg);z-index:2000;pointer-events:none;opacity:1;transition:opacity .22s ease}
+#dlVeil.off{opacity:0}
 </style>
 </head>
 <body>
+<div id="dlVeil" hidden></div>
+<script>/* 딥링크 진입이면 첫 페인트 전에 베일부터 — 기본 제목줄 노출(플래시) 차단 */
+if (location.hash.length > 1) document.getElementById('dlVeil').hidden = false;</script>
 <header>
   <div>
-    <h1>미국판매법인 비즈니스 온톨로지 <span class="mono muted" id="ontVer"></span></h1>
+    <h1><span id="entName">미국판매법인</span> 비즈니스 온톨로지 <span class="mono muted" id="ontVer"></span></h1>
     <div class="sub">parquet 데이터 마트 위 시멘틱 레이어 — 객체 · 링크 · 액션 · 수명주기 선언 (v7-ontology.js)</div>
   </div>
   <nav class="tabs">
@@ -283,6 +291,7 @@ html{scrollbar-color:#3a3a36 transparent}
 </main>
 
 
+<script src="entity-config.js"></script><!-- 법인 프로필 — development/entity-profile.md 빌드 생성물 (없어도 기본값으로 동작) -->
 <script src="v7-data.js"></script>
 <script src="v7-ontology.js"></script>
 <script src="v7-ontology-instances.js"></script>
@@ -292,6 +301,9 @@ html{scrollbar-color:#3a3a36 transparent}
 // 임베드 모드 (?embed=1) — 트윈이 관계 뷰만 오버레이로 띄울 때: 탐색기 자체 크롬(헤더·탭)을
 // 숨겨 온톨로지 HTML 전체가 아니라 해당 객체의 관계 뷰만 보이게 한다.
 if (new URLSearchParams(location.search).has('embed')) document.body.classList.add('embed');
+// 법인 프로필 적용 — entity-config.js(빌드 생성물)가 있으면 법인명을 반영
+if (window.ENTITY_CONFIG && window.ENTITY_CONFIG.entity && window.ENTITY_CONFIG.entity.name)
+  document.getElementById('entName').textContent = window.ENTITY_CONFIG.entity.name;
 const O = window.ONTOLOGY;
 const DB = window.buildOntologyInstances(window.TWIN_DATA);
 const GC = { org:'#3987e5', product:'#d95926', plan:'#199e70', logistics:'#c98500', commerce:'#d55181', care:'#008300', quality:'#9085e9' };
@@ -1425,17 +1437,42 @@ async function initTripMap() {
   return _tripMapReady;
 }
 
-// 그래프 탭 첫 진입 시 URL 해시로 타입 딥링크 — '#<tid>' = 고정, '#focus:<tid>' = 관계 뷰 진입
-if (location.hash.length > 1) {
-  const h = location.hash.slice(1);
-  const focus = h.startsWith('focus:');
-  const tid = focus ? h.slice(6) : h;
-  if (OT[tid]) {
-    window._cy.$('#' + tid).select();
-    if (focus) window._enterFocus(tid); else window._graphPin(tid);
-    renderTypePanel(tid);
-  }
+// URL 해시 딥링크 — '#<tid>' = 고정, '#focus:<tid>' = 관계 뷰 진입,
+// '#act:<actionId>' = 대상 객체 관계 뷰 + (map/board 트윈 뷰가 있으면) 데이터 뷰까지 오픈.
+// V10 트윈 월드가 임베드 iframe의 해시만 바꿔 재소환하므로 hashchange에도 다시 적용한다.
+// 베일 On/Off — 상태 적용이 끝난 프레임 이후에만 걷어서 이전/기본 제목줄이 보이지 않게 한다.
+const dlVeil = document.getElementById('dlVeil');
+function dlVeilOn() { dlVeil.hidden = false; dlVeil.classList.remove('off'); }
+function dlVeilOff() {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    dlVeil.classList.add('off');
+    setTimeout(() => { dlVeil.hidden = true; }, 250);
+  }));
 }
+function applyHashDeepLink() {
+  try {
+    if (location.hash.length <= 1) return;
+    const h = decodeURIComponent(location.hash.slice(1));
+    if (h.startsWith('act:')) {
+      const a = O.actionTypes.find(x => x.id === h.slice(4));
+      if (!a || !OT[a.objectType]) return;
+      window._resetFocusView(a.objectType);                       // 액션 대상 객체의 관계 뷰로 초기화
+      if (a.twinView && a.twinView.kind !== 'sim') openTwinPanel(a.id);   // 데이터 뷰 액션이면 바로 오픈
+      return;
+    }
+    const focus = h.startsWith('focus:');
+    const tid = focus ? h.slice(6) : h;
+    if (OT[tid]) {
+      if (focus) { window._resetFocusView(tid); return; }
+      window._cy.$('#' + tid).select();
+      window._graphPin(tid);
+      renderTypePanel(tid);
+    }
+  } finally { dlVeilOff(); }   // 어떤 경로로 끝나도 베일은 걷는다
+}
+applyHashDeepLink();
+// 재소환(같은 문서, 해시만 변경)도 베일을 먼저 덮고 적용 — 이전 제목줄 플래시 방지
+window.addEventListener('hashchange', () => { dlVeilOn(); applyHashDeepLink(); });
 </script>
 </body>
 </html>

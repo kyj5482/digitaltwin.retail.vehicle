@@ -1,0 +1,12 @@
+ym,activity_id,phase,gate_seq,gate_id,gate_name,gate_type,owner,status
+2025-06,PP-1,product,1,G1,Feature 게이트 심사,hitl,상품위원회,승인
+2025-06,MKT-3,marketing,1,G1,예산 재배분,ai,AGT-MED,실행완료
+2025-06,ORD-1,order,1,G1,DoS Weight 배분 초안,ai,AGT-ORD,실행완료
+2025-06,ORD-1,order,2,G2,주문 승인,hitl,오더 매니저,승인
+2025-06,ORD-1,order,3,G3,생산법인 전송,auto,시스템,실행완료
+2025-06,SLS-1,sales,1,G1,도매·소매 정산,auto,시스템,실행완료
+2025-06,QLT-1,quality,1,G1,VoC 분류·이슈 감지,ai,AGT-VOC,실행완료
+2025-06,QLT-2,quality,1,G1,조치 결정 (리콜/OTA/TSB),hitl,품질위원회,승인
+2025-06,QLT-2,quality,2,G2,대상 VIN 추출,ai,AGT-VIN,실행완료
+2025-06,QLT-2,quality,3,G3,완결 판정,hitl,품질,예정
+2025-06,SVC-2,service,1,G1,워런티 정산,auto,시스템,실행완료

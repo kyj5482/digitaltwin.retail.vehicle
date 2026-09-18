@@ -1,0 +1,10 @@
+model_year,model_id,item_type,item_name,target_launch_ym,gate,ready_pct
+2026,LUM,feature,커넥티드 2.0 (OTA 진단),2025-10,G4,100
+2026,TRN,new_trim,Summit Black 에디션,2025-11,G4,100
+2026,AUR,feature,배터리 프리컨디셔닝,2025-09,G4,100
+2027,SOL,new_model,Solara EV (준중형 EV 세단),2027-03,G2,45
+2027,TRN,new_trim,X-Pro (오프로드 트림),2026-11,G3,78
+2027,LUM,feature,OTA 2.0 플랫폼,2026-10,G3,85
+2027,AUR,feature,ADAS 3.0 하이웨이 어시스트,2027-01,G2,60
+2027,VST,my_change,MY27 연식변경 (12.3인치 인포테인먼트),2026-09,G4,96
+2027,NOV,feature,2열 라운지 시트,2026-12,G3,72

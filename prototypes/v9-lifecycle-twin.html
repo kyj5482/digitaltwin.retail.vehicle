@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ============================================================================
+V9 라이프사이클 트윈 — 판매법인 연간 업무 사이클
+상품 준비 → 사업계획·트림믹스·FOB → 마케팅(매체 제작·퍼포먼스) → 월 생산 주문(DoS Weight)
+→ 판매·유통 → VoC·품질(TSB/OTA) → 서비스·Parts(DN/Factory 균형)의 폐루프를
+하나의 씬으로 트윈하고, 연간 사이클 링 + 이번 달 실행 업무 피드로
+"지금 회사에서 어떤 업무가 실행되고 있는가"에 답한다. 데이터: v7-data.js (data/와 동일 소스)
+============================================================================= -->
+<title>V9 라이프사이클 트윈 — 판매법인 연간 업무 사이클</title>
+<style>
+:root{
+  --page:#161614;--surface:#1e1e1c;--surface2:#262623;--line:#33332f;
+  --ink:#f0efec;--muted:#a3a199;--edge:#6e6e67;--edge-hi:#79b8ff;
+  --good:#4cc38a;--warn:#eaa93e;--crit:#e5484d;--fb:#4cc38a;
+  --ph-product:#b58cff;--ph-bp:#79b8ff;--ph-marketing:#eaa93e;--ph-order:#58d1c9;
+  --ph-sales:#e8e6e1;--ph-quality:#e5484d;--ph-service:#4cc38a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--page);color:var(--ink);overflow:hidden;display:flex;flex-direction:column;
+  font:13px/1.45 Pretendard,"Apple SD Gothic Neo","Segoe UI",system-ui,sans-serif;
+  font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+/* ── 헤더 ─────────────────────────────────────────── */
+header{height:46px;flex:0 0 46px;display:flex;align-items:center;gap:12px;padding:0 14px;
+  background:var(--surface);border-bottom:1px solid var(--line)}
+header h1{font-size:14px;font-weight:700}
+header .sub{font-size:11.5px;color:var(--muted)}
+.phLgd{display:flex;gap:10px;margin-left:auto;font-size:11px;color:var(--muted)}
+.phLgd span{display:inline-flex;align-items:center;gap:4px}
+.phLgd i{width:8px;height:8px;border-radius:2px;display:inline-block}
+/* ── 메인 그리드 ──────────────────────────────────── */
+#main{flex:1;display:grid;grid-template-columns:218px 1fr 290px;min-height:0}
+/* 좌: 단계 레일 */
+#rail{border-right:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px}
+#rail .railTtl{font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin:4px 4px 8px}
+.stg{width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);
+  border-left:3px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px;transition:border-color .15s}
+.stg:hover{border-color:var(--edge)}
+.stg.sel{border-color:var(--edge-hi)}
+.stg .nm{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+.stg .nm .lamp{margin-left:auto}
+.stg .v1{font-size:14px;font-weight:700;margin-top:3px}
+.stg .v2{font-size:11px;color:var(--muted);margin-top:1px}
+.lamp{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--line)}
+.lamp.on{background:var(--good);box-shadow:0 0 6px var(--good)}
+.lamp.warn{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+.lamp.crit{background:var(--crit);box-shadow:0 0 6px var(--crit)}
+/* 중앙: 씬 + 하단 밴드 */
+#center{display:flex;flex-direction:column;min-width:0}
+#sceneWrap{flex:1;position:relative;min-height:0}
+#scene{width:100%;height:100%;display:block}
+#band{flex:0 0 232px;border-top:1px solid var(--line);display:grid;grid-template-columns:320px 1fr;min-height:0}
+#ringBox{border-right:1px solid var(--line);position:relative;background:var(--surface)}
+#ringBox .bandTtl,#trendBox .bandTtl{position:absolute;top:8px;left:12px;font-size:11px;color:var(--muted);letter-spacing:.04em}
+#ring{width:100%;height:100%;display:block}
+#trendBox{position:relative;background:var(--surface)}
+#trend{width:100%;height:100%;display:block}
+/* 우: 이번 달 실행 업무 피드 */
+#side{border-left:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px}
+#side .sideTtl{font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin:4px 4px 8px}
+.feedCard{width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);border-radius:7px;
+  padding:7px 9px;margin-bottom:6px;transition:border-color .15s}
+.feedCard:hover{border-color:var(--edge)}
+.feedCard.dim{opacity:.5}
+.feedCard .hd{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.feedCard .hd i{width:7px;height:7px;border-radius:2px;flex:0 0 7px}
+.feedCard .st{margin-left:auto;font-size:10px;padding:1px 6px;border-radius:8px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.feedCard .st.run{color:var(--good);border-color:var(--good)}
+.feedCard .st.warn{color:var(--warn);border-color:var(--warn)}
+.feedCard .st.crit{color:var(--crit);border-color:var(--crit)}
+.feedCard .ctx{font-size:11px;color:var(--muted);margin-top:3px}
+.feedCard .own{font-size:10px;color:var(--muted);opacity:.75;margin-top:2px}
+/* ── 푸터 타임라인 ────────────────────────────────── */
+footer{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:12px;padding:0 16px;
+  background:var(--surface);border-top:1px solid var(--line)}
+footer .btn{border:1px solid var(--line);border-radius:6px;padding:4px 12px;font-size:12px}
+footer .btn:hover{border-color:var(--edge)}
+footer .btn.on{border-color:var(--edge-hi);color:var(--edge-hi)}
+#tlWrap{flex:1;position:relative;height:26px;display:flex;align-items:center}
+#tl{width:100%;accent-color:var(--edge-hi)}
+#ymLbl{font-size:14px;font-weight:700;min-width:84px}
+#ymSub{font-size:11px;color:var(--muted);min-width:130px}
+/* ── 씬 SVG 공통 ──────────────────────────────────── */
+.nodeBox{fill:var(--surface2);stroke:var(--line);stroke-width:1.2;rx:8}
+.nodeBox.active{stroke-width:1.6}
+.nodeAccent{rx:2}
+.nodeName{font-size:12.5px;font-weight:700;fill:var(--ink)}
+.nodeCnt{font-size:11.5px;fill:var(--ink)}
+.nodeSub{font-size:10.5px;fill:var(--muted)}
+.nodeLamp{r:4}
+.nodeLampLbl{font-size:9.5px;fill:var(--muted)}
+.laneLbl{font-size:10.5px;fill:var(--muted);letter-spacing:.08em}
+.edgeP{fill:none;stroke-width:1.4;opacity:.55}
+.edgeP.fb{stroke-dasharray:none}
+.pulseRing{fill:none;stroke-width:2;opacity:0;pointer-events:none}
+@keyframes pulse{0%{opacity:.7;stroke-width:1.5}100%{opacity:0;stroke-width:7}}
+.pulseRing.on{animation:pulse 1.8s ease-out infinite}
+.node{cursor:pointer}
+.node:hover .nodeBox{stroke:var(--edge)}
+.node.sel .nodeBox{stroke:var(--edge-hi);stroke-width:1.8}
+/* 링 */
+.ringArc{fill:none;cursor:pointer}
+.ringArc:hover{stroke-width:7}
+.ringTick{stroke:var(--line)}
+.ringMon{font-size:9.5px;fill:var(--muted)}
+.ringNeedle{stroke:var(--ink);stroke-width:1.6}
+.ringCenterYm{font-size:15px;font-weight:700;fill:var(--ink);text-anchor:middle}
+.ringCenterSub{font-size:9.5px;fill:var(--muted);text-anchor:middle}
+/* 툴팁 */
+.tip{position:fixed;z-index:90;background:var(--surface2);border:1px solid var(--edge);border-radius:7px;
+  padding:7px 10px;font-size:11.5px;pointer-events:none;display:none;max-width:300px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.tip b{display:block;margin-bottom:2px}
+.tip .mut{color:var(--muted)}
+/* ── 드릴 패널 ────────────────────────────────────── */
+#drill{position:fixed;top:46px;right:-670px;bottom:58px;width:660px;z-index:70;background:var(--surface);
+  border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.45);transition:right .22s;display:flex;flex-direction:column}
+#drill.open{right:0}
+#drillHd{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+#drillHd .ph{width:9px;height:9px;border-radius:2px}
+#drillHd h2{font-size:13.5px;font-weight:700}
+#drillHd .ym{font-size:11.5px;color:var(--muted)}
+#drillX{margin-left:auto;border:1px solid var(--line);border-radius:6px;padding:2px 9px;font-size:12px}
+#drillX:hover{border-color:var(--edge)}
+#drillBody{flex:1;overflow-y:auto;padding:12px 14px}
+.dSec{margin-bottom:16px}
+.dSec h3{font-size:11px;color:var(--muted);letter-spacing:.05em;margin-bottom:7px}
+.dNote{font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--line);
+  border-radius:6px;padding:7px 9px;margin-bottom:10px;line-height:1.55}
+.dNote code{color:var(--ink);background:none;font-size:11px}
+table.dt{width:100%;border-collapse:collapse;font-size:11.5px}
+table.dt th{color:var(--muted);font-weight:500;text-align:left;padding:3px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.dt td{padding:3px 6px;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);white-space:nowrap}
+table.dt td.num,table.dt th.num{text-align:right}
+table.dt tr.hl td{background:color-mix(in srgb,var(--edge-hi) 10%,transparent)}
+.chipRow{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px}
+.chip{border:1px solid var(--line);border-radius:12px;padding:2px 10px;font-size:11.5px;color:var(--muted)}
+.chip:hover{border-color:var(--edge)}
+.chip.on{border-color:var(--edge-hi);color:var(--edge-hi)}
+.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;border:1px solid var(--line);color:var(--muted)}
+.badge.good{color:var(--good);border-color:var(--good)}
+.badge.warn{color:var(--warn);border-color:var(--warn)}
+.badge.crit{color:var(--crit);border-color:var(--crit)}
+.gbar{display:inline-block;height:7px;border-radius:3px;background:var(--edge-hi);vertical-align:middle}
+.stepper{display:flex;gap:0;margin-bottom:10px}
+.step{flex:1;text-align:center;font-size:10.5px;color:var(--muted);padding:5px 2px;border-bottom:2px solid var(--line)}
+.step.done{color:var(--good);border-color:var(--good)}
+.step.now{color:var(--warn);border-color:var(--warn);font-weight:700}
+/* 히트맵 셀 */
+table.heat td{text-align:center;border-radius:3px;font-size:10.5px;padding:4px 2px;cursor:default}
+table.heat{border-spacing:2px;border-collapse:separate;width:100%}
+table.heat th{font-size:10px;color:var(--muted);font-weight:500;padding:2px}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+::-webkit-scrollbar-thumb:hover{background:var(--edge)}
+@media (prefers-reduced-motion:reduce){.pulseRing.on{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>V9 라이프사이클 트윈</h1>
+  <span class="sub">판매법인 연간 업무 사이클 — 상품 → BP·FOB → 마케팅 → 주문 → 판매 → 품질 → Parts 폐루프</span>
+  <div class="phLgd" id="phLgd"></div>
+</header>
+<div id="main">
+  <aside id="rail">
+    <div class="railTtl">라이프사이클 단계</div>
+    <div id="stgList"></div>
+  </aside>
+  <div id="center">
+    <div id="sceneWrap"><svg id="scene" viewBox="0 0 1240 520" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div id="band">
+      <div id="ringBox"><span class="bandTtl">연간 사이클 링 — 1년 업무 창</span><svg id="ring" viewBox="0 0 320 232"></svg></div>
+      <div id="trendBox"><span class="bandTtl" id="trendTtl">단계 트렌드</span><svg id="trend"></svg></div>
+    </div>
+  </div>
+  <aside id="side">
+    <div class="sideTtl" id="feedTtl">이번 달 실행 업무</div>
+    <div id="feedList"></div>
+  </aside>
+</div>
+<footer>
+  <button class="btn" id="btnPlay">▶ Play</button>
+  <button class="btn" id="btnSpd">×1</button>
+  <span id="ymLbl">2026-08</span>
+  <div id="tlWrap"><input type="range" id="tl" min="0" max="31" value="31" step="1"></div>
+  <span id="ymSub">실적 32개월 재생 · 미래 시뮬은 V7/V8</span>
+</footer>
+<div id="drill">
+  <div id="drillHd"><span class="ph" id="drillPh"></span><h2 id="drillTtl"></h2><span class="ym" id="drillYm"></span>
+    <button id="drillX">닫기 ✕</button></div>
+  <div id="drillBody"></div>
+</div>
+<div class="tip" id="tip"></div>
+<script src="v7-data.js"></script>
+<script>
+'use strict';
+/* ═══════════ PART A. 데이터 바인딩 · 공통 헬퍼 ═══════════ */
+const D = window.TWIN_DATA, M = D.meta, LC = D.lifecycle;
+const MODELS = D.models, ZONES = D.zones, PLANTS = D.plants;
+const COLORS = D.attrs.colors, TRIM_W = D.trim_w;
+const N = M.months.length, NOW = M.now, DS_TARGET = M.ds_target;
+const MONTHS = M.months;
+const MODEL_OF = Object.fromEntries(MODELS.map(m=>[m.id,m]));
+const PLANT_LEAD = Object.fromEntries(PLANTS.map(p=>[p.id,p.lead_m]));
+const fmt = n => Math.round(n).toLocaleString('en-US');
+const f1 = n => (Math.round(n*10)/10).toFixed(1);
+const fmtM = n => '$' + (n/1e6).toFixed(1) + 'M';
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+const $ = id => document.getElementById(id);
+const elNS = (tag,attrs,parent)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]); if(parent) parent.appendChild(e); return e;};
+
+const PHASES = [
+  {id:'product',   name:'상품 준비',            color:'var(--ph-product)',  hex:'#b58cff'},
+  {id:'bp',        name:'사업계획·트림믹스·FOB', color:'var(--ph-bp)',       hex:'#79b8ff'},
+  {id:'marketing', name:'마케팅',               color:'var(--ph-marketing)',hex:'#eaa93e'},
+  {id:'order',     name:'생산 주문',            color:'var(--ph-order)',    hex:'#58d1c9'},
+  {id:'sales',     name:'판매·유통',            color:'var(--ph-sales)',    hex:'#e8e6e1'},
+  {id:'quality',   name:'품질·VoC',             color:'var(--ph-quality)',  hex:'#e5484d'},
+  {id:'service',   name:'서비스·Parts',         color:'var(--ph-service)',  hex:'#4cc38a'},
+];
+const PHASE_OF = Object.fromEntries(PHASES.map(p=>[p.id,p]));
+
+// 번들 표 데이터 인덱싱: cols 배열 → 이름 접근자 + ym별 그룹
+function tableOf(t){
+  const idx = Object.fromEntries(t.cols.map((c,k)=>[c,k]));
+  const get = (row,c)=>row[idx[c]];
+  const byYm = new Map();
+  for(const r of t.rows){ const ym=r[0]; if(!byYm.has(ym)) byYm.set(ym,[]); byYm.get(ym).push(r); }
+  return {rows:t.rows, get, byYm, cols:t.cols};
+}
+const VOC = tableOf(LC.voc), MEDIA = tableOf(LC.media), ACTIONS = tableOf(LC.actions), PARTS = tableOf(LC.parts);
+const TRIM_MIX_COLS = Object.fromEntries(LC.trim_mix.cols.map((c,k)=>[c,k]));
+const tmx = (row,c)=>row[TRIM_MIX_COLS[c]];
+
+const mv = i => D.actual[Math.min(i,NOW)];             // 월 뷰 (실적)
+const mvm = (i,mid) => mv(i).models[mid];
+const bpm = (i,mid) => D.bp[i].models[mid];
+
+/* ═══════════ PART B. 주문 로직 미러 (generate.py order_plan_rows와 동일 수식) ═══════════ */
+// 재고 믹스 = 2~4개월 전 주문분 → 색상 수요 이동(A2) 시 DS 괴리 → Weight 보정.
+function zoneWeights(md){
+  const raw = ZONES.map(z => md.ev ? z.share*z.ev_aff : z.share);
+  const s = raw.reduce((a,b)=>a+b,0);
+  return raw.map(r=>r/s);
+}
+function mixColor(mid, zid, i){
+  const md = MODEL_OF[mid];
+  const w = [...D.attrs.color_w];
+  for(const a of (D.attrs.anomalies||[])){
+    if(a.type!=='color') continue;
+    if(a.ev_only && !md.ev) continue;
+    if(!a.zones.includes(zid) || i < a.start) continue;
+    const t = Math.min(1,(i-a.start+1)/a.ramp);
+    w[a.from_idx] -= a.shift*t; w[a.to_idx] += a.shift*t;
+  }
+  const s = w.reduce((a,b)=>a+b,0);
+  return w.map(x=>x/s);
+}
+const ZONE_STOCK_BIAS = LC.meta.zone_stock_bias;
+function orderPlan(mid, i){
+  const md = MODEL_OF[mid];
+  const lead = PLANT_LEAD[md.plant];
+  const src = Math.min(i+lead, NOW);
+  const total = mvm(src, mid).ws;
+  const zw = zoneWeights(md);
+  const stockI = mvm(i, mid).stock;
+  const cells = [];
+  ZONES.forEach((z,zi)=>{
+    const lag = [2,3,4].map(k=>Math.max(0,i-k));
+    const cmxStk = COLORS.map((_,ci)=> lag.reduce((s,j)=>s+mixColor(mid,z.id,j)[ci],0)/3 );
+    const bias = ZONE_STOCK_BIAS[z.id];
+    for(let ti=0; ti<3; ti++){
+      const baseF = zw[zi]*TRIM_W[ti];
+      COLORS.forEach((c,ci)=>{
+        let ma3=0; const j0=Math.max(0,i-2);
+        for(let j=j0;j<=i;j++) ma3 += mvm(j,mid).retail*baseF*mixColor(mid,z.id,j)[ci];
+        ma3 /= Math.min(3,i+1);
+        cells.push({zi,ti,ci,ma3,stkRaw:baseF*cmxStk[ci]*bias});
+      });
+    }
+  });
+  const rawSum = cells.reduce((s,c)=>s+c.stkRaw,0);
+  let ssum=0;
+  for(const c of cells){
+    c.stk = stockI*c.stkRaw/rawSum;
+    c.ds = c.stk/Math.max(c.ma3/30.4,0.01);
+    c.w = clamp(DS_TARGET/c.ds,0.6,1.6);
+    c.score = c.ma3*c.w; ssum += c.score;
+  }
+  for(const c of cells) c.qty = total*c.score/ssum;
+  return {cells, total, lead, prodYm: MONTHS[Math.min(i+lead,N-1)]};
+}
+
+/* ═══════════ PART C. 업무 캘린더 상태 · 단계 지표 ═══════════ */
+// annual: m_from~m_to 창 / quarterly: 분기 첫 달 제작·런칭 / monthly·continuous: 상시 / event: 조치 존재 시
+function actState(a, i){
+  const m = i%12+1, ym = MONTHS[i];
+  if(a.cadence==='annual'){
+    const inWin = a.m_from<=a.m_to ? (m>=a.m_from && m<=a.m_to) : (m>=a.m_from || m<=a.m_to);
+    if(inWin) return 'active';
+    return (a.m_from<=a.m_to && m>a.m_to) ? 'done' : 'wait';
+  }
+  if(a.cadence==='quarterly') return [1,4,7,10].includes(m) ? 'active' : 'run';
+  if(a.cadence==='monthly' || a.cadence==='continuous') return 'active';
+  if(a.cadence==='event') return (ACTIONS.byYm.get(ym)||[]).length ? 'active' : 'wait';
+  return 'wait';
+}
+// 커서 월 기준 각 활동의 컨텍스트 문구 (피드·툴팁 공용)
+function actContext(a, i){
+  const ym = MONTHS[i], y = 2024 + Math.floor(i/12), m = i%12+1;
+  const planMy = y+1;
+  switch(a.id){
+    case 'PP-1': {
+      const items = LC.product_plan.filter(p=>p.my===planMy);
+      const avg = items.length? items.reduce((s,p)=>s+p.ready,0)/items.length : 0;
+      return `MY${planMy} 아이템 ${items.length}건 · 평균 준비율 ${f1(avg)}%`; }
+    case 'PP-2': {
+      const ns = (D.attrs.my_next||[])[i%12]||0;
+      return `신형 MY 혼입률 ${f1(ns*100)}%`; }
+    case 'BP-1': case 'BP-2': case 'BP-3': {
+      const rows = LC.trim_mix.rows[planMy]||LC.trim_mix.rows[2027];
+      const st = rows.length? tmx(rows[0],'status') : '-';
+      const ws = rows.reduce((s,r)=>s+tmx(r,'plan_ws_qty'),0);
+      return `MY${planMy} ${st} · 계획 WS ${fmt(ws)}대`; }
+    case 'MKT-1': return `차년도 매체 플랜 확정 (브랜드·차종별)`;
+    case 'MKT-2': {
+      const rows = MEDIA.byYm.get(ym)||[];
+      const making = rows.filter(r=>MEDIA.get(r,'status')==='제작·런칭').length;
+      return making? `신규 크리에이티브 ${making}건 제작·런칭` : `분기 캠페인 집행 중`; }
+    case 'MKT-3': {
+      const rows = MEDIA.byYm.get(ym)||[];
+      const sp = rows.reduce((s,r)=>s+MEDIA.get(r,'spend_musd'),0);
+      return `당월 집행 $${f1(sp)}M · 캠페인 ${new Set(rows.map(r=>MEDIA.get(r,'campaign_id'))).size}개`; }
+    case 'ORD-1': {
+      const tot = MODELS.reduce((s,md)=>s+orderPlan(md.id,i).total,0);
+      return `${MONTHS[Math.min(i+1,N-1)]}~ 생산분 주문 ${fmt(tot)}대 (DoS Weight 배분)`; }
+    case 'SLS-1': {
+      const r = MODELS.reduce((s,md)=>s+mvm(i,md.id).retail,0);
+      const b = MODELS.reduce((s,md)=>s+bpm(i,md.id).retail,0);
+      return `소매 ${fmt(r)}대 · BP 대비 ${(r/b*100-100>=0?'+':'')}${f1(r/b*100-100)}%`; }
+    case 'SLS-2': return `연말 프로그램 인센티브 +$500/대`;
+    case 'QLT-1': {
+      const rows = VOC.byYm.get(ym)||[];
+      const hi = rows.filter(r=>VOC.get(r,'severity')==='high');
+      return hi.length? `HIGH ${hi.length}건: ${hi.map(r=>`${r[1]} ${r[2]}`).join(', ')}` : `전 카테고리 정상 범위`; }
+    case 'QLT-2': {
+      const rows = ACTIONS.byYm.get(ym)||[];
+      return rows.length? rows.map(r=>`${ACTIONS.get(r,'action_type')} ${r[3]}(${ACTIONS.get(r,'status')})`).join(' · ') : `진행 조치 없음`; }
+    case 'SVC-1': return `DN/Factory 갭 개정 — 워런티 정산 균형`;
+    case 'SVC-2': {
+      const rows = PARTS.byYm.get(ym)||[];
+      const tot = rows.reduce((s,r)=>s+PARTS.get(r,'cp_sales_kusd')+PARTS.get(r,'warranty_sales_kusd')+PARTS.get(r,'campaign_sales_kusd'),0);
+      const gap = rows.length? rows.reduce((s,r)=>s+PARTS.get(r,'gap_pct'),0)/rows.length : 0;
+      return `Parts 매출 $${f1(tot/1000)}M · 평균 DN갭 ${f1(gap)}%`; }
+  }
+  return '';
+}
+/* ═══════════ PART D. 씬 — 라이프사이클 폐루프 (계획/실행/피드백 3레인) ═══════════ */
+const NW=180, NH=74;
+const NODES = [
+  {id:'PRD', phase:'product',   x:60,   y:60,  name:'상품 준비'},
+  {id:'BP',  phase:'bp',        x:330,  y:60,  name:'사업계획·트림믹스'},
+  {id:'FOB', phase:'bp',        x:600,  y:60,  name:'FOB·생산법인 전달'},
+  {id:'MKT', phase:'marketing', x:60,   y:225, name:'마케팅·매체'},
+  {id:'ORD', phase:'order',     x:330,  y:225, name:'월 생산 주문'},
+  {id:'PLT', phase:'sales',     x:600,  y:225, name:'생산·물류'},
+  {id:'DLR', phase:'sales',     x:830,  y:225, name:'딜러 (도매·재고)'},
+  {id:'RTL', phase:'sales',     x:1050, y:225, name:'소매·고객'},
+  {id:'PRT', phase:'service',   x:330,  y:395, name:'서비스·Parts'},
+  {id:'QAC', phase:'quality',   x:600,  y:395, name:'TSB·OTA 조치'},
+  {id:'VOC', phase:'quality',   x:830,  y:395, name:'VoC·품질 모니터링'},
+];
+const NODE_AT = Object.fromEntries(NODES.map(n=>[n.id,n]));
+// 직교 엣지 — pts는 꺾임점 좌표 목록. kind: plan(연간 계획)/cmd(월 지시)/mat(물류)/dmd(수요)/fb(피드백)
+const EDGES = [
+  {id:'prd-bp',  kind:'plan', ph:'product',  pts:[[240,97],[330,97]],            lbl:'차년도 라인업'},
+  {id:'bp-fob',  kind:'plan', ph:'bp',       pts:[[510,97],[600,97]],            lbl:'트림믹스 결정'},
+  {id:'fob-plt', kind:'plan', ph:'bp',       pts:[[690,134],[690,225]],          lbl:'FOB·연간 물량 전달'},
+  {id:'bp-ord',  kind:'plan', ph:'bp',       pts:[[420,134],[420,225]],          lbl:'계획 기준 (목표 DS)'},
+  {id:'prd-mkt', kind:'plan', ph:'product',  pts:[[150,134],[150,225]],          lbl:'주요 Feature'},
+  {id:'ord-plt', kind:'cmd',  ph:'order',    pts:[[510,262],[600,262]],          lbl:'주문서 (지역×트림×색상)'},
+  {id:'plt-dlr', kind:'mat',  ph:'sales',    pts:[[780,262],[830,262]],          lbl:'도매 (딜러 인수)'},
+  {id:'dlr-rtl', kind:'mat',  ph:'sales',    pts:[[1010,262],[1050,262]],        lbl:'소매'},
+  {id:'mkt-rtl', kind:'dmd',  ph:'marketing',pts:[[240,244],[270,244],[270,190],[1140,190],[1140,225]], lbl:'수요 견인 (퍼포먼스)'},
+  {id:'rtl-voc', kind:'fb',   ph:'quality',  pts:[[1105,299],[1105,340],[920,340],[920,395]], lbl:'VoC·클레임·텔레메트리'},
+  {id:'voc-qac', kind:'fb',   ph:'quality',  pts:[[830,432],[780,432]],          lbl:'이슈 → 조치 배정'},
+  {id:'qac-rtl', kind:'fb',   ph:'quality',  pts:[[690,395],[690,355],[1170,355],[1170,299]], lbl:'TSB·OTA S/W 업데이트'},
+  {id:'rtl-prt', kind:'fb',   ph:'service',  pts:[[1075,299],[1075,485],[420,485],[420,469]], lbl:'정비 입고 → Parts 판매'},
+  {id:'dlr-ord', kind:'fb',   ph:'order',    pts:[[900,299],[900,325],[455,325],[455,299]],  lbl:'Retail·재고 실적 (DoS)'},
+  {id:'voc-prd', kind:'fb',   ph:'product',  pts:[[920,469],[920,502],[30,502],[30,97],[60,97]], lbl:'품질·VoC → 차기 상품 반영'},
+];
+// 엣지별 월 활동도 0~1 (파티클 밀도·불투명도)
+function edgeActivity(e, i){
+  const m = i%12+1, ym = MONTHS[i];
+  switch(e.id){
+    case 'prd-bp':  return (m>=4&&m<=7)?1:0.08;
+    case 'bp-fob':  return m===10?1:(m>=8&&m<=9?0.4:0.08);
+    case 'fob-plt': return m===11?1:0.08;
+    case 'bp-ord':  return 0.25;
+    case 'prd-mkt': return [1,4,7,10].includes(m)?0.9:0.2;
+    case 'ord-plt': return 1;
+    case 'plt-dlr': { const w=MODELS.reduce((s,md)=>s+mvm(i,md.id).ws,0); return clamp(w/62000,0.3,1); }
+    case 'dlr-rtl': { const r=MODELS.reduce((s,md)=>s+mvm(i,md.id).retail,0); return clamp(r/62000,0.3,1); }
+    case 'mkt-rtl': { const rows=MEDIA.byYm.get(ym)||[]; const sp=rows.reduce((s,r)=>s+MEDIA.get(r,'spend_musd'),0); return clamp(sp/55,0.2,1); }
+    case 'rtl-voc': { const rows=VOC.byYm.get(ym)||[]; const v=rows.reduce((s,r)=>s+VOC.get(r,'voc_cnt'),0); return clamp(v/1600,0.25,1); }
+    case 'voc-qac': return (ACTIONS.byYm.get(ym)||[]).length?0.9:0.15;
+    case 'qac-rtl': { const rows=(ACTIONS.byYm.get(ym)||[]).filter(r=>['OTA','TSB','FSC'].includes(ACTIONS.get(r,'action_type'))); return rows.length?0.9:0.05; }
+    case 'rtl-prt': return 0.5;
+    case 'dlr-ord': return 0.7;
+    case 'voc-prd': return 0.25;
+  }
+  return 0.3;
+}
+// 노드별 커서 월 상태 {cnt, sub, lamp, lampLbl, active}
+function nodeInfo(id, i){
+  const ym = MONTHS[i], m = i%12+1, y = 2024+Math.floor(i/12), planMy = y+1;
+  switch(id){
+    case 'PRD': {
+      const items = LC.product_plan.filter(p=>p.my===planMy);
+      const avg = items.length? items.reduce((s,p)=>s+p.ready,0)/items.length : 0;
+      const risky = items.filter(p=>{ const li=MONTHS.indexOf(p.launch); return p.ready<60 && li>=0 && li-i<=6; });
+      const active = (m>=4&&m<=9);
+      return {cnt:`MY${planMy} 아이템 ${items.length}건`, sub:`평균 준비율 ${f1(avg)}%`,
+              lamp: risky.length?'warn':(active?'on':''), lampLbl: risky.length?`지연 리스크 ${risky.length}`:(active?'준비 중':'대기'), active};
+    }
+    case 'BP': {
+      const active = (m>=8&&m<=10);
+      const rows = LC.trim_mix.rows[planMy]||[];
+      const ws = rows.reduce((s,r)=>s+tmx(r,'plan_ws_qty'),0);
+      return {cnt:`MY${planMy} ${rows.length?tmx(rows[0],'status'):'-'}`, sub:`계획 WS ${fmt(ws)}대 (Wholesale 기준)`,
+              lamp: active?'on':'', lampLbl: active?(m===10?'트림믹스 결정':'BP 수립'):'대기', active};
+    }
+    case 'FOB': {
+      const active = m===11;
+      const done = LC.trim_mix.rows[planMy] && tmx(LC.trim_mix.rows[planMy][0],'status')==='FOB 확정';
+      return {cnt: done?`MY${planMy} FOB 확정`:`MY${planMy} 협의 전`, sub:`FOB ≈ MSRP×0.62 · 연 +2.5%`,
+              lamp: active?'on':(done?'on':''), lampLbl: active?'FOB 협의':'대기', active};
+    }
+    case 'MKT': {
+      const rows = MEDIA.byYm.get(ym)||[];
+      const sp = rows.reduce((s,r)=>s+MEDIA.get(r,'spend_musd'),0);
+      const making = rows.filter(r=>MEDIA.get(r,'status')==='제작·런칭').length;
+      return {cnt:`집행 $${f1(sp)}M`, sub: making?`신규 제작·런칭 ${making}건`:`캠페인 ${new Set(rows.map(r=>MEDIA.get(r,'campaign_id'))).size}개 집행중`,
+              lamp:'on', lampLbl: making?'제작·런칭':'퍼포먼스 관리', active:true};
+    }
+    case 'ORD': {
+      const tot = MODELS.reduce((s,md)=>s+orderPlan(md.id,i).total,0);
+      return {cnt:`주문 ${fmt(tot)}대`, sub:`DoS Weight 배분 · 목표 DS ${DS_TARGET}일`,
+              lamp:'on', lampLbl:'매월 실행', active:true};
+    }
+    case 'PLT': {
+      const prod = MODELS.reduce((s,md)=>s+mvm(Math.min(i+PLANT_LEAD[MODEL_OF[md.id].plant],NOW),md.id).ws,0);
+      const kr = (i===M.ev_kr||i===M.ev_kr+1);
+      return {cnt:`생산 ${fmt(prod)}대`, sub:`공장 5곳 · 리드 0~2개월`,
+              lamp: kr?'crit':'on', lampLbl: kr?'KR-1 설비 이상':'가동', active:true};
+    }
+    case 'DLR': {
+      const stk = MODELS.reduce((s,md)=>s+mvm(i,md.id).stock,0);
+      const r = MODELS.reduce((s,md)=>s+mvm(i,md.id).retail,0);
+      const ds = stk/Math.max(r/30.4,1);
+      return {cnt:`재고 ${fmt(stk)}대`, sub:`DS ${f1(ds)}일 (목표 ${DS_TARGET})`,
+              lamp: ds>75||ds<45?'warn':'on', lampLbl: ds>75?'과잉':(ds<45?'부족':'정상'), active:true};
+    }
+    case 'RTL': {
+      const r = MODELS.reduce((s,md)=>s+mvm(i,md.id).retail,0);
+      const b = MODELS.reduce((s,md)=>s+bpm(i,md.id).retail,0);
+      const d = r/b*100-100;
+      return {cnt:`소매 ${fmt(r)}대`, sub:`BP 대비 ${(d>=0?'+':'')}${f1(d)}%`,
+              lamp: d<-5?'warn':'on', lampLbl: d<-5?'BP 미달':'판매 중', active:true};
+    }
+    case 'VOC': {
+      const rows = VOC.byYm.get(ym)||[];
+      const v = rows.reduce((s,r)=>s+VOC.get(r,'voc_cnt'),0);
+      const hi = rows.filter(r=>VOC.get(r,'severity')==='high');
+      const safety = rows.some(r=>VOC.get(r,'safety_flag'));
+      return {cnt:`VoC ${fmt(v)}건`, sub: hi.length?`HIGH: ${hi.map(r=>`${r[1]} ${r[2]}`).join(', ')}`:'전 카테고리 정상',
+              lamp: safety?'crit':(hi.length?'warn':'on'), lampLbl: safety?'안전 이슈':(hi.length?`HIGH ${hi.length}`:'모니터링'), active:true};
+    }
+    case 'QAC': {
+      const rows = ACTIONS.byYm.get(ym)||[];
+      const inv = rows.filter(r=>ACTIONS.get(r,'action_type')==='조사').length;
+      return {cnt: rows.length?`진행 ${rows.length}건`:'진행 조치 없음',
+              sub: rows.length? rows.map(r=>`${ACTIONS.get(r,'action_type')} ${r[3]}`).join(' · '):'이슈 발생 시 배정',
+              lamp: inv?'warn':(rows.length?'on':''), lampLbl: inv?'원인 조사':(rows.length?'조치중':'대기'), active:rows.length>0};
+    }
+    case 'PRT': {
+      const rows = PARTS.byYm.get(ym)||[];
+      const tot = rows.reduce((s,r)=>s+PARTS.get(r,'cp_sales_kusd')+PARTS.get(r,'warranty_sales_kusd')+PARTS.get(r,'campaign_sales_kusd'),0);
+      const gap = rows.length? Math.max(...rows.map(r=>PARTS.get(r,'gap_pct'))) : 0;
+      return {cnt:`Parts $${f1(tot/1000)}M`, sub:`최대 DN/Factory 갭 ${f1(gap)}%`,
+              lamp: gap>6?'warn':'on', lampLbl: gap>6?'갭 과다':'균형', active:true};
+    }
+  }
+}
+// 씬 노드→드릴 phase 매핑
+const NODE_DRILL = {PRD:'product', BP:'bp', FOB:'bp', MKT:'marketing', ORD:'order',
+                    PLT:'sales', DLR:'sales', RTL:'sales', PRT:'service', QAC:'quality', VOC:'quality'};
+
+/* ── 씬 정적 렌더 (1회) ── */
+const scene = $('scene');
+const Ledges = elNS('g',{id:'Ledges'},scene), Lparts = elNS('g',{id:'Lparts'},scene),
+      Lnodes = elNS('g',{id:'Lnodes'},scene), Llabels = elNS('g',{id:'Llabels'},scene);
+const edgePathEls = {}, nodeEls = {};
+function edgeD(pts){ return pts.map((p,k)=>(k?'L':'M')+p[0]+' '+p[1]).join(' '); }
+function edgeColor(e){
+  if(e.kind==='mat') return '#8b8a83';
+  if(e.kind==='fb') return e.ph==='quality'||e.ph==='service'||e.ph==='product' ? PHASE_OF[e.ph].hex : 'var(--fb)';
+  return PHASE_OF[e.ph].hex;
+}
+for(const e of EDGES){
+  const p = elNS('path',{d:edgeD(e.pts),class:'edgeP'+(e.kind==='fb'?' fb':''),stroke:edgeColor(e)},Ledges);
+  p.addEventListener('mousemove',ev=>tipShow(ev,`<b>${e.lbl}</b><span class="mut">${
+    {plan:'연간 계획 흐름',cmd:'월간 지시',mat:'물류 흐름',dmd:'수요 견인',fb:'피드백 폐루프'}[e.kind]}</span>`));
+  p.addEventListener('mouseleave',tipHide);
+  edgePathEls[e.id] = p;
+}
+// 레인 라벨
+elNS('text',{x:14,y:40,class:'laneLbl'},Llabels).textContent='계획 레인 — 연간 사이클';
+elNS('text',{x:14,y:212,class:'laneLbl'},Llabels).textContent='실행 레인 — 월간·상시';
+elNS('text',{x:14,y:382,class:'laneLbl'},Llabels).textContent='피드백 레인 — 폐루프';
+for(const n of NODES){
+  const g = elNS('g',{class:'node','data-id':n.id},Lnodes);
+  elNS('rect',{class:'pulseRing',x:n.x-3,y:n.y-3,width:NW+6,height:NH+6,rx:10,stroke:PHASE_OF[n.phase].hex},g);
+  elNS('rect',{class:'nodeBox',x:n.x,y:n.y,width:NW,height:NH,rx:8},g);
+  elNS('rect',{class:'nodeAccent',x:n.x,y:n.y,width:NW,height:3,rx:1.5,fill:PHASE_OF[n.phase].hex},g);
+  elNS('text',{class:'nodeName',x:n.x+10,y:n.y+21},g).textContent = n.name;
+  elNS('circle',{class:'nodeLamp',cx:n.x+NW-12,cy:n.y+16},g);
+  elNS('text',{class:'nodeLampLbl',x:n.x+NW-22,y:n.y+19.5,'text-anchor':'end'},g);
+  elNS('text',{class:'nodeCnt',x:n.x+10,y:n.y+42},g);
+  elNS('text',{class:'nodeSub',x:n.x+10,y:n.y+60},g);
+  g.addEventListener('click',()=>{ selectPhase(NODE_DRILL[n.id]); openDrill(NODE_DRILL[n.id]); });
+  g.addEventListener('mousemove',ev=>{
+    const inf = nodeInfo(n.id,cursor);
+    tipShow(ev,`<b>${n.name}</b>${inf.cnt} · ${inf.sub}<br><span class="mut">클릭 → ${PHASE_OF[NODE_DRILL[n.id]].name} 데이터 뷰</span>`);
+  });
+  g.addEventListener('mouseleave',tipHide);
+  nodeEls[n.id] = g;
+}
+function updateScene(i){
+  for(const n of NODES){
+    const g = nodeEls[n.id], inf = nodeInfo(n.id,i);
+    g.querySelector('.nodeCnt').textContent = inf.cnt;
+    g.querySelector('.nodeSub').textContent = inf.sub.length>29? inf.sub.slice(0,28)+'…' : inf.sub;
+    const lamp = g.querySelector('.nodeLamp');
+    lamp.setAttribute('fill', inf.lamp==='crit'?'var(--crit)':inf.lamp==='warn'?'var(--warn)':inf.lamp==='on'?'var(--good)':'var(--line)');
+    g.querySelector('.nodeLampLbl').textContent = inf.lampLbl;
+    g.querySelector('.pulseRing').classList.toggle('on', !!inf.active && inf.lamp!=='');
+    g.querySelector('.nodeBox').classList.toggle('active', !!inf.active);
+    g.classList.toggle('sel', NODE_DRILL[n.id]===selPhase);
+  }
+  for(const e of EDGES){
+    const a = edgeActivity(e,i);
+    edgePathEls[e.id].style.opacity = 0.18 + 0.5*a;
+  }
+  rebuildParticles(i);
+}
+/* ── 파티클 (활동도 비례) ── */
+let particles = [];
+function rebuildParticles(i){
+  Lparts.textContent = '';
+  particles = [];
+  for(const e of EDGES){
+    const a = edgeActivity(e,i);
+    const cnt = Math.round(a*4);
+    const path = edgePathEls[e.id], len = path.getTotalLength();
+    for(let k=0;k<cnt;k++){
+      const dot = elNS('circle',{r:2.2,fill:edgeColor(e),opacity:.85},Lparts);
+      particles.push({dot,path,len,off:k/cnt,speed:(e.kind==='mat'?1:0.7)});
+    }
+  }
+}
+let animT = 0, lastTs = 0;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function tickParticles(ts){
+  if(!REDUCED){
+    const dt = lastTs? (ts-lastTs)/1000 : 0; lastTs = ts; animT += dt;
+    for(const p of particles){
+      const t = (p.off + animT*p.speed*0.12) % 1;
+      const pt = p.path.getPointAtLength(t*p.len);
+      p.dot.setAttribute('cx',pt.x); p.dot.setAttribute('cy',pt.y);
+    }
+  }
+  requestAnimationFrame(tickParticles);
+}
+requestAnimationFrame(tickParticles);
+/* ── 툴팁 ── */
+function tipShow(ev, html){
+  const tip = $('tip'); tip.innerHTML = html; tip.style.display = 'block';
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(ev.clientX+14, innerWidth-w-8)+'px';
+  tip.style.top = Math.min(ev.clientY+12, innerHeight-h-8)+'px';
+}
+function tipHide(){ $('tip').style.display = 'none'; }
+/* ═══════════ PART E. 좌측 레일 · 연간 링 · 트렌드 · 피드 ═══════════ */
+let cursor = NOW, selPhase = 'order', drillPhase = null;
+
+// 헤더 범례
+$('phLgd').innerHTML = PHASES.map(p=>`<span><i style="background:${p.hex}"></i>${p.name}</span>`).join('');
+
+function stageInfo(ph, i){
+  const ni = id => nodeInfo(id,i);
+  switch(ph){
+    case 'product': { const a=ni('PRD'); return {v1:a.cnt, v2:a.sub, lamp:a.lamp}; }
+    case 'bp': { const a=ni('BP'), b=ni('FOB'); return {v1:a.cnt, v2:b.cnt, lamp:a.lamp||b.lamp}; }
+    case 'marketing': { const a=ni('MKT'); return {v1:a.cnt, v2:a.sub, lamp:a.lamp}; }
+    case 'order': {
+      const a=ni('ORD');
+      let wmin=9,wmax=0;
+      for(const md of MODELS){ for(const c of orderPlan(md.id,i).cells){ wmin=Math.min(wmin,c.w); wmax=Math.max(wmax,c.w);} }
+      return {v1:a.cnt, v2:`Weight ${wmin.toFixed(2)}~${wmax.toFixed(2)} 보정`, lamp:a.lamp};
+    }
+    case 'sales': { const a=ni('RTL'), b=ni('DLR'); return {v1:a.cnt+' · '+a.sub, v2:b.cnt+' · '+b.sub, lamp:a.lamp==='warn'||b.lamp==='warn'?'warn':'on'}; }
+    case 'quality': { const a=ni('VOC'), b=ni('QAC'); return {v1:a.cnt+' · '+b.cnt, v2:a.sub, lamp:a.lamp}; }
+    case 'service': { const a=ni('PRT'); return {v1:a.cnt, v2:a.sub, lamp:a.lamp}; }
+  }
+}
+function renderRail(i){
+  $('stgList').innerHTML = PHASES.map(p=>{
+    const s = stageInfo(p.id,i);
+    return `<button class="stg${p.id===selPhase?' sel':''}" data-ph="${p.id}" style="border-left-color:${p.hex}">
+      <div class="nm">${p.name}<span class="lamp ${s.lamp}"></span></div>
+      <div class="v1">${s.v1}</div><div class="v2">${s.v2}</div></button>`;
+  }).join('');
+  for(const b of $('stgList').querySelectorAll('.stg'))
+    b.onclick = ()=>{ selectPhase(b.dataset.ph); openDrill(b.dataset.ph); };
+}
+function selectPhase(ph){
+  selPhase = ph;
+  for(const b of $('stgList').querySelectorAll('.stg')) b.classList.toggle('sel', b.dataset.ph===ph);
+  for(const n of NODES) nodeEls[n.id].classList.toggle('sel', NODE_DRILL[n.id]===ph);
+  renderTrend(cursor);
+}
+
+/* ── 연간 사이클 링 ── */
+const RING_CX=160, RING_CY=118, ringSvg=$('ring');
+const ringArcEls = [];
+function polar(r,ang){ return [RING_CX+r*Math.cos(ang), RING_CY+r*Math.sin(ang)]; }
+function arcPath(r,a0,a1){
+  const [x0,y0]=polar(r,a0), [x1,y1]=polar(r,a1);
+  const large = (a1-a0)>Math.PI?1:0;
+  return `M${x0} ${y0} A${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
+}
+const monAng = m => (m-1)/12*2*Math.PI - Math.PI/2;     // 월 시작 각
+(function buildRing(){
+  for(let m=1;m<=12;m++){
+    const a = monAng(m);
+    const [x0,y0]=polar(100,a), [x1,y1]=polar(106,a);
+    elNS('line',{x1:x0,y1:y0,x2:x1,y2:y1,class:'ringTick'},ringSvg);
+    const [lx,ly]=polar(112,monAng(m)+Math.PI/12);
+    elNS('text',{x:lx,y:ly+3,class:'ringMon','text-anchor':'middle'},ringSvg).textContent=m;
+  }
+  const phR = Object.fromEntries(PHASES.map((p,k)=>[p.id, 96-k*8]));
+  for(const a of LC.calendar){
+    const r = phR[a.phase], hex = PHASE_OF[a.phase].hex;
+    let d, dash='';
+    if(a.cadence==='annual'){
+      const a0=monAng(a.m_from), span=((a.m_to-a.m_from+12)%12)+1;
+      d = arcPath(r,a0,a0+span/12*2*Math.PI);
+    } else if(a.cadence==='quarterly'){
+      d = [1,4,7,10].map(m=>arcPath(r,monAng(m),monAng(m)+Math.PI/6)).join(' ');
+    } else { d = arcPath(r,-Math.PI/2+0.001,1.5*Math.PI-0.001); dash='1 7'; }
+    const p = elNS('path',{d,class:'ringArc',stroke:hex,'stroke-width':dash?2:4.5,'stroke-linecap':'round',
+      'stroke-dasharray':dash,opacity:dash?.14:.4,'data-dash':dash?1:0},ringSvg);
+    p.addEventListener('mousemove',ev=>tipShow(ev,`<b>${a.name}</b><span class="mut">${a.owner} · ${
+      a.cadence==='annual'?`${a.m_from}~${a.m_to}월`:{quarterly:'분기',monthly:'매월',continuous:'상시',event:'이슈 발생 시'}[a.cadence]
+      }</span><br>${actContext(a,cursor)}`));
+    p.addEventListener('mouseleave',tipHide);
+    p.addEventListener('click',()=>{ selectPhase(a.phase); openDrill(a.phase); });
+    ringArcEls.push({a,p});
+  }
+  elNS('line',{id:'ringNeedle',class:'ringNeedle',x1:RING_CX,y1:RING_CY,x2:RING_CX,y2:RING_CY-40},ringSvg);
+  elNS('text',{id:'ringYm',class:'ringCenterYm',x:RING_CX,y:RING_CY+2},ringSvg);
+  elNS('text',{id:'ringSub',class:'ringCenterSub',x:RING_CX,y:RING_CY+17},ringSvg);
+})();
+function renderRing(i){
+  const m = i%12+1;
+  const ang = monAng(m)+Math.PI/12;
+  const [x0,y0] = polar(99,ang), [x1,y1] = polar(108,ang);   // 외곽 월 마커 (중앙 텍스트 비관통)
+  const nd = $('ringNeedle');
+  nd.setAttribute('x1',x0); nd.setAttribute('y1',y0);
+  nd.setAttribute('x2',x1); nd.setAttribute('y2',y1);
+  nd.setAttribute('stroke-width',3);
+  $('ringYm').textContent = MONTHS[i];
+  let nAct=0;
+  for(const {a,p} of ringArcEls){
+    const on = actState(a,i)==='active';
+    if(on) nAct++;
+    const dashed = p.getAttribute('data-dash')==='1';
+    p.setAttribute('opacity', on?(dashed?0.6:0.95):(dashed?0.12:0.3));
+    p.setAttribute('stroke-width', on?(dashed?3:6.5):(dashed?2:4));
+  }
+  $('ringSub').textContent = `실행 업무 ${nAct}건`;
+}
+
+/* ── 단계 트렌드 (32개월) ── */
+function trendSeries(ph){
+  const S = fn => Array.from({length:NOW+1},(_,i)=>fn(i));
+  switch(ph){
+    case 'product': return {name:'신형 MY 혼입률 %', unit:'%', s:S(i=>(D.attrs.my_next||[])[i%12]*100)};
+    case 'bp': return {name:'소매 BP 대비 %', unit:'%', s:S(i=>{
+      const r=MODELS.reduce((s,md)=>s+mvm(i,md.id).retail,0), b=MODELS.reduce((s,md)=>s+bpm(i,md.id).retail,0);
+      return r/b*100-100;})};
+    case 'marketing': return {name:'매체 집행 $M', unit:'$M', s:S(i=>{
+      const rows=MEDIA.byYm.get(MONTHS[i])||[]; return rows.reduce((s,r)=>s+MEDIA.get(r,'spend_musd'),0);})};
+    case 'order': return {name:'월 주문 (대)', unit:'대', s:S(i=>MODELS.reduce((s,md)=>s+orderPlan(md.id,i).total,0))};
+    case 'sales': return {name:'소매 (대)', unit:'대', s:S(i=>MODELS.reduce((s,md)=>s+mvm(i,md.id).retail,0))};
+    case 'quality': return {name:'VoC (건)', unit:'건', s:S(i=>{
+      const rows=VOC.byYm.get(MONTHS[i])||[]; return rows.reduce((s,r)=>s+VOC.get(r,'voc_cnt'),0);})};
+    case 'service': return {name:'Parts 매출 $M', unit:'$M', s:S(i=>{
+      const rows=PARTS.byYm.get(MONTHS[i])||[];
+      return rows.reduce((s,r)=>s+PARTS.get(r,'cp_sales_kusd')+PARTS.get(r,'warranty_sales_kusd')+PARTS.get(r,'campaign_sales_kusd'),0)/1000;})};
+  }
+}
+function renderTrend(i){
+  const box = $('trendBox'), svg = $('trend');
+  const W = box.clientWidth||600, H = box.clientHeight||230;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.textContent = '';
+  const t = trendSeries(selPhase);
+  $('trendTtl').textContent = `${PHASE_OF[selPhase].name} — ${t.name} (실적 32개월)`;
+  const padL=46,padR=14,padT=30,padB=22;
+  const lo = Math.min(...t.s), hi = Math.max(...t.s);
+  const y = v => padT + (H-padT-padB)*(1-(v-lo)/Math.max(hi-lo,1e-9));
+  const x = k => padL + (W-padL-padR)*k/NOW;
+  for(let g=0;g<4;g++){
+    const v = lo+(hi-lo)*g/3;
+    elNS('line',{x1:padL,y1:y(v),x2:W-padR,y2:y(v),stroke:'var(--line)','stroke-width':.6},svg);
+    elNS('text',{x:padL-5,y:y(v)+3,'text-anchor':'end',fill:'var(--muted)','font-size':9.5},svg)
+      .textContent = hi-lo>1000? fmt(v) : f1(v);
+  }
+  for(let k=0;k<=NOW;k+=4)
+    elNS('text',{x:x(k),y:H-7,'text-anchor':'middle',fill:'var(--muted)','font-size':9},svg).textContent=MONTHS[k].slice(2);
+  elNS('path',{d:t.s.map((v,k)=>(k?'L':'M')+x(k)+' '+y(v)).join(' '),fill:'none',
+    stroke:PHASE_OF[selPhase].hex,'stroke-width':1.6},svg);
+  elNS('line',{x1:x(i),y1:padT-6,x2:x(i),y2:H-padB,stroke:'var(--ink)','stroke-width':1,'stroke-dasharray':'3 3',opacity:.7},svg);
+  elNS('circle',{cx:x(i),cy:y(t.s[i]),r:3,fill:PHASE_OF[selPhase].hex},svg);
+  elNS('text',{x:x(i),y:padT-10,'text-anchor':'middle',fill:'var(--ink)','font-size':10,'font-weight':700},svg)
+    .textContent = (t.unit==='%'? f1(t.s[i])+'%' : t.unit==='$M'? '$'+f1(t.s[i])+'M' : fmt(t.s[i]));
+}
+
+/* ── 이번 달 실행 업무 피드 ── */
+function renderFeed(i){
+  $('feedTtl').textContent = `${MONTHS[i]} 실행 업무`;
+  const cards = LC.calendar.map(a=>{
+    const st = actState(a,i);
+    const active = st==='active' || st==='run';
+    const ph = PHASE_OF[a.phase];
+    let chip = {active: a.cadence==='annual'?'진행중':'실행중', run:'집행중', done:'완료', wait:'예정', idle:'대기'}[st]||st;
+    let chipCls = st==='active'?'run':'';
+    if(a.id==='QLT-1'){
+      const hi=(VOC.byYm.get(MONTHS[i])||[]).filter(r=>VOC.get(r,'severity')==='high');
+      if(hi.length){ chip=`HIGH ${hi.length}`; chipCls='crit'; }
+    }
+    if(a.id==='QLT-2' && st==='active'){
+      const inv=(ACTIONS.byYm.get(MONTHS[i])||[]).some(r=>ACTIONS.get(r,'action_type')==='조사');
+      if(inv){ chip='조사중'; chipCls='warn'; }
+    }
+    const ctx = active? actContext(a,i) : (a.cadence==='annual'? `${a.m_from}~${a.m_to}월 실행 창` : '');
+    return {a, active, html:`<button class="feedCard${active?'':' dim'}" data-ph="${a.phase}">
+      <div class="hd"><i style="background:${ph.hex}"></i>${a.name}<span class="st ${chipCls}">${chip}</span></div>
+      ${ctx?`<div class="ctx">${ctx}</div>`:''}
+      <div class="own">${a.owner} → ${a.output}</div></button>`};
+  });
+  cards.sort((p,q)=>(q.active?1:0)-(p.active?1:0));
+  $('feedList').innerHTML = cards.map(c=>c.html).join('');
+  for(const b of $('feedList').querySelectorAll('.feedCard'))
+    b.onclick = ()=>{ selectPhase(b.dataset.ph); openDrill(b.dataset.ph); };
+}
+
+/* ═══════════ PART F. 타임라인 · seek 파이프라인 ═══════════ */
+let playing = null, speed = 1;
+function seek(i){
+  cursor = clamp(i,0,NOW);
+  $('tl').value = cursor;
+  $('ymLbl').textContent = MONTHS[cursor];
+  updateScene(cursor);
+  renderRail(cursor);
+  renderRing(cursor);
+  renderTrend(cursor);
+  renderFeed(cursor);
+  if(drillPhase) renderDrill(drillPhase);
+}
+$('tl').addEventListener('input',e=>seek(+e.target.value));
+$('btnPlay').onclick = ()=>{
+  if(playing){ clearInterval(playing); playing=null; $('btnPlay').textContent='▶ Play'; $('btnPlay').classList.remove('on'); return; }
+  if(cursor>=NOW) cursor=-1;
+  playing = setInterval(()=>{ if(cursor>=NOW){ $('btnPlay').click(); return; } seek(cursor+1); }, 800/speed);
+  $('btnPlay').textContent='⏸ Pause'; $('btnPlay').classList.add('on');
+};
+$('btnSpd').onclick = ()=>{
+  speed = speed===4?1:speed*2;
+  $('btnSpd').textContent = '×'+speed;
+  if(playing){ clearInterval(playing); playing=setInterval(()=>{ if(cursor>=NOW){ $('btnPlay').click(); return;} seek(cursor+1); },800/speed); }
+};
+addEventListener('keydown',e=>{ if(e.key==='Escape' && drillPhase) closeDrill(); });
+addEventListener('resize',()=>renderTrend(cursor));
+/* ═══════════ PART G. 드릴 패널 — 단계별 데이터 뷰 ═══════════ */
+const drillSel = {my:2027, model:'LUM', mkModel:'all'};
+function openDrill(ph){
+  drillPhase = ph;
+  const p = PHASE_OF[ph];
+  $('drillPh').style.background = p.hex;
+  $('drillTtl').textContent = p.name + ' — 데이터 뷰';
+  renderDrill(ph);
+  $('drill').classList.add('open');
+}
+function closeDrill(){ drillPhase = null; $('drill').classList.remove('open'); }
+$('drillX').onclick = closeDrill;
+function renderDrill(ph){
+  $('drillYm').textContent = MONTHS[cursor];
+  const B = $('drillBody');
+  B.innerHTML = { product:drillProduct, bp:drillBp, marketing:drillMarketing, order:drillOrder,
+                  sales:drillSales, quality:drillQuality, service:drillService }[ph](cursor);
+  wireDrill(ph);
+}
+const badge=(t,cls='')=>`<span class="badge ${cls}">${t}</span>`;
+const gbar=(pct,w=70,color)=>`<span class="gbar" style="width:${Math.max(2,pct/100*w)}px${color?`;background:${color}`:''}"></span>`;
+const chipRow=(items,sel,key)=>`<div class="chipRow">${items.map(it=>
+  `<button class="chip${String(it.v)===String(sel)?' on':''}" data-k="${key}" data-v="${it.v}">${it.t}</button>`).join('')}</div>`;
+
+/* ── ① 상품 준비 ── */
+function drillProduct(i){
+  const items = LC.product_plan.filter(p=>p.my===drillSel.my);
+  const gates = ['G1','G2','G3','G4'];
+  const rows = items.map(p=>{
+    const li = MONTHS.indexOf(p.launch);
+    const dm = li - i;
+    const gi = gates.indexOf(p.gate);
+    const risky = p.ready<60 && li>=0 && dm<=6 && dm>=0;
+    return `<tr><td>${MODEL_OF[p.model]?.name||p.model} <span style="color:var(--muted)">${p.model}</span></td>
+      <td>${badge({new_model:'신차',new_trim:'신규 트림',feature:'Feature',my_change:'연식변경'}[p.typ], p.typ==='new_model'?'good':'')}</td>
+      <td>${p.name}</td>
+      <td class="num">${p.launch}${li>=0?` <span style="color:${risky?'var(--warn)':'var(--muted)'}">(${dm>=0?'D-'+dm+'개월':'런칭됨'})</span>`:''}</td>
+      <td>${gates.map((g,k)=>`<span style="color:${k<=gi?PHASE_OF.product.hex:'var(--line)'};font-size:10px">${g}</span>`).join('<span style="color:var(--line)">·</span>')}</td>
+      <td class="num">${gbar(p.ready,56,risky?'var(--warn)':undefined)} ${p.ready}%</td></tr>`;
+  }).join('');
+  return `<div class="dNote">내년 신차·신규 트림·주요 Feature의 준비 상태. 게이트 <code>G1 기획 → G2 개발 → G3 인증 → G4 런칭</code>.
+    이 라인업이 <b>사업계획(트림믹스)의 입력</b>이 되고, 주요 Feature는 <b>마케팅 매체 제작</b> 대상이 된다. — <code>data/master/product_plan.csv</code></div>
+  ${chipRow([{v:2026,t:'MY2026'},{v:2027,t:'MY2027'}],drillSel.my,'my')}
+  <div class="dSec"><h3>MY${drillSel.my} 상품 준비 보드 (${items.length}건)</h3>
+  <table class="dt"><tr><th>차종</th><th>유형</th><th>아이템</th><th class="num">런칭 목표</th><th>게이트</th><th class="num">준비율</th></tr>${rows}</table></div>`;
+}
+
+/* ── ② 사업계획·트림믹스·FOB ── */
+function drillBp(i){
+  const my = drillSel.my===2026?2026:drillSel.my; // 2025~2027
+  const rows = LC.trim_mix.rows[my]||[];
+  const m = i%12+1;
+  const status = rows.length? tmx(rows[0],'status') : '';
+  const stepDone = status==='FOB 확정';
+  const step = (name,on,done)=>`<div class="step${done?' done':on?' now':''}">${name}</div>`;
+  const isPlanYr = my===2024+Math.floor(i/12)+1;
+  const totWs = rows.reduce((s,r)=>s+tmx(r,'plan_ws_qty'),0);
+  let lastModel='';
+  const trs = rows.map(r=>{
+    const mid=tmx(r,'model_id'), first=mid!==lastModel; lastModel=mid;
+    const dp = tmx(r,'mix_plan_pct')-tmx(r,'mix_prev_pct');
+    const fob=tmx(r,'fob_usd'), fp=tmx(r,'fob_prev_usd');
+    return `<tr>${first?`<td><b>${MODEL_OF[mid]?.name||mid}</b> <span style="color:var(--muted)">${tmx(r,'plant_id')}</span></td>`:'<td></td>'}
+      <td>${tmx(r,'trim_id')}</td>
+      <td class="num">${f1(tmx(r,'mix_prev_pct'))}% → <b>${f1(tmx(r,'mix_plan_pct'))}%</b>
+        <span style="color:${dp>0?'var(--good)':dp<0?'var(--crit)':'var(--muted)'}">${dp>0?'▲':dp<0?'▼':'—'}${Math.abs(dp)?f1(Math.abs(dp)):''}</span></td>
+      <td class="num">${fmt(tmx(r,'plan_ws_qty'))}</td>
+      <td class="num">$${fmt(fob)}${fp?` <span style="color:var(--muted)">(+${f1((fob/fp-1)*100)}%)</span>`:''}</td>
+      <td>${badge(tmx(r,'status'), stepDone?'good':'warn')}</td></tr>`;
+  }).join('');
+  return `<div class="dNote"><b>Wholesale 기반</b>으로 차년도 사업계획을 수립하고 <b>트림믹스를 결정</b>해 생산법인으로 전달,
+    <b>FOB</b>(생산법인 인도가 ≈ MSRP×0.62)가 확정된다. 연 사이클: 8~10월 BP 수립 → 10월 트림믹스 → 11월 FOB. — <code>data/bp_trim_mix/</code></div>
+  ${chipRow([{v:2025,t:'MY2025'},{v:2026,t:'MY2026'},{v:2027,t:'MY2027'}],my,'my')}
+  <div class="stepper">
+    ${step('BP-1 수립 (8~10월)', isPlanYr&&m>=8&&m<=10, stepDone)}
+    ${step('BP-2 트림믹스 (10월)', isPlanYr&&m===10, stepDone)}
+    ${step('BP-3 생산법인 전달·FOB (11월)', isPlanYr&&m===11, stepDone)}
+  </div>
+  <div class="dSec"><h3>MY${my} 트림믹스 · FOB — 계획 WS 합계 ${fmt(totWs)}대 ${badge(status, stepDone?'good':'warn')}</h3>
+  <table class="dt"><tr><th>차종·생산법인</th><th>트림</th><th class="num">믹스 (전년→계획)</th><th class="num">계획 WS</th><th class="num">FOB (전년比)</th><th>상태</th></tr>${trs}</table></div>`;
+}
+
+/* ── ③ 마케팅 — 매체 제작·퍼포먼스 ── */
+function drillMarketing(i){
+  const ym = MONTHS[i];
+  let rows = MEDIA.byYm.get(ym)||[];
+  if(drillSel.mkModel!=='all') rows = rows.filter(r=>MEDIA.get(r,'model_id')===drillSel.mkModel);
+  const benchmark = Object.fromEntries(LC.meta.media.map(mm=>[mm.id,mm]));
+  const totSp = rows.reduce((s,r)=>s+MEDIA.get(r,'spend_musd'),0);
+  const trs = rows.map(r=>{
+    const med = benchmark[MEDIA.get(r,'medium')];
+    const ctr = MEDIA.get(r,'ctr_pct'), dctr = med.ctr? (ctr-med.ctr)/med.ctr*100 : 0;
+    const st = MEDIA.get(r,'status');
+    return `<tr><td>${MEDIA.get(r,'campaign_id')}</td><td><b>${MEDIA.get(r,'feature_focus')}</b></td>
+      <td>${med.name}</td>
+      <td class="num">$${f1(MEDIA.get(r,'spend_musd'))}M</td>
+      <td class="num">${f1(MEDIA.get(r,'impressions_m'))}M</td>
+      <td class="num">${med.ctr? ctr+'% <span style="color:'+(dctr>=0?'var(--good)':'var(--crit)')+'">('+(dctr>=0?'+':'')+f1(dctr)+'%)</span>' : '—'}</td>
+      <td class="num">$${MEDIA.get(r,'cpm_usd')}</td>
+      <td>${badge(st, st==='제작·런칭'?'warn':'good')}</td></tr>`;
+  }).join('');
+  return `<div class="dNote">브랜드·차종별 마케팅: <b>주요 Feature 대상 매체 제작</b>(분기 캠페인, 제작·런칭 → 집행 → 최적화) 후
+    임프레션·CTR·CPM으로 <b>퍼포먼스를 관리</b>한다. CTR 괄호는 매체 벤치마크 대비. — <code>data/marketing_media/</code></div>
+  ${chipRow([{v:'all',t:'전체'},...MODELS.map(md=>({v:md.id,t:md.name}))],drillSel.mkModel,'mkModel')}
+  <div class="dSec"><h3>${ym} 매체 집행 — $${f1(totSp)}M · ${rows.length}개 라인</h3>
+  <table class="dt"><tr><th>캠페인</th><th>Feature</th><th>매체</th><th class="num">집행</th><th class="num">노출</th><th class="num">CTR</th><th class="num">CPM</th><th>상태</th></tr>${trs}</table></div>`;
+}
+
+/* ── ⑤ 판매·유통 (요약 — 상세는 V7/V8) ── */
+function drillSales(i){
+  const trs = MODELS.map(md=>{
+    const a = mvm(i,md.id), b = bpm(i,md.id);
+    const d = a.retail/b.retail*100-100;
+    const ds = a.ds;
+    return `<tr><td><b>${md.name}</b> <span style="color:var(--muted)">${md.id}</span></td>
+      <td class="num">${fmt(a.retail)}</td>
+      <td class="num" style="color:${d<-5?'var(--crit)':d<0?'var(--warn)':'var(--good)'}">${(d>=0?'+':'')}${f1(d)}%</td>
+      <td class="num">${fmt(a.ws)}</td><td class="num">${fmt(a.stock)}</td>
+      <td class="num" style="color:${ds>75||ds<45?'var(--warn)':'var(--ink)'}">${f1(ds)}일</td>
+      <td class="num">$${fmt(a.inc)}</td></tr>`;
+  }).join('');
+  return `<div class="dNote">라이프사이클 컨텍스트 요약. 사양×지역 필터 상세 분석·전략 시뮬레이션은 <b>V7/V8 트윈</b>이 담당한다.
+    소매·도매·재고는 <b>월 주문(DoS Weight)</b>과 <b>VoC 피드백</b>의 입력이다. — <code>data/agg_kpi/</code></div>
+  <div class="dSec"><h3>${MONTHS[i]} 차종별 판매 현황</h3>
+  <table class="dt"><tr><th>차종</th><th class="num">소매</th><th class="num">vs BP</th><th class="num">도매</th><th class="num">재고</th><th class="num">DS</th><th class="num">인센티브</th></tr>${trs}</table></div>`;
+}
+/* ── ④ 월 생산 주문 — DoS Weight 배분 (주문 로직이 트윈 안에서 실행됨) ── */
+function drillOrder(i){
+  const mid = drillSel.model;
+  const op = orderPlan(mid, i);
+  // zone×color 집계 (Weight는 트림 공통 — ma3·재고 모두 트림 비중에 비례하므로 DS 동일)
+  const cellAt = {};
+  for(const c of op.cells){
+    const k = c.zi+'-'+c.ci;
+    if(!cellAt[k]) cellAt[k] = {...c, qty:0, ma3All:0, stkAll:0};
+    cellAt[k].qty += c.qty; cellAt[k].ma3All += c.ma3; cellAt[k].stkAll += c.stk;
+  }
+  let wmin={w:9}, wmax={w:0};
+  for(const k in cellAt){ const c=cellAt[k]; if(c.w<wmin.w) wmin=c; if(c.w>wmax.w) wmax=c; }
+  const heatCell = c=>{
+    const dv = c.w-1;
+    const bg = dv>=0? `rgba(234,169,62,${clamp(dv/0.6,0,1)*0.75})` : `rgba(121,184,255,${clamp(-dv/0.4,0,1)*0.65})`;
+    return `<td style="background:${bg}" title="${ZONES[c.zi].name} · ${COLORS[c.ci]}
+Retail MA3 ${f1(c.ma3All)}대 · 재고 ${fmt(c.stkAll)}대 · DS ${f1(c.ds)}일
+Weight ${c.w.toFixed(2)} → 주문 ${fmt(c.qty)}대">${c.w.toFixed(2)}</td>`;
+  };
+  const heat = ZONES.map((z,zi)=>`<tr><th style="text-align:left">${z.name}</th>${
+    COLORS.map((_,ci)=>heatCell(cellAt[zi+'-'+ci])).join('')}</tr>`).join('');
+  const trimRows = D.trims[mid].map((t,ti)=>{
+    const qty = op.cells.filter(c=>c.ti===ti).reduce((s,c)=>s+c.qty,0);
+    return `<tr><td>${mid}-${t.slice(0,2).toUpperCase()} ${t}</td><td class="num">${f1(TRIM_W[ti]*100)}%</td><td class="num">${fmt(qty)}대</td></tr>`;
+  }).join('');
+  return `<div class="dNote"><b>매월 실행되는 주문 업무가 이 트윈 안에서 그대로 계산된다</b> (data/order_plan/과 동일 수식):<br>
+    <code>주문 = 차종 총주문 × (과거 3개월 Retail MA × Weight) 정규화</code> ·
+    <code>Weight = clamp(목표 DS ${DS_TARGET} / 셀 DS, 0.6~1.6)</code><br>
+    재고 믹스는 2~4개월 전 주문분 — 색상 수요가 이동하면 DS 괴리가 생기고 Weight가 주문을 보정한다.</div>
+  ${chipRow(MODELS.map(md=>({v:md.id,t:md.name})),mid,'model')}
+  <div class="dSec"><h3>${MONTHS[i]} 주문 ${fmt(op.total)}대 → 생산 ${op.prodYm} (리드 ${op.lead}개월, ${MODEL_OF[mid].plant})</h3>
+  <div class="dNote" style="margin-bottom:8px">최대 증산 ${badge(`${ZONES[wmax.zi].name} · ${COLORS[wmax.ci]} ×${wmax.w.toFixed(2)}`,'warn')}
+   · 최대 감산 ${badge(`${ZONES[wmin.zi].name} · ${COLORS[wmin.ci]} ×${wmin.w.toFixed(2)}`,'')}
+   ${wmax.w>1.25?`<br>→ 재고 믹스가 수요를 따라가지 못하는 셀을 Weight가 자동 보정 중`:''}</div>
+  <table class="heat"><tr><th></th>${COLORS.map(c=>`<th>${c.replace(' ','<br>')}</th>`).join('')}</tr>${heat}</table>
+  <div style="font-size:10px;color:var(--muted);margin-top:4px">셀 = DoS Weight · <span style="color:#79b8ff">파랑=감산(재고 과잉)</span> · <span style="color:#eaa93e">주황=증산(재고 부족)</span> · 호버 시 셀 근거</div></div>
+  <div class="dSec"><h3>트림 배분 (믹스 가중)</h3>
+  <table class="dt"><tr><th>트림</th><th class="num">믹스</th><th class="num">주문</th></tr>${trimRows}</table></div>`;
+}
+
+/* ── ⑥ 품질·VoC — 카테고리 모니터링 → TSB/OTA ── */
+function drillQuality(i){
+  const ym = MONTHS[i];
+  const rows = VOC.byYm.get(ym)||[];
+  const cats = LC.meta.voc_cats.map(c=>c[0]);
+  const byMc = {};
+  let vmax = 0.1;
+  for(const r of rows){ byMc[VOC.get(r,'model_id')+'|'+VOC.get(r,'category')] = r; vmax = Math.max(vmax, VOC.get(r,'voc_per_1k_uio')); }
+  const heat = MODELS.map(md=>`<tr><th style="text-align:left">${md.name}</th>${cats.map(c=>{
+    const r = byMc[md.id+'|'+c];
+    if(!r) return '<td>—</td>';
+    const v = VOC.get(r,'voc_per_1k_uio'), sev = VOC.get(r,'severity'), sf = VOC.get(r,'safety_flag');
+    return `<td style="background:rgba(229,72,77,${clamp(v/vmax,0,1)*0.72});${sev==='high'?'outline:1.5px solid var(--crit);':''}"
+      title="${md.name} ${c}: ${VOC.get(r,'voc_cnt')}건 · ${v}/1000대 · ${sev}${sf?' · 안전 플래그':''}">${v}${sf?' ⚑':''}</td>`;
+  }).join('')}</tr>`).join('');
+  const acts = ACTIONS.byYm.get(ym)||[];
+  const actTrs = acts.length? acts.map(r=>{
+    const tgt = ACTIONS.get(r,'target_vins'), app = ACTIONS.get(r,'applied_vins_cum');
+    const pct = tgt? app/tgt*100 : 0;
+    const st = ACTIONS.get(r,'status');
+    return `<tr><td>${ACTIONS.get(r,'action_id')}</td>
+      <td>${badge(ACTIONS.get(r,'action_type'), ACTIONS.get(r,'action_type')==='조사'?'warn':'good')}</td>
+      <td>${MODEL_OF[r[3]]?.name||r[3]} · ${ACTIONS.get(r,'category')}</td>
+      <td style="white-space:normal;min-width:110px">${ACTIONS.get(r,'title')}</td>
+      <td class="num">${tgt?`${gbar(pct,48)} ${fmt(app)}/${fmt(tgt)}`:'—'}</td>
+      <td class="num">${ACTIONS.get(r,'claim_per_1k_before')} → <b>${ACTIONS.get(r,'claim_per_1k_now')}</b></td>
+      <td>${badge(st, st==='완결'?'good':st==='원인 조사중'?'warn':'')}</td></tr>`;
+  }).join('') : '<tr><td colspan="7" style="color:var(--muted)">당월 진행 조치 없음</td></tr>';
+  return `<div class="dNote">품질/안전 파이프라인: <code>VoC·서비스 수집 → 카테고리 분류 → 임계 탐지 → 조치 배정 → TSB/OTA S/W 업데이트 → 클레임 소멸</code>.
+    셀 = 1,000대당 VoC · <span style="color:var(--crit)">HIGH 테두리</span> · ⚑ 안전 플래그. — <code>data/voc_category/ · data/quality_actions/</code></div>
+  <div class="dSec"><h3>${ym} 카테고리 모니터링 (차종 × 카테고리)</h3>
+  <table class="heat"><tr><th></th>${cats.map(c=>`<th>${c.replace('/','<br>')}</th>`).join('')}</tr>${heat}</table></div>
+  <div class="dSec"><h3>조치 원장 — TSB · OTA · FSC</h3>
+  <table class="dt"><tr><th>조치</th><th>유형</th><th>대상</th><th>제목</th><th class="num">적용 진행</th><th class="num">클레임/1000</th><th>상태</th></tr>${actTrs}</table></div>`;
+}
+
+/* ── ⑦ 서비스·Parts — DN/Factory 균형 ── */
+function drillService(i){
+  const ym = MONTHS[i];
+  const rows = PARTS.byYm.get(ym)||[];
+  const repriced = i >= LC.meta.parts_reprice;
+  let tot = {cp:0,w:0,c:0};
+  const trs = rows.map(r=>{
+    const cp=PARTS.get(r,'cp_sales_kusd'), w=PARTS.get(r,'warranty_sales_kusd'), c=PARTS.get(r,'campaign_sales_kusd');
+    tot.cp+=cp; tot.w+=w; tot.c+=c;
+    const sum = cp+w+c, sc=v=>Math.max(1,v/sum*120);
+    const gap = PARTS.get(r,'gap_pct');
+    return `<tr><td><b>${PARTS.get(r,'part_category')}</b></td>
+      <td><span class="gbar" style="width:${sc(cp)}px;background:var(--ph-service)" title="고객부담 $${fmt(cp)}k"></span><span class="gbar" style="width:${sc(w)}px;background:var(--warn)" title="워런티 $${fmt(w)}k"></span><span class="gbar" style="width:${sc(c)}px;background:var(--crit)" title="캠페인 $${fmt(c)}k"></span></td>
+      <td class="num">$${fmt(sum)}k</td>
+      <td class="num">${f1(PARTS.get(r,'dealer_net_idx'))} / ${PARTS.get(r,'factory_price_idx')}</td>
+      <td class="num" style="color:${gap>6?'var(--warn)':'var(--ink)'}">${f1(gap)}%</td>
+      <td class="num">${f1(PARTS.get(r,'sc_margin_pct'))}%</td></tr>`;
+  }).join('');
+  return `<div class="dNote">일반 정비의 <b>고객부담(CP) Parts는 판매법인의 이익원</b>(마진 ${Math.round(LC.meta.sc_margin.cp*100)}%).
+    <b>캠페인·워런티 Parts 가격은 Dealer Net과 Factory 정산 기준 사이 균형</b>이 필요 — 갭이 크면(딜러 유리) 워런티 정산에서 판매법인 마진이 압박된다.
+    ${repriced? badge('2026-02 가격 개정 반영 — 갭 60% 축소','good') : badge('가격 개정 전 — 전장/배터리 갭 18%','warn')} — <code>data/parts_pnl/</code></div>
+  <div class="dSec"><h3>${ym} Parts 손익 — 합계 $${f1((tot.cp+tot.w+tot.c)/1000)}M
+    <span style="color:var(--muted);font-size:10.5px">(CP $${f1(tot.cp/1000)}M · 워런티 $${f1(tot.w/1000)}M · 캠페인 $${f1(tot.c/1000)}M)</span></h3>
+  <table class="dt"><tr><th>카테고리</th><th>채널 구성 <span style="color:var(--ph-service)">CP</span>·<span style="color:var(--warn)">워런티</span>·<span style="color:var(--crit)">캠페인</span></th><th class="num">매출</th><th class="num">DN/Factory</th><th class="num">갭</th><th class="num">마진</th></tr>${trs}</table></div>`;
+}
+
+function wireDrill(ph){
+  for(const c of $('drillBody').querySelectorAll('.chip')){
+    c.onclick = ()=>{
+      const k = c.dataset.k;
+      drillSel[k] = k==='my'? +c.dataset.v : c.dataset.v;
+      renderDrill(ph);
+    };
+  }
+}
+
+/* ═══════════ PART H. 초기화 · 테스트 훅 ═══════════ */
+// V10 임베드(iframe 소환) — 제목줄 1개 원칙: 자체 헤더(타이틀·범례)를 숨긴다 (단독 실행 시 유지)
+if (window.parent !== window) document.querySelector('header').style.display = 'none';
+seek(NOW);
+window._v9 = { seek, orderPlan, nodeInfo, actState, actContext, openDrill, closeDrill, selectPhase,
+               mixColor, zoneWeights, PHASES, NODES, EDGES,
+               get cursor(){ return cursor; }, get drillPhase(){ return drillPhase; }, drillSel };
+</script>
+</body>
+</html>

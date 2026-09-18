@@ -1,0 +1,2271 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ============================================================================
+V11 차량 트윈 — 고객 만족(서비스) 개선: 하나의 서비스
+딜러 서비스·품질팀·서비스팀이 같은 차량 트윈을 각자의 하위 KPI로 탐색해 고객 만족(서비스)을
+끌어올린다. 진입점은 홈 KPI 트리 — 최상위 내부 CSI(결과) ← 팀별 하위 KPI 6종(선행):
+  딜러 서비스: 재고 12V 건전율 · 장기 재고(90일+) 비중
+  품질팀:      DTC 발생/1k · 시정(OTA-2606) 적용률
+  서비스팀:    12V 방전 이슈/1k · 사전 진단 조치 전환율
+각 KPI는 목표·근거 데이터·문제 차량·조치를 가지며 탐색 폐루프로 닫힌다:
+  ① KPI 확인(홈) → ② 데이터 확인(KPI 상세 — 카테고리 롤업·목표 판정·OTA 전후 Δ)
+  → ③ 문제 VIN 드릴(차량 트윈 — 생산→게이트 KDS→트립 신호→상태 리플레이)
+  → ④ 조치 등록(v11-svc-project 환류) → ⑤ 다음 달 재검증.
+관제(피트월)는 서비스팀의 실시간 운영 뷰 — F1 레이스 엔지니어링 방식(docs/f1-telemetry-
+research.md): 타이밍 타워·다채널+기준차 델타·엔지니어 콜(single voice)·몬테카를로 개입 전략.
+- 데이터: v7-data.js (models·plants·vdata·csi_internal·csi_actions) + VIN 상세는
+  시드 PRNG로 결정론 합성 (v8 vinChain 패턴 — L0 번들을 키우지 않는다, L3 지연 생성)
+- V10 소환·환류: 해시(#i=&vin=&m=) in / postMessage v11-svc-project out
+============================================================================= -->
+<title>차량 트윈 — 고객 만족(서비스) 개선 서비스</title>
+<style>
+:root{
+  --page:#161614;--surface:#1e1e1c;--surface2:#262623;--line:#33332f;
+  --ink:#f0efec;--muted:#a3a199;--edge:#6e6e67;--edge-hi:#79b8ff;
+  --good:#4cc38a;--warn:#eaa93e;--crit:#e5484d;--na:#57554e;--ai:#58d1c9;
+  --st-prod:#b58cff;--st-ship:#79b8ff;--st-stock:#eaa93e;--st-cust:#4cc38a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--page);color:var(--ink);overflow:hidden;display:flex;flex-direction:column;
+  font:13px/1.45 Pretendard,"Apple SD Gothic Neo","Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+header{height:46px;flex:0 0 46px;display:flex;align-items:center;gap:12px;padding:0 14px;
+  background:var(--surface);border-bottom:1px solid var(--line)}
+header h1{font-size:14px;font-weight:700}
+header .sub{font-size:11.5px;color:var(--muted)}
+#main{flex:1;display:grid;grid-template-columns:230px 1fr 316px;grid-template-rows:100%;min-height:0}
+#railL{border-right:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px;min-height:0}
+#side{border-left:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px;min-height:0}
+.railTtl{font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin:6px 4px 8px}
+/* 모드 토글 — 2×2 (홈·VIN·관제·KPI 상세) */
+#modeSeg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:10px}
+#modeSeg button{padding:5px 4px;font-size:11.5px;color:var(--muted);border-right:1px solid var(--line)}
+#modeSeg button:nth-child(2n){border-right:none}
+#modeSeg button:nth-child(n+3){border-top:1px solid var(--line)}
+#modeSeg button.on{background:color-mix(in srgb,var(--edge-hi) 20%,transparent);color:var(--ink);font-weight:700}
+/* VIN 타일 / 지표 타일 */
+.vinTile{width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);
+  border-left:3px solid var(--line);border-radius:7px;padding:7px 9px;margin-bottom:6px}
+.vinTile:hover{border-color:var(--edge)}
+.vinTile.sel{border-color:var(--edge-hi)}
+.vinTile .nm{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.vinTile .nm .lamp{margin-left:auto}
+.vinTile .v1{font-size:10.5px;color:var(--muted);margin-top:2px;font-family:ui-monospace,monospace}
+.vinTile .v2{font-size:10.5px;margin-top:2px;color:var(--muted)}
+.vinTile .v2 b{color:var(--ink);font-weight:600}
+.lamp{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--good);flex:0 0 8px}
+.lamp.warn{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+.lamp.crit{background:var(--crit);box-shadow:0 0 6px var(--crit)}
+/* 카드 (우 레일 공용) */
+.card{background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px}
+.card .hd{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.card .hd .k{margin-left:auto;font-size:9.5px;color:var(--muted);font-weight:400}
+.card .ctx{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.55}
+.card .ctx code{color:var(--ink);font-size:10px}
+.kv{display:flex;font-size:11px;padding:2.5px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--muted);width:92px;flex:0 0 92px}
+.kv .v{flex:1;text-align:right;font-weight:600}
+/* KDS 진단 결과 */
+.kdsJudge{display:flex;align-items:center;gap:8px;margin:6px 0 4px;padding:6px 8px;border-radius:6px;
+  border:1px solid var(--line);font-size:12px;font-weight:700}
+.kdsJudge.good{border-color:var(--good);color:var(--good)}
+.kdsJudge.warn{border-color:var(--warn);color:var(--warn)}
+.kdsJudge.crit{border-color:var(--crit);color:var(--crit)}
+.dtcRow{display:flex;gap:7px;font-size:10.5px;padding:3px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.dtcRow:last-child{border-bottom:none}
+.dtcRow code{font-family:ui-monospace,monospace;font-weight:700;flex:0 0 52px}
+.dtcRow .sev{margin-left:auto;flex:0 0 auto;font-size:9.5px;padding:0 6px;border-radius:8px;border:1px solid var(--line);color:var(--muted)}
+.dtcRow .sev.warn{color:var(--warn);border-color:var(--warn)}
+.dtcRow .sev.crit{color:var(--crit);border-color:var(--crit)}
+/* AI 진단 게이지·권고 */
+.riskBarW{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0 4px}
+.riskBarW i{display:block;height:100%}
+.recBtn{width:100%;border:1px solid var(--ai);color:var(--ai);border-radius:7px;padding:5px;font-size:11.5px;margin-top:5px}
+.recBtn:hover{background:color-mix(in srgb,var(--ai) 14%,transparent)}
+.recBtn:disabled{opacity:.45;cursor:default}
+.recBtn.done{border-color:var(--good);color:var(--good)}
+/* KPI 타일 (플릿 모드 좌 레일) */
+.kpiTile{width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);
+  border-left:3px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px}
+.kpiTile:hover{border-color:var(--edge)}
+.kpiTile.sel{border-color:var(--edge-hi)}
+.kpiTile .nm{font-size:11.5px;font-weight:700}
+.kpiTile .v1{font-size:15px;font-weight:700;margin-top:3px}
+.kpiTile .v2{font-size:10.5px;color:var(--muted);margin-top:1px}
+.kpiTile .up{color:var(--good);font-weight:700}
+.kpiTile .dn{color:var(--crit);font-weight:700}
+/* 필터 칩 (플릿 씬 상단) */
+.chip{display:inline-block;font-size:10.5px;padding:2px 9px;border-radius:10px;border:1px solid var(--line);color:var(--muted);cursor:pointer;margin:0 4px 4px 0}
+.chip.on{border-color:var(--edge-hi);color:var(--ink);background:color-mix(in srgb,var(--edge-hi) 16%,transparent)}
+/* 중앙 */
+#center{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative}
+#sceneWrap{flex:1;position:relative;min-height:0}
+#scene{width:100%;height:100%;display:block}
+#band{flex:0 0 218px;border-top:1px solid var(--line);position:relative;background:var(--surface)}
+#band .ttl{position:absolute;top:7px;left:12px;right:96px;font-size:11px;color:var(--muted);z-index:2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tpPlay{position:absolute;top:4px;right:12px;z-index:3;border:1px solid var(--line);border-radius:6px;padding:2px 10px;font-size:11px}
+#tpPlay:hover{border-color:var(--edge)}
+#btnDrive{position:absolute;top:4px;right:84px;z-index:3;border:1px solid var(--ai);color:var(--ai);border-radius:6px;padding:2px 10px;font-size:11px}
+#btnDrive:hover{background:color-mix(in srgb,var(--ai) 14%,transparent)}
+/* ── 상태 리플레이 (홀로 트윈 콕핏 — 홀로그램 차량 + 둘레 데이터 패널 + 클러스터 HUD) ── */
+#drive{position:absolute;inset:0;z-index:40;display:none;flex-direction:column;background:#07090d}
+#drive.open{display:flex}
+#dvTop{height:38px;flex:0 0 38px;display:flex;align-items:center;gap:10px;padding:0 12px;
+  background:rgba(20,22,26,.92);border-bottom:1px solid var(--line);z-index:3}
+#dvTop b{font-size:12.5px}
+#dvTop .sub{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dvBtn{border:1px solid var(--line);border-radius:6px;padding:3px 10px;font-size:11px;white-space:nowrap}
+.dvBtn:hover{border-color:var(--edge)}
+#dvWrap{flex:1;position:relative;min-height:0}
+#driveCv{position:absolute;inset:0;width:100%;height:100%;display:block}
+#dvMsg{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);font-size:15px;font-weight:700;
+  color:var(--ink);background:rgba(10,12,16,.72);border:1px solid var(--line);border-radius:9px;
+  padding:10px 22px;display:none;text-align:center;line-height:1.6;z-index:2}
+#dvEvt{position:absolute;left:50%;top:14px;transform:translateX(-50%);font-size:12px;font-weight:700;
+  color:var(--warn);background:rgba(10,12,16,.66);border:1px solid var(--warn);border-radius:14px;
+  padding:3px 14px;display:none;z-index:2}
+#hud{flex:0 0 122px;display:flex;align-items:stretch;gap:12px;padding:8px 14px;
+  background:linear-gradient(180deg,rgba(16,18,22,.96),rgba(10,12,15,.99));border-top:1px solid var(--line);z-index:3}
+#hudSpeedo{flex:0 0 190px;position:relative}
+#hudSpeedo svg{width:100%;height:100%}
+#hudMid{flex:0 0 300px;display:flex;flex-direction:column;justify-content:center;gap:7px}
+#ttRow{display:flex;gap:7px;align-items:center}
+.tt{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:6px;border:1px solid var(--line);
+  color:#4a4d53;letter-spacing:.03em;transition:color .2s,border-color .2s}
+.tt.on{color:var(--ai);border-color:var(--ai);text-shadow:0 0 8px var(--ai)}
+.tt.amber{color:var(--warn);border-color:var(--warn);text-shadow:0 0 8px var(--warn);animation:ttBlink 1s step-end infinite}
+@keyframes ttBlink{50%{opacity:.35}}
+#battRow{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--muted)}
+#battBar{flex:1;height:9px;background:#22252b;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+#battBar i{display:block;height:100%;background:var(--edge-hi);transition:width .3s}
+#battBar i.low{background:var(--crit)}
+#dvInfo{font-size:10.5px;color:var(--muted);line-height:1.5}
+#dvInfo b{color:var(--ink);font-variant-numeric:tabular-nums}
+#hudScrub{flex:1;position:relative;min-width:0}
+#dvScrub{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+#dvScrubLbl{position:absolute;top:0;left:6px;font-size:9.5px;color:var(--muted);pointer-events:none}
+#tripChart{width:100%;height:100%;display:block}
+#tripVeil{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:12px;background:var(--surface);z-index:1}
+/* 관제 (피트월) — 타이밍 타워 · 엔지니어 콜 피드 */
+.twPos{flex:0 0 20px;font-size:11px;font-weight:700;color:var(--muted)}
+#callFeed{max-height:290px;overflow-y:auto;margin-top:5px}
+.callRow{display:flex;align-items:center;gap:6px;font-size:10.5px;padding:3px 6px;margin-bottom:4px;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--edge);border-radius:5px}
+.callRow.warn{border-left-color:var(--warn)}
+.callRow.crit{border-left-color:var(--crit)}
+.callRow.ai{border-left-color:var(--ai)}
+.callRow .ct{flex:0 0 34px;color:var(--muted);font-family:ui-monospace,monospace;font-size:10px}
+.callRow .cm{flex:1;min-width:0;line-height:1.4}
+.callRow .sendBtn{flex:0 0 auto;border:1px solid var(--ai);color:var(--ai);border-radius:5px;padding:1px 7px;font-size:10px}
+.callRow .sendBtn:hover{background:color-mix(in srgb,var(--ai) 14%,transparent)}
+.callRow .sendBtn.sent{border-color:var(--good);color:var(--good);cursor:default}
+@keyframes liveBlink{50%{opacity:.25}}
+/* 씬 텍스트 */
+.tierLbl{font-size:10.5px;fill:var(--muted);letter-spacing:.08em}
+.gAxis{font-size:10px;fill:var(--muted)}
+.gCur{font-size:10.5px;font-weight:700;fill:var(--warn)}
+.evLbl{font-size:10px;fill:var(--ink)}
+.evSub{font-size:9px;fill:var(--muted)}
+.stageLbl{font-size:9.5px;font-weight:700;letter-spacing:.04em}
+.node{cursor:pointer}
+.node.dim{opacity:.22}
+.node:hover .evDot{stroke:var(--ink)}
+.node.sel .evDot{stroke:var(--edge-hi);stroke-width:2.4}
+.tick{cursor:pointer}
+.tick.dim{opacity:.2}
+.tick.sel rect{stroke:var(--edge-hi);stroke-width:1.6}
+/* 푸터 */
+footer{height:52px;flex:0 0 52px;display:flex;align-items:center;gap:12px;padding:0 16px;
+  background:var(--surface);border-top:1px solid var(--line)}
+footer .btn{border:1px solid var(--line);border-radius:6px;padding:4px 12px;font-size:12px}
+footer .btn:hover{border-color:var(--edge)}
+#ymLbl{font-size:14px;font-weight:700;min-width:84px}
+#modeLbl{font-size:11px;color:var(--muted);min-width:120px}
+#tlWrap{flex:1}
+#tl{width:100%;accent-color:var(--edge-hi)}
+.tip{position:fixed;z-index:90;background:var(--surface2);border:1px solid var(--edge);border-radius:7px;
+  padding:7px 10px;font-size:11.5px;pointer-events:none;display:none;max-width:320px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.tip b{display:block;margin-bottom:2px}
+.tip .mut{color:var(--muted)}
+::-webkit-scrollbar{width:9px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>차량 트윈 — 고객 만족(서비스) 개선</h1>
+  <span class="sub">하나의 서비스: 고객 만족(서비스) KPI 트리(딜러 서비스·품질팀·서비스팀) → 데이터 확인 → 문제 VIN 드릴 → 조치 → 전후 검증 폐루프</span>
+</header>
+<div id="main">
+  <aside id="railL">
+    <div id="modeSeg">
+      <button data-m="home">홈 · KPI 트리</button>
+      <button data-m="vin">VIN 트윈</button>
+      <button data-m="ctl">관제 (피트월)</button>
+      <button data-m="fleet">KPI 상세</button>
+    </div>
+    <div id="railVin">
+      <div class="railTtl">관측 차량 — 트윈 표본 VIN</div>
+      <div id="vinList"></div>
+    </div>
+    <div id="railFleet" style="display:none">
+      <div class="railTtl">세부 KPI — 고객 만족(서비스) 정의</div>
+      <div id="kpiList"></div>
+      <div class="card"><div class="ctx" id="kpiNote"></div></div>
+    </div>
+    <div id="railCtl" style="display:none">
+      <div class="railTtl">타이밍 타워 — 플릿 라이브 (위험도 순)</div>
+      <div id="towerList"></div>
+      <div class="card"><div class="ctx" id="ctlNote"></div></div>
+    </div>
+    <div id="railHome" style="display:none">
+      <div class="railTtl">담당 팀 — 하위 KPI 오너</div>
+      <div id="teamList"></div>
+      <div class="card"><div class="ctx" id="homeNote"></div></div>
+    </div>
+  </aside>
+  <div id="center">
+    <div id="sceneWrap"><svg id="scene" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div id="band">
+      <span class="ttl" id="tripTtl"></span>
+      <button id="btnDrive">◈ 상태 리플레이</button>
+      <button id="tpPlay">▶ 재생</button>
+      <svg id="tripChart"></svg>
+      <div id="tripVeil">타임라인에서 트립(시동 ON~OFF) 또는 이벤트를 선택하면 실차 수집 데이터가 재생됩니다</div>
+    </div>
+    <div id="drive">
+      <div id="dvTop">
+        <b id="dvTtl"></b><span class="sub" id="dvSub"></span>
+        <span style="margin-left:auto"></span>
+        <button class="dvBtn" id="dvPlay">∥ 일시정지</button>
+        <button class="dvBtn" id="dvRate">배속 ×20</button>
+        <button class="dvBtn" id="dvClose">✕ 닫기 · ESC</button>
+      </div>
+      <div id="dvWrap">
+        <canvas id="driveCv"></canvas>
+        <div id="dvEvt"></div>
+        <div id="dvMsg"></div>
+      </div>
+      <div id="hud">
+        <div id="hudSpeedo"><svg id="spdSvg" viewBox="0 0 190 112"></svg></div>
+        <div id="hudMid">
+          <div id="ttRow">
+            <span class="tt" id="ttBatt">⚡ 12V</span>
+            <span class="tt" id="ttHda">◉ HDA</span>
+            <span class="tt" id="ttTer">TERRAIN</span>
+            <span class="tt" id="ttLamp">⚠ —</span>
+          </div>
+          <div id="battRow">12V SoC<div id="battBar"><i></i></div><span id="battPct">—</span></div>
+          <div id="dvInfo"></div>
+        </div>
+        <div id="hudScrub"><canvas id="dvScrub"></canvas><span id="dvScrubLbl">차속 프로파일 — 클릭: 시킹</span></div>
+      </div>
+    </div>
+  </div>
+  <aside id="side"><div id="sideBody"></div></aside>
+</div>
+<footer>
+  <button class="btn" id="btnPlay">▶ Play</button>
+  <span id="ymLbl">2026-08</span>
+  <span id="modeLbl">관측 시점</span>
+  <div id="tlWrap"><input type="range" id="tl" min="0" max="31" value="31" step="1"></div>
+  <span class="sub" id="ftNote">월 커서 = 관측 시점 — 커서 이후 이벤트는 아직 도래하지 않음</span>
+</footer>
+<div class="tip" id="tip"></div>
+<script src="v7-data.js"></script>
+<script>
+'use strict';
+/* ═══ PART A. 시간축·유틸 — 월(48) × 일(30) 격자, 시드 PRNG ═══ */
+const D=window.TWIN_DATA, M=D.meta, NOW=M.now, MONTHS=M.months;
+const MODELS=D.models, PLANTS=D.plants, ZONES=D.zones;
+const EMBED=window.parent!==window;
+const $=id=>document.getElementById(id);
+const el=(t,a,p)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const f1=n=>(Math.round(n*10)/10).toFixed(1);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const DAYM=30, NOWD=NOW*DAYM+DAYM-1;                      // 관측 최신일 = 2026-08-30
+const dateOf=d=>{const m=clamp(Math.floor(d/DAYM),0,MONTHS.length-1);return MONTHS[m]+'-'+String(d-m*DAYM+1).padStart(2,'0');};
+const obsOf=i=>Math.min(NOWD,i*DAYM+DAYM-1);              // 월 커서 → 관측 시점(일)
+const mmss=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const hash=s=>{let h=7;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h;};
+// VIN 마스킹 — 04-security 규격: 뒤 8자만 노출
+const maskVin=v=>'•••••'+v.slice(-8);
+/* ═══ PART B. VIN 상세 합성 — 트윈 표본 8대 (시드 결정론 · L3 지연 생성) ═══ */
+const COLORS={TRN:'그래비티 블랙',VST:'스노우 화이트 펄',AUR:'오로라 블루 매트',MRD:'실버 브룩',NOV:'미드나이트 네이비',LUM:'문스케이프 그레이'};
+const HEXC={TRN:'#23262c',VST:'#e4e4e6',AUR:'#3b6fb5',MRD:'#b9bcc0',NOV:'#1d2b4d',LUM:'#878c94'};   // 외장색 헥스 — 실루엣·드라이브 공용
+const ENGINES={TRN:'3.5 T-GDI · AWD',VST:'2.5 GDI · FWD',AUR:'EV 160kW×2 · AWD',MRD:'1.6 T-HEV · FWD',NOV:'3.5 GDI · FWD',LUM:'EV 150kW · FWD'};
+const DTCLIB={
+  B1250:{desc:'12V 배터리 저전압',sev:'warn'},
+  U0155:{desc:'클러스터 통신 응답 지연',sev:'warn'},
+  U0198:{desc:'텔레매틱스 유닛 통신 이상',sev:'warn'},
+  B1620:{desc:'커넥티드 모듈 내부 오류',sev:'crit'},
+  P0C79:{desc:'구동 인버터 전압 이상',sev:'crit'},
+  C1616:{desc:'외판 충격 감지 이력',sev:'warn'},
+};
+const EXEMPLARS=[
+ {key:'presale12v',mid:'LUM',my:2026,trim:'GT-Line',prodM:25,soldM:29,tag:'판매 전 12V 방전',
+  desc:'재고 중 암전류 과다 — G3 인수 진단에서 SoC 저하 검출, 보충 충전 반복, 판매 후 OTA로 시정'},
+ {key:'connDtc',mid:'LUM',my:2026,trim:'Air',prodM:22,soldM:24,tag:'커넥티드 DTC → OTA 시정',
+  desc:'판매 후 커넥티드 DTC 반복 — VoC 입고 시 재현 불가, OTA-2606 적용 후 소멸'},
+ {key:'evDrive',mid:'AUR',my:2026,trim:'Long Range',prodM:23,soldM:25,tag:'구동계 DTC → FSC 수리',
+  desc:'구동계 결함 DTC — 필드 서비스 캠페인(FSC-2603) 입고 수리로 완결'},
+ {key:'towing',mid:'TRN',my:2026,trim:'X-Pro',prodM:24,soldM:26,tag:'트레일러·Terrain 헤비',
+  desc:'견인·오프로드 고부하 사용 — 이슈 없음, 사용 패턴 관측 표본'},
+ {key:'hda',mid:'VST',my:2026,trim:'Signature',prodM:23,soldM:24,tag:'HDA 헤비유저 · 무이슈',
+  desc:'고속도로 주행보조 상시 사용 — 기능 체감 우수 표본'},
+ {key:'transit',mid:'MRD',my:2026,trim:'EX',prodM:26,soldM:28,tag:'운송 손상 → 인수 보수',
+  desc:'철도 운송 중 외판 손상 — G3 인수 검사에서 검출, 보수 후 재검 합격'},
+ {key:'aging',mid:'NOV',my:2025,trim:'SX',prodM:20,soldM:null,tag:'장기 재고 · SoH 저하',
+  desc:'재고 300일+ 미판매 — 12V SoH 저하, 주기 보충 충전으로 관리 중'},
+ {key:'baseline',mid:'TRN',my:2025,trim:'EX',prodM:14,soldM:16,tag:'정상 — 기준 차량',
+  desc:'정기점검 외 무이슈 — 비교 기준(Baseline) 표본'},
+];
+function makeVin(md,plant,rnd){
+  let vds='';for(let j=0;j<4;j++)vds+='ABCDEFGHJKLMNPRSTUVWXYZ'[Math.floor(rnd()*23)];
+  return `${plant.wmi}${md.id[0]}${vds}T${plant.id[0]}${String(100000+Math.floor(rnd()*899999))}`;
+}
+const _veh={};
+function vehicle(key){
+  if(_veh[key])return _veh[key];
+  const ex=EXEMPLARS.find(e=>e.key===key);
+  return _veh[key]=buildVehicle(ex);
+}
+function buildVehicle(ex){
+  const md=MODELS.find(m=>m.id===ex.mid), plant=PLANTS.find(p=>p.id===md.plant);
+  const rnd=mulberry32(M.seed+hash(ex.key)*7919);
+  const vin=makeVin(md,plant,rnd), vh=hash(vin);
+  const kr=md.plant.startsWith('KR'), mx=md.plant==='MX-MT';
+  const zone=ZONES[Math.floor(rnd()*ZONES.length)];
+  const dealer=zone.name+' 권역 대표 딜러';
+  /* ── 1) 스케줄 — 생산→운송→입고→판매 ── */
+  const prodD=ex.prodM*DAYM+2+Math.floor(rnd()*5);
+  let shipD=null,portD=null,arriveD;
+  if(kr){shipD=prodD+6+Math.floor(rnd()*3);portD=shipD+18;arriveD=portD+12;}
+  else if(mx){arriveD=prodD+8+Math.floor(rnd()*3);}
+  else{arriveD=prodD+5+Math.floor(rnd()*3);}
+  const soldD=ex.soldM!=null?Math.max(arriveD+9,ex.soldM*DAYM+6+Math.floor(rnd()*12)):null;
+  // 시정(S/W·수리) 시점 — 스토리별
+  let fixD=null,fixKind=null,fixName='';
+  if(ex.key==='presale12v'){fixD=soldD+26;fixKind='OTA';fixName='12V 전원관리 S/W 업데이트 (암전류 시정)';}
+  if(ex.key==='connDtc'){fixD=29*DAYM+14;fixKind='OTA';fixName='커넥티드 SW 결함 OTA 시정 (OTA-2606-LUM)';}
+  if(ex.key==='evDrive'){fixD=27*DAYM+11;fixKind='FSC';fixName='FSC-2603-AUR 구동 인버터 하니스 교체';}
+  /* ── 2) 트립 — 사전 이동·시운전·고객 대표 트립 ── */
+  const trips=[]; let tseq=0;
+  const addTrip=(d,ctx,dur,km,label)=>{trips.push({id:'T'+(++tseq),d,ctx,dur,km:Math.round(km),label});};
+  addTrip(prodD,'yard',7,2,'공장 라인오프 이동');
+  addTrip(kr?shipD:prodD+2,'yard',9,3,kr?'수출항 상차 이동':'철도·트럭 상차 이동');
+  if(kr)addTrip(portD,'port',11,4,'항만 하역 · VPC 이동');
+  addTrip(arriveD,'yard',8,3,'딜러 하차 · 전시장 이동');
+  const stockEnd=soldD!=null?soldD-1:NOWD;
+  for(let d=arriveD+14;d<stockEnd-4&&trips.filter(t=>t.ctx==='test').length<3;d+=22+Math.floor(rnd()*10))
+    addTrip(d,'test',16+Math.floor(rnd()*8),9+rnd()*7,'고객 시승 (딜러)');
+  if(soldD!=null)addTrip(soldD-1,'test',14,8,'PDS 인도 전 주행 점검');
+  // 판매 후 — 주행일 패턴(결정론)에서 대표 트립 추출
+  const heavy=ex.key==='towing'||ex.key==='hda';
+  const driveDay=d=>soldD!=null&&d>soldD&&((Math.imul(d,2654435761)^vh)>>>0)%7<(heavy?6:5);
+  if(soldD!=null){
+    let last=soldD+1;
+    for(let d=soldD+2;d<=NOWD;d++){
+      if(!driveDay(d))continue;
+      if(d-last>=10&&trips.filter(t=>t.ctx==='cust').length<14){
+        const tow=ex.key==='towing'&&rnd()<0.55;
+        const dur=tow?46:24+Math.floor(rnd()*22), km=tow?90+rnd()*70:18+rnd()*55;
+        addTrip(d,'cust',dur,km,tow?'고객 주행 — 트레일러 견인':'고객 주행');
+        if(tow)trips[trips.length-1].tow=1;
+        last=d;
+      }
+    }
+  }
+  /* ── 3) 12V SoC 일 시계열 — 암전류·운송·충전·주행 반영 ── */
+  const soc=new Array(NOWD+1).fill(null);
+  const chargeDays=[], sRnd=mulberry32(vh);
+  const agingChg=[]; if(ex.key==='aging')for(let d=arriveD+45;d<=NOWD;d+=45)agingChg.push(d);
+  const tripDays=new Set(trips.map(t=>t.d));
+  soc[prodD]=82;
+  for(let d=prodD+1;d<=NOWD;d++){
+    let s=soc[d-1];
+    const stock=d>arriveD&&(soldD==null||d<soldD);
+    const dark=(ex.key==='presale12v'&&(fixD==null||d<fixD))?1.35
+      :(kr&&d>=shipD&&d<=portD)?0.5
+      :(ex.key==='aging'&&stock)?0.5:0.35;
+    if(d===prodD+1||d===arriveD+2&&ex.key==='presale12v')s=79;          // G1·G3 후 충전
+    else if(agingChg.includes(d)){s=79;chargeDays.push(d);}
+    else if(stock&&s<56){s=79;chargeDays.push(d);}                       // 딜러 보충 충전
+    else if(soldD!=null&&d===soldD-1)s=Math.max(s,78);                   // PDS 충전
+    else if(tripDays.has(d)||driveDay(d))s=Math.min(83,s+9+sRnd()*3);
+    else s-=dark*(0.85+sRnd()*0.3);
+    soc[d]=clamp(s,33,84);
+  }
+  const socAt=d=>soc[clamp(Math.round(d),prodD,NOWD)];
+  /* ── 4) DTC 발생 이력 — 스토리별 ── */
+  const dtcs=[];
+  const addDtc=(d,code)=>{if(d>prodD&&d<=NOWD)dtcs.push({d,code,...DTCLIB[code]});};
+  if(ex.key==='presale12v'){
+    let n=0;
+    for(let d=arriveD;d<(soldD||NOWD);d++)if(soc[d]<55&&(n===0||d-dtcs[dtcs.length-1].d>11)&&n<3){addDtc(d,'B1250');n++;}
+    if(dtcs.length)addDtc(dtcs[0].d+2,'U0155');
+    if(soldD)for(let k=0;k<2;k++)addDtc(soldD+8+k*9,'B1250');            // 판매 후 OTA 전 아침 저전압
+  }
+  if(ex.key==='connDtc')for(let k=0;k<8;k++){const d=soldD+30+k*11;if(d<fixD){addDtc(d,'U0198');if(k%3===2)addDtc(d,'B1620');}}
+  if(ex.key==='evDrive')[32,47,58].forEach(o=>{if(soldD+o<fixD+3)addDtc(soldD+o,'P0C79');});
+  if(ex.key==='transit')addDtc(arriveD-2,'C1616');
+  if(ex.key==='aging'){let n=0;for(let d=arriveD;d<=NOWD;d++)if(soc[d]<54&&n<3&&(n===0||d-dtcs[dtcs.length-1].d>40)){addDtc(d,'B1250');n++;}}
+  dtcs.sort((a,b)=>a.d-b.d);
+  /* ── 5) 이벤트 체인 — 게이트 KDS 진단 포함 ── */
+  const stockDays=(soldD!=null?soldD:NOWD)-arriveD;
+  const soh=ex.key==='aging'?Math.round(100-stockDays*0.04):99-Math.floor(rnd()*2);
+  const kds=(d,extra)=>({soc:Math.round(socAt(d)),soh,dtc:dtcs.filter(x=>Math.abs(x.d-d)<=1).map(x=>x.code),...extra});
+  const events=[];let eseq=0;
+  const addEv=(d,type,title,sub,st,x)=>{events.push({id:'E'+(++eseq),d,type,title,sub:sub||'',st:st||'good',...x});};
+  addEv(prodD,'PROD','생산 (라인오프)',plant.name);
+  addEv(prodD+1,'GATE','G1 PDI — 공장 출하 검사','KDS 진단',null,{g:'G1',kds:kds(prodD+1,{judge:'합격'})});
+  if(kr){
+    addEv(shipD,'SHIP','수출항 선적','해상 운송 18일');
+    addEv(portD,'PORT','항만 하역 (VPC)',zone.name+' 수입항');
+    const g2warn=socAt(portD+1)<62;
+    addEv(portD+1,'GATE','G2 VPC — 항만 인수 검사','KDS 진단',g2warn?'warn':'good',
+      {g:'G2',kds:kds(portD+1,{judge:g2warn?'조건부 — 12V 보충 충전 지시':'합격'})});
+    addEv(portD+3,'RAIL','내륙 철도 운송','9일');
+  } else addEv(prodD+2,'RAIL',mx?'철도 출발 · 국경 통관':'트럭·철도 상차','');
+  addEv(arriveD,'ARRIVE','딜러 입고 (=도매)',dealer);
+  const g3=ex.key==='presale12v'?{st:'warn',judge:'조건부 — 12V SoC '+Math.round(socAt(arriveD+1))+'% · 보충 충전 및 암전류 점검 지시'}
+    :ex.key==='transit'?{st:'warn',judge:'부적합 — 우측 도어 외판 손상 (운송 중) · 보수 후 재검'}
+    :{st:'good',judge:'합격'};
+  addEv(arriveD+1,'GATE','G3 — 딜러 인수 검사','KDS 진단',g3.st,{g:'G3',kds:kds(arriveD+1,{judge:g3.judge})});
+  if(ex.key==='transit'){
+    addEv(arriveD+6,'SVC','외판 보수 (인수 보수)','바디샵 · 도어 패널 교환','warn',
+      {svc:{ro:'RO-'+(2600+vh%90),kind:'운송 손상 보수',work:'우측 프런트 도어 패널 교환·재도장',parts:'도어 패널 ASSY',cost:'운송사 구상'}});
+    addEv(arriveD+8,'GATE','G3 재검 — 딜러 인수','KDS 진단',null,{g:'G3',kds:kds(arriveD+8,{judge:'합격 (보수 완료)'})});
+  }
+  // 딜러 보충 충전 — 기록은 최대 2건 (이후는 SoC 곡선으로만)
+  chargeDays.filter(d=>soldD==null||d<soldD).slice(0,2).forEach((d,k)=>
+    addEv(d,'SVC','12V 보충 충전'+(k===0&&ex.key==='presale12v'?' · 암전류 점검':''),'딜러 서비스','warn',
+      {svc:{ro:'RO-'+(2500+vh%90+k),kind:'재고 차량 관리',work:'12V 보충 충전'+(k===0&&ex.key==='presale12v'?' · 암전류 측정 42mA (기준 25mA 초과 — 원인 S/W 조사 의뢰)':''),parts:'-',cost:'딜러 부담'}}));
+  if(ex.key==='aging')addEv(arriveD+180,'SVC','장기 재고 점검','12V SoH '+soh+'% — 교체 임계 접근','warn',
+    {svc:{ro:'RO-'+(2700+vh%90),kind:'재고 차량 관리',work:'배터리 SoH 측정·유체·타이어 점검',parts:'-',cost:'딜러 부담'}});
+  if(soldD!=null){
+    addEv(soldD-1,'GATE','G4 PDS — 인도 전 점검','KDS 진단',null,{g:'G4',kds:kds(soldD-1,{judge:'합격 — 인도 승인'})});
+    addEv(soldD,'RETAIL','소매 판매 ★','고객 인도 · '+dealer);
+  }
+  // 판매 후 서비스·시정
+  if(ex.key==='connDtc')addEv(soldD+49,'SVC','VoC 입고 — 커넥티드 점검','재현 불가 · 로그 채증','warn',
+    {svc:{ro:'RO-'+(2610+vh%90),kind:'워런티',work:'텔레매틱스 유닛 진단 — 재현 불가, 원격 로그 모니터링 등록',parts:'-',cost:'워런티'}});
+  if(fixKind==='OTA')addEv(fixD,'OTA',fixName.split(' (')[0],'S/W 배포 — 무선 업데이트','good',{ota:1,svc:{ro:'OTA',kind:'캠페인(OTA)',work:fixName,parts:'-',cost:'제조사'}});
+  if(fixKind==='FSC')addEv(fixD,'SVC','FSC-2603 캠페인 수리','필드 서비스 캠페인 입고','good',
+    {svc:{ro:'RO-'+(2620+vh%90),kind:'캠페인',work:fixName,parts:'인버터 하니스 KIT',cost:'제조사'}});
+  if(ex.key==='baseline')[soldD+180,soldD+330].forEach((d,k)=>{if(d<=NOWD)addEv(d,'SVC','정기점검 '+(k+1)+'차','유상 점검 · 무이슈','good',
+    {svc:{ro:'RO-'+(2400+vh%90+k),kind:'일반(CP)',work:'엔진오일·필터 교환, 하부 점검',parts:'오일·필터',cost:'고객'}});});
+  if(ex.key==='hda'&&soldD+200<=NOWD)addEv(soldD+200,'SVC','정기점검 1차','유상 점검 · 무이슈','good',
+    {svc:{ro:'RO-'+(2410+vh%90),kind:'일반(CP)',work:'엔진오일·필터 교환',parts:'오일·필터',cost:'고객'}});
+  events.sort((a,b)=>a.d-b.d||(a.type==='GATE'?1:0)-(b.type==='GATE'?1:0));
+  /* ── 6) 누적 주행거리 ── */
+  const odo=new Array(NOWD+1).fill(0);
+  {let o=0;const km=Object.fromEntries(trips.map(t=>[t.d,t.km]));
+   for(let d=prodD;d<=NOWD;d++){
+     if(km[d]!=null)o+=km[d];
+     else if(driveDay(d))o+=(heavy?55:32)+((Math.imul(d,40503)^vh)>>>0)%40;
+     odo[d]=Math.round(o);}}
+  /* ── 7) AI 사전 진단 — 권고 윈도우 ── */
+  const recs=[];
+  if(ex.key==='presale12v'){
+    recs.push({act:'서비스 예약',name:'12V 배터리 점검·보충 충전',fromD:arriveD+1,untilD:fixD});
+    recs.push({act:'OTA 배포',name:'12V 전원관리 S/W (암전류 시정)',fromD:soldD,untilD:fixD});}
+  if(ex.key==='connDtc')recs.push({act:'OTA 배포',name:'커넥티드 SW 결함 시정 (OTA-2606)',fromD:soldD+30,untilD:fixD});
+  if(ex.key==='evDrive')recs.push({act:'서비스 예약',name:'FSC-2603 캠페인 입고 수리',fromD:soldD+32,untilD:fixD});
+  if(ex.key==='aging')recs.push({act:'서비스 예약',name:'장기 재고 점검 — 12V 배터리 교체 검토',fromD:arriveD+150,untilD:null});
+  return {...ex,md,plant,vin,vh,zone,dealer,prodD,shipD,portD,arriveD,soldD,fixD,fixKind,fixName,
+    trips,soc,socAt,dtcs,events,odo,soh,recs,heavy,story:ex.key};
+}
+/* AI 사전 진단 스코어 — 관측 시점 기준 */
+function riskOf(v,obsD){
+  obsD=clamp(obsD,v.prodD+1,NOWD);
+  const s=v.socAt(obsD), s14=v.socAt(Math.max(v.prodD,obsD-14));
+  const slope=(s-s14)/14;
+  const dtc60=v.dtcs.filter(x=>x.d<=obsD&&x.d>obsD-60).length;
+  const aging=(v.soldD==null||obsD<v.soldD)&&obsD>v.arriveD?obsD-v.arriveD:0;
+  let sc=clamp((62-s)*1.6,0,40)+Math.min(30,dtc60*7)+(slope<-0.7?18:0)+(aging>150?12:0)+(v.soh<92?8:0);
+  if(v.fixD!=null&&obsD>=v.fixD)sc=Math.min(sc,14);
+  sc=Math.round(clamp(sc,2,96));
+  const lv=sc<25?{lbl:'안정',hex:'var(--good)'}:sc<55?{lbl:'주의',hex:'var(--warn)'}:{lbl:'위험',hex:'var(--crit)'};
+  const why=[];
+  if(s<62)why.push('12V SoC '+Math.round(s)+'% — 방전 임계(60%) 근접');
+  if(slope<-0.7)why.push('최근 14일 SoC 하락 '+f1(slope*14)+'%p — 암전류 의심');
+  if(dtc60)why.push('최근 60일 DTC '+dtc60+'건');
+  if(aging>150)why.push('재고 '+aging+'일 — 에이징 관리 대상');
+  if(v.soh<92)why.push('12V SoH '+v.soh+'%');
+  if(v.fixD!=null&&obsD>=v.fixD)why.push('시정 완료('+dateOf(v.fixD)+') — '+v.fixName);
+  if(!why.length)why.push('이상 신호 없음 — 정상 운용');
+  const recs=v.recs.filter(r=>obsD>=r.fromD&&(r.untilD==null||obsD<r.untilD));
+  return {score:sc,...lv,why,recs};
+}
+/* ═══ PART C. 씬 — VIN 라이프사이클 타임라인 (이벤트 체인 + 트립 + 12V·주행거리) ═══ */
+let mode='home', cursor=NOW, selVin='presale12v', selEv=null, selTrip=null;
+const APPLIED=new Set();                                   // AI 권고 실행 이력 (세션)
+const tip=$('tip');
+function tipShow(e,html){tip.innerHTML=html;tip.style.display='block';
+  const r=tip.getBoundingClientRect();
+  tip.style.left=Math.min(e.clientX+14,innerWidth-r.width-10)+'px';
+  tip.style.top=Math.min(e.clientY+12,innerHeight-r.height-10)+'px';}
+function tipHide(){tip.style.display='none';}
+const CTXC={yard:'var(--st-ship)',port:'var(--st-ship)',test:'var(--st-stock)',cust:'var(--st-cust)'};
+const CTXNM={yard:'사전 이동',port:'항만 이동',test:'시운전',cust:'고객 주행'};
+const EVC=ev=>ev.st==='crit'?'var(--crit)':ev.st==='warn'?'var(--warn)':
+  ev.type==='RETAIL'?'var(--st-cust)':ev.type==='GATE'?'var(--edge-hi)':
+  ev.type==='OTA'?'var(--ai)':ev.type==='PROD'?'var(--st-prod)':'var(--edge)';
+let sceneZoom=null;
+function renderSceneVin(){
+  const svg=$('scene');svg.innerHTML='';
+  const v=vehicle(selVin), obsD=obsOf(cursor);
+  const W=1000,PL=70,PR=24;
+  const d0=v.prodD-6, d1=NOWD+4;
+  const X=d=>PL+(d-d0)/(d1-d0)*(W-PL-PR);
+  el('text',{x:24,y:24,class:'tierLbl'},svg).textContent=
+    `VIN 라이프사이클 — ${maskVin(v.vin)} · ${v.md.name} ${v.my}MY · 관측 ${dateOf(obsD)} · 노드/트립 클릭: 상세·재생 · 휠 확대/더블클릭 리셋`;
+  /* 스테이지 리본 */
+  const transEnd=v.arriveD, prodEnd=v.shipD!=null?v.shipD:v.prodD+2;
+  const stages=[
+    {a:v.prodD-3,b:prodEnd,nm:'생산',hex:'var(--st-prod)'},
+    {a:prodEnd,b:transEnd,nm:'운송',hex:'var(--st-ship)'},
+    {a:transEnd,b:v.soldD!=null?v.soldD:NOWD,nm:'딜러 재고',hex:'var(--st-stock)'},
+  ];
+  if(v.soldD!=null)stages.push({a:v.soldD,b:NOWD,nm:'고객 운용',hex:'var(--st-cust)'});
+  stages.forEach(s=>{
+    const x=X(s.a),w=Math.max(2,X(s.b)-x);
+    el('rect',{x,y:46,width:w,height:16,rx:3,fill:s.hex,opacity:.16},svg);
+    el('rect',{x,y:46,width:w,height:2.5,fill:s.hex,opacity:.85},svg);
+    if(w>46)el('text',{x:x+6,y:58,class:'stageLbl',fill:s.hex},svg).textContent=s.nm;
+  });
+  /* 이벤트 레인 */
+  const EY=118;
+  el('line',{x1:X(v.prodD),y1:EY,x2:X(Math.min(obsD,NOWD)),y2:EY,stroke:'var(--edge)','stroke-width':1.2},svg);
+  el('line',{x1:X(Math.min(obsD,NOWD)),y1:EY,x2:X(d1-1),y2:EY,stroke:'var(--line)','stroke-width':1.2,'stroke-dasharray':'3 3'},svg);
+  const lblRows=[-16,26,-29,39], lblEnd=lblRows.map(()=>-1e9);   // 충돌 인지 스태거
+  v.events.forEach((ev,k)=>{
+    const x=X(ev.d), fut=ev.d>obsD;
+    const g=el('g',{class:'node'+(fut?' dim':'')+(selEv===ev.id?' sel':'')},svg);
+    if(ev.type==='GATE'){
+      el('rect',{x:x-6.5,y:EY-6.5,width:13,height:13,rx:2.5,class:'evDot',transform:`rotate(45 ${x} ${EY})`,
+        fill:'var(--surface2)',stroke:EVC(ev),'stroke-width':1.8},g);
+      el('text',{x,y:EY+3.2,class:'evSub','text-anchor':'middle',fill:EVC(ev),style:'font-weight:700'},g).textContent=ev.g[1];
+    } else {
+      el('circle',{cx:x,cy:EY,r:ev.type==='RETAIL'?8:6,class:'evDot',
+        fill:ev.type==='RETAIL'?'color-mix(in srgb,var(--st-cust) 30%,var(--surface2))':'var(--surface2)',
+        stroke:EVC(ev),'stroke-width':1.8},g);
+      if(ev.type==='RETAIL')el('text',{x,y:EY+3.5,class:'evSub','text-anchor':'middle',fill:'var(--st-cust)'},g).textContent='★';
+    }
+    const txt=ev.title.length>14?ev.title.slice(0,13)+'…':ev.title;
+    const w=txt.length*9.5;                               // 라벨 폭 추정 → 빈 단 선택 (겹침 방지)
+    const row=lblRows.findIndex((_,ri)=>x-w/2>lblEnd[ri]+9);
+    if(row>=0){                                           // 자리 없으면 라벨 생략 — 툴팁으로 제공
+      lblEnd[row]=x+w/2;
+      el('text',{x,y:EY+lblRows[row],class:'evLbl','text-anchor':'middle',opacity:fut?.5:1},g).textContent=txt;
+    }
+    g.addEventListener('click',()=>selectEvent(ev.id));
+    g.addEventListener('mousemove',e=>tipShow(e,
+      `<b>${dateOf(ev.d)} · ${esc(ev.title)}</b>${esc(ev.sub)}`+
+      (ev.kds?`<br><span class="mut">KDS: ${esc(ev.kds.judge)} · 12V SoC ${ev.kds.soc}% · SoH ${ev.kds.soh}%${ev.kds.dtc.length?' · DTC '+ev.kds.dtc.join(', '):''}</span>`:'')+
+      (fut?'<br><span class="mut">관측 시점 이후 — 아직 도래하지 않음</span>':'')+
+      '<br><span class="mut">클릭: 상세'+(v.trips.some(t=>t.d===ev.d)?' · 동일 시점 트립 재생':'')+'</span>'));
+    g.addEventListener('mouseleave',tipHide);
+  });
+  /* 트립 레인 */
+  const TY=176;
+  el('text',{x:24,y:TY+6,class:'gAxis'},svg).textContent='트립';
+  el('text',{x:24,y:TY+18,class:'evSub',fill:'var(--muted)'},svg).textContent='시동 ON~OFF';
+  v.trips.forEach(t=>{
+    const x=X(t.d), fut=t.d>obsD;
+    const g=el('g',{class:'tick'+(fut?' dim':'')+(selTrip===t.id?' sel':'')},svg);
+    el('rect',{x:x-2,y:TY-4,width:4,height:20,rx:1.5,fill:CTXC[t.ctx],stroke:'transparent','stroke-width':3,opacity:t.ctx==='cust'?.9:.75},g);
+    g.addEventListener('click',()=>selectTrip(t.id));
+    g.addEventListener('mousemove',e=>tipShow(e,
+      `<b>${dateOf(t.d)} · ${esc(t.label)}</b>${CTXNM[t.ctx]} · ${t.dur}분 · ${t.km}km${t.tow?' · 트레일러':''}`+
+      (fut?'<br><span class="mut">관측 시점 이후</span>':'<br><span class="mut">클릭: 신호 재생 (차속·12V·HDA·Terrain·경고등)</span>')));
+    g.addEventListener('mouseleave',tipHide);
+  });
+  /* 12V SoC 일 시계열 */
+  const SY0=232,SY1=372;
+  const sY=val=>SY1-(val-30)/(90-30)*(SY1-SY0);
+  el('text',{x:24,y:SY0-8,class:'gAxis'},svg).textContent='12V 배터리 SoC (%) — 실차 수집';
+  for(const gv of [40,60,80]){
+    el('line',{x1:PL,y1:sY(gv),x2:W-PR,y2:sY(gv),stroke:gv===60?'var(--crit)':'var(--line)','stroke-width':1,
+      'stroke-dasharray':gv===60?'4 3':'none',opacity:gv===60?.6:.7},svg);
+    el('text',{x:PL-7,y:sY(gv)+3.5,class:'gAxis','text-anchor':'end'},svg).textContent=gv+'%';
+  }
+  el('text',{x:W-PR-2,y:sY(60)-4,class:'evSub','text-anchor':'end',fill:'var(--crit)'},svg).textContent='방전 임계 60%';
+  let p='',ap='';
+  const dEnd=Math.min(obsD,NOWD);
+  for(let d=v.prodD;d<=dEnd;d++){
+    const pt=X(d).toFixed(1)+' '+sY(v.soc[d]).toFixed(1);
+    p+=(p?'L':'M')+pt;
+  }
+  if(p){
+    ap=p+`L${X(dEnd).toFixed(1)} ${SY1}L${X(v.prodD).toFixed(1)} ${SY1}Z`;
+    el('path',{d:ap,fill:'rgba(121,184,255,.10)'},svg);
+    el('path',{d:p,fill:'none',stroke:'var(--edge-hi)','stroke-width':1.5,'vector-effect':'non-scaling-stroke'},svg);
+  }
+  // DTC 마커
+  v.dtcs.filter(x=>x.d<=obsD).forEach(x=>{
+    const g=el('g',{style:'cursor:pointer'},svg);
+    el('circle',{cx:X(x.d),cy:sY(v.soc[x.d])-7,r:3.2,fill:'var(--crit)',stroke:'var(--page)','stroke-width':1},g);
+    g.addEventListener('mousemove',e=>tipShow(e,`<b>DTC ${x.code} — ${esc(x.desc)}</b>${dateOf(x.d)} · 12V SoC ${Math.round(v.soc[x.d])}%`));
+    g.addEventListener('mouseleave',tipHide);
+  });
+  // 시정(OTA/FSC) 라인
+  if(v.fixD!=null&&v.fixD<=obsD){
+    el('line',{x1:X(v.fixD),y1:SY0-4,x2:X(v.fixD),y2:SY1,stroke:'var(--ai)','stroke-width':1.2,'stroke-dasharray':'5 3'},svg);
+    el('text',{x:X(v.fixD)+4,y:SY0+6,class:'evSub',fill:'var(--ai)'},svg).textContent=v.fixKind+' 시정';
+  }
+  /* 누적 주행거리 */
+  const OY0=402,OY1=488;
+  const omax=Math.max(50,v.odo[dEnd]);
+  const oY=val=>OY1-val/omax*(OY1-OY0);
+  el('text',{x:24,y:OY0-8,class:'gAxis'},svg).textContent='누적 주행거리 (km)';
+  let op='';
+  for(let d=v.prodD;d<=dEnd;d++)op+=(op?'L':'M')+X(d).toFixed(1)+' '+oY(v.odo[d]).toFixed(1);
+  if(op)el('path',{d:op,fill:'none',stroke:'var(--muted)','stroke-width':1.4,'vector-effect':'non-scaling-stroke'},svg);
+  el('text',{x:Math.min(X(dEnd)+5,W-PR-40),y:oY(v.odo[dEnd])+3,class:'gAxis',fill:'var(--ink)'},svg).textContent=v.odo[dEnd].toLocaleString()+'km';
+  /* 월 눈금 */
+  const m0=Math.floor(d0/DAYM)+1;
+  for(let m=m0;m*DAYM<d1;m+=2){
+    el('line',{x1:X(m*DAYM),y1:OY1+8,x2:X(m*DAYM),y2:OY1+13,stroke:'var(--edge)','stroke-width':1},svg);
+    el('text',{x:X(m*DAYM),y:OY1+26,class:'gAxis','text-anchor':'middle'},svg).textContent=MONTHS[m].slice(2);
+  }
+  /* 관측 커서 + 차량 글리프 — 커서 이동 = 차량이 생애를 달린다 */
+  el('line',{x1:X(obsD),y1:38,x2:X(obsD),y2:OY1+8,stroke:'var(--warn)','stroke-width':1.2,opacity:.85,'vector-effect':'non-scaling-stroke'},svg);
+  el('text',{x:Math.min(X(obsD)+4,W-PR-58),y:40,class:'gCur'},svg).textContent=dateOf(obsD);
+  {const cxr=X(obsD),cyr=88,hex=HEXC[v.mid];
+   const g=el('g',{},svg);
+   el('path',{d:`M${cxr-11} ${cyr+3} L${cxr-10} ${cyr-1} Q${cxr-9} ${cyr-3} ${cxr-5} ${cyr-3} L${cxr-3} ${cyr-6} Q${cxr-2} ${cyr-7} ${cxr+3} ${cyr-7} L${cxr+6} ${cyr-7} Q${cxr+9} ${cyr-6} ${cxr+10} ${cyr-3} Q${cxr+11} ${cyr-2} ${cxr+11} ${cyr+1} L${cxr+11} ${cyr+3} Z`,
+     fill:hex,stroke:'var(--ink)','stroke-width':0.9},g);
+   el('circle',{cx:cxr-6,cy:cyr+3.5,r:2.3,fill:'#101216',stroke:'#565b64','stroke-width':0.7},g);
+   el('circle',{cx:cxr+6,cy:cyr+3.5,r:2.3,fill:'#101216',stroke:'#565b64','stroke-width':0.7},g);}
+  /* 호버 — 씬 전체에서 일 단위 판독 */
+  const hov=el('rect',{x:PL,y:SY0,width:W-PL-PR,height:OY1-SY0,fill:'transparent'},svg);
+  hov.addEventListener('mousemove',e=>{
+    const vb=svg.viewBox.baseVal,r=svg.getBoundingClientRect();
+    const ux=vb.x+(e.clientX-r.left)/r.width*vb.width;
+    const d=clamp(Math.round(d0+(ux-PL)/(W-PL-PR)*(d1-d0)),v.prodD,dEnd);
+    tipShow(e,`<b>${dateOf(d)}</b>12V SoC ${Math.round(v.soc[d])}% · 누적 ${v.odo[d].toLocaleString()}km`+
+      `<br><span class="mut">${d<v.arriveD?'생산·운송 구간':(v.soldD==null||d<v.soldD?'딜러 재고 '+(d-v.arriveD)+'일차':'고객 운용 '+(d-v.soldD)+'일차')}</span>`);
+  });
+  hov.addEventListener('mouseleave',tipHide);
+}
+/* ═══ PART D. 트립 플레이어 — 시동 ON~OFF 신호 재생 (차속·12V·HDA·Terrain·경고등) ═══ */
+const _ts={};
+function tripSeries(vKey,tripId){
+  const ck=vKey+'|'+tripId;
+  if(_ts[ck])return _ts[ck];
+  const v=vehicle(vKey), t=v.trips.find(x=>x.id===tripId);
+  const rnd=mulberry32(v.vh+hash(t.id)*101);
+  const n=Math.max(36,Math.round(t.dur*6));                // 10초/틱
+  let phases;
+  if(t.ctx==='yard'||t.ctx==='port')phases=[{v:16,f:0,len:.34},{v:7,f:0,len:.33},{v:20,f:0,len:.33}];
+  else if(t.ctx==='test')phases=[{v:42,f:0,len:.35},{v:82,f:1,len:.4},{v:38,f:0,len:.25}];
+  else if(t.tow)phases=[{v:38,f:0,len:.2},{v:88,f:1,len:.55},{v:30,f:0,len:.25}];
+  else phases=[{v:44,f:0,len:.3},{v:102,f:1,len:.45},{v:40,f:0,len:.25}];
+  const hdaCap=t.ctx==='cust'||t.ctx==='test';
+  phases.forEach(p=>{p.hda=p.f===1&&hdaCap&&(v.story==='hda'||rnd()<0.45);});
+  const mon=Math.floor(t.d/DAYM)%12, winter=mon<2||mon>9;
+  phases.forEach(p=>{p.ter=t.tow&&p.f===1?(winter?'SNOW':'MUD'):'NORMAL';});
+  const spd=[],soc=[],ph=[];
+  const s0=v.socAt(t.d)-2;let s=s0-5,vv=0;
+  for(let i=0;i<n;i++){
+    const u=i/n;let acc=0,cp=phases[phases.length-1];
+    for(const p of phases){acc+=p.len;if(u<acc){cp=p;break;}}
+    ph.push(cp);
+    let tgt=cp.v*(0.82+0.22*Math.sin(i*0.55+rnd()*0.4)+rnd()*0.14);
+    if(cp.f===0&&rnd()<0.055)tgt=0;
+    if(i>n-4)tgt=0;
+    vv=clamp(vv+clamp(tgt-vv,-9,6.5)*(0.8+rnd()*0.4),0,134);
+    spd.push(vv);
+    if(i<5)s=Math.min(s0,s+1.3);
+    else s=Math.min(82,s+(vv>3?0.05:-0.012)+(rnd()-0.5)*0.03);
+    soc.push(s);
+  }
+  const seg=key=>{const out=[];let a=null,cur=null;
+    for(let i=0;i<n;i++){const val=key(ph[i],i);
+      if(val&&a==null){a=i;cur=val;}
+      else if(val!==cur&&a!=null){out.push({a,b:i-1,v:cur});a=val?i:null;cur=val||null;}}
+    if(a!=null)out.push({a,b:n-1,v:cur});return out;};
+  const hdaSeg=seg(p=>p.hda?'ON':null);
+  const terSeg=seg(p=>p.ter!=='NORMAL'?p.ter:null);
+  const pre=v.fixD==null||t.d<v.fixD;
+  const lamps=[];
+  if(pre&&v.story==='presale12v'&&s0<66)lamps.push({a:0,b:Math.floor(n*0.35),v:'12V 충전 시스템'});
+  if(pre&&v.story==='connDtc'&&t.ctx==='cust'){lamps.push({a:Math.floor(n*0.3),b:Math.floor(n*0.48),v:'커넥티드 점검'});
+    lamps.push({a:Math.floor(n*0.74),b:Math.floor(n*0.84),v:'커넥티드 점검'});}
+  if(pre&&v.story==='evDrive'&&t.ctx==='cust'&&t.d>v.soldD+28)lamps.push({a:Math.floor(n*0.58),b:n-1,v:'EV 시스템 점검'});
+  const evts=[{i:0,txt:'IG-ON (시동)'},{i:n-1,txt:'IG-OFF'}];
+  lamps.forEach(l=>{evts.push({i:l.a,txt:'경고등 점등 — '+l.v});if(l.b<n-1)evts.push({i:l.b,txt:'경고등 소등'});});
+  hdaSeg.forEach(h=>evts.push({i:h.a,txt:'HDA 활성'}));
+  evts.sort((a,b)=>a.i-b.i);
+  return _ts[ck]={t,n,dt:10,spd,soc,hdaSeg,terSeg,lamps,evts,
+    vmax:Math.max(...spd),smin:Math.min(...soc),smax:Math.max(...soc)};
+}
+let tpCursor=0,tpTimer=null,tpW=1000,tpH=212;
+function tpStop(){if(tpTimer){clearInterval(tpTimer);tpTimer=null;}$('tpPlay').textContent='▶ 재생';}
+function renderTrip(){
+  const svg=$('tripChart');svg.innerHTML='';
+  if(!selTrip){$('tripVeil').style.display='flex';$('tripTtl').textContent='';$('tpPlay').style.display='none';$('btnDrive').style.display='none';return;}
+  $('tripVeil').style.display='none';$('tpPlay').style.display='block';$('btnDrive').style.display='block';
+  const v=vehicle(selVin), S=tripSeries(selVin,selTrip), t=S.t;
+  tpW=Math.max(560,svg.clientWidth||1000);tpH=Math.max(150,svg.clientHeight||212);
+  svg.setAttribute('viewBox',`0 0 ${tpW} ${tpH}`);
+  const PL=64,PR=56,PT=32,ROWS=3,RH=13,PB=ROWS*RH+22;
+  const W=tpW,H=tpH;
+  const X=i=>PL+i/(S.n-1)*(W-PL-PR);
+  const vTop=Math.max(20,S.vmax*1.12);
+  const Yv=val=>H-PB-val/vTop*(H-PT-PB);
+  const sLo=Math.floor(S.smin-3),sHi=Math.ceil(S.smax+3);
+  const Ys=val=>H-PB-(val-sLo)/(sHi-sLo)*(H-PT-PB);
+  $('tripTtl').textContent=`트립 재생 — ${dateOf(t.d)} · ${t.label} · ${t.dur}분 · ${t.km}km · 10초/틱 — 차속(백색·좌) · 12V SoC(청색·우) · 하단: HDA/Terrain/경고등`;
+  // 그리드·축
+  for(let k=0;k<=3;k++){
+    const val=vTop*k/3,y=Yv(val);
+    el('line',{x1:PL,y1:y,x2:W-PR,y2:y,stroke:'var(--line)','stroke-width':1,opacity:k?0.5:0.9},svg);
+    el('text',{x:PL-7,y:y+3.5,class:'gAxis','text-anchor':'end'},svg).textContent=Math.round(val);
+    el('text',{x:W-PR+7,y:y+3.5,class:'gAxis'},svg).textContent=Math.round(sLo+(sHi-sLo)*k/3)+'%';
+  }
+  el('text',{x:PL-7,y:PT-8,class:'gAxis','text-anchor':'end'},svg).textContent='km/h';
+  el('text',{x:W-PR+7,y:PT-8,class:'gAxis'},svg).textContent='SoC';
+  for(let i=0;i<S.n;i+=Math.max(6,Math.round(S.n/10))){
+    el('text',{x:X(i),y:H-PB+ROWS*RH+16,class:'gAxis','text-anchor':'middle'},svg).textContent=mmss(i*S.dt);
+  }
+  // 신호 곡선
+  const pth=(arr,Y)=>arr.map((val,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(val).toFixed(1)).join('');
+  el('path',{d:pth(S.spd,Yv)+`L${X(S.n-1).toFixed(1)} ${(H-PB).toFixed(1)}L${PL} ${(H-PB).toFixed(1)}Z`,fill:'rgba(240,239,236,.05)'},svg);
+  el('path',{d:pth(S.spd,Yv),fill:'none',stroke:'var(--ink)','stroke-width':1.5},svg);
+  el('path',{d:pth(S.soc,Ys),fill:'none',stroke:'var(--edge-hi)','stroke-width':1.5},svg);
+  // 상태 스트립 3열
+  const rows=[
+    {nm:'HDA',hex:'var(--ai)',segs:S.hdaSeg.map(x=>({...x,lbl:'ON'}))},
+    {nm:'Terrain',hex:'var(--warn)',segs:S.terSeg.map(x=>({...x,lbl:x.v}))},
+    {nm:'경고등',hex:'var(--crit)',segs:S.lamps.map(x=>({...x,lbl:x.v}))},
+  ];
+  rows.forEach((r,ri)=>{
+    const y=H-PB+ri*RH+2;
+    el('text',{x:PL-7,y:y+RH-5,class:'evSub','text-anchor':'end',fill:'var(--muted)'},svg).textContent=r.nm;
+    el('rect',{x:PL,y,width:W-PL-PR,height:RH-3,rx:2,fill:'var(--surface2)',stroke:'var(--line)','stroke-width':.6},svg);
+    r.segs.forEach(sg=>{
+      const x=X(sg.a),w=Math.max(3,X(sg.b)-x);
+      const rc=el('rect',{x,y:y+1,width:w,height:RH-5,rx:2,fill:r.hex,opacity:.55,style:'cursor:pointer'},svg);
+      if(w>44)el('text',{x:x+4,y:y+RH-5,class:'evSub',fill:'var(--page)',style:'font-weight:700'},svg).textContent=sg.lbl;
+      rc.addEventListener('mousemove',e=>tipShow(e,`<b>${r.nm} — ${esc(sg.lbl)}</b>${mmss(sg.a*S.dt)} ~ ${mmss((sg.b+1)*S.dt)}`));
+      rc.addEventListener('mouseleave',tipHide);
+    });
+  });
+  // 이벤트 마커 (IG-ON/OFF·경고등)
+  S.evts.forEach(ev=>{
+    el('line',{x1:X(ev.i),y1:PT-3,x2:X(ev.i),y2:PT+3,stroke:'var(--muted)','stroke-width':1},svg);
+  });
+  // 재생 커서 + 판독값
+  tpCursor=clamp(tpCursor,0,S.n-1);
+  el('line',{x1:X(tpCursor),y1:PT,x2:X(tpCursor),y2:H-PB+ROWS*RH,stroke:'var(--warn)','stroke-width':1.2},svg);
+  el('circle',{cx:X(tpCursor),cy:Yv(S.spd[tpCursor]),r:3.5,fill:'var(--ink)',stroke:'var(--page)','stroke-width':1.2},svg);
+  el('circle',{cx:X(tpCursor),cy:Ys(S.soc[tpCursor]),r:3.5,fill:'var(--edge-hi)',stroke:'var(--page)','stroke-width':1.2},svg);
+  const lampNow=S.lamps.find(l=>tpCursor>=l.a&&tpCursor<=l.b);
+  const hdaNow=S.hdaSeg.some(h=>tpCursor>=h.a&&tpCursor<=h.b);
+  const terNow=S.terSeg.find(x=>tpCursor>=x.a&&tpCursor<=x.b);
+  el('text',{x:W-PR-6,y:PT+12,class:'gCur','text-anchor':'end'},svg).textContent=
+    `${mmss(tpCursor*S.dt)} · ${Math.round(S.spd[tpCursor])}km/h · 12V ${f1(S.soc[tpCursor])}%`+
+    `${hdaNow?' · HDA':''}${terNow?' · '+terNow.v:''}${lampNow?' · ⚠ '+lampNow.v:''}`;
+  // 호버·클릭 시킹
+  const hv=el('rect',{x:PL,y:PT,width:W-PL-PR,height:H-PT-PB+ROWS*RH,fill:'transparent'},svg);
+  const idxOf=e=>{const r=svg.getBoundingClientRect();
+    return clamp(Math.round((e.clientX-r.left)/r.width*W-PL)/(W-PL-PR)*(S.n-1),0,S.n-1);};
+  hv.addEventListener('mousemove',e=>{
+    const i=Math.round(idxOf(e));
+    tipShow(e,`<b>${mmss(i*S.dt)} (시동 후)</b>차속 ${Math.round(S.spd[i])} km/h · 12V SoC ${f1(S.soc[i])}%`+
+      `<br><span class="mut">클릭: 커서 이동 · ${esc(S.evts.filter(x=>Math.abs(x.i-i)<3).map(x=>x.txt).join(' · ')||'')}</span>`);
+  });
+  hv.addEventListener('mouseleave',tipHide);
+  hv.addEventListener('click',e=>{tpCursor=Math.round(idxOf(e));renderTrip();});
+}
+$('tpPlay').addEventListener('click',()=>{
+  if(tpTimer){tpStop();return;}
+  const S=selTrip?tripSeries(selVin,selTrip):null;if(!S)return;
+  if(tpCursor>=S.n-1)tpCursor=0;
+  $('tpPlay').textContent='❚❚ 정지';
+  tpTimer=setInterval(()=>{
+    tpCursor++;
+    if(tpCursor>=S.n-1){tpStop();tpCursor=S.n-1;}
+    renderTrip();
+  },70);
+});
+new ResizeObserver(()=>{if(mode==='vin'&&selTrip)renderTrip();}).observe($('band'));
+/* ═══ PART E. 좌/우 레일 — VIN 타일 · 차량 카드 · KDS/서비스 상세 · AI 사전 진단 ═══ */
+function renderRailVin(){
+  const host=$('vinList');host.innerHTML='';
+  const obsD=obsOf(cursor);
+  EXEMPLARS.forEach(ex=>{
+    const v=vehicle(ex.key), rk=riskOf(v,obsD);
+    const born=v.prodD<=obsD;
+    const b=document.createElement('button');
+    b.className='vinTile'+(selVin===ex.key?' sel':'');
+    b.style.borderLeftColor=rk.hex;
+    b.innerHTML=`<div class="nm">${esc(v.md.name)} <span style="font-weight:400;color:var(--muted)">${ex.my}MY</span>
+        <span class="lamp ${rk.score>=55?'crit':rk.score>=25?'warn':''}"></span></div>
+      <div class="v1">${maskVin(v.vin)}</div>
+      <div class="v2">${esc(ex.tag)} · <b>${born?(v.soldD!=null&&obsD>=v.soldD?'고객 운용':'재고 '+(obsD>v.arriveD?(obsD-v.arriveD)+'일':'운송 중')):'생산 전'}</b></div>`;
+    b.addEventListener('click',()=>selectVin(ex.key));
+    b.addEventListener('mousemove',e=>tipShow(e,`<b>${esc(v.md.name)} ${ex.my}MY · ${esc(ex.tag)}</b>${esc(ex.desc)}<br><span class="mut">AI 위험도 ${rk.score} (${rk.lbl})</span>`));
+    b.addEventListener('mouseleave',tipHide);
+    host.appendChild(b);
+  });
+}
+function kdsHtml(ev){
+  const k=ev.kds;
+  return `<div class="kdsJudge ${ev.st}">KDS 판정 — ${esc(k.judge)}</div>
+    <div class="kv"><span class="k">12V 배터리 SoC</span><span class="v" style="color:${k.soc<60?'var(--crit)':k.soc<70?'var(--warn)':'var(--good)'}">${k.soc}%</span></div>
+    <div class="kv"><span class="k">12V 배터리 SoH</span><span class="v">${k.soh}%</span></div>
+    <div class="kv"><span class="k">DTC 스캔</span><span class="v">${k.dtc.length?k.dtc.length+'건 검출':'없음'}</span></div>`+
+    k.dtc.map(c=>`<div class="dtcRow"><code>${c}</code><span>${esc(DTCLIB[c].desc)}</span><span class="sev ${DTCLIB[c].sev}">${DTCLIB[c].sev==='crit'?'중대':'주의'}</span></div>`).join('');
+}
+function svcHtml(sv){
+  return `<div class="kv"><span class="k">RO 번호</span><span class="v">${esc(sv.ro)}</span></div>
+    <div class="kv"><span class="k">유형</span><span class="v">${esc(sv.kind)}</span></div>
+    <div class="kv"><span class="k">작업 내용</span><span class="v" style="font-weight:400;text-align:right">${esc(sv.work)}</span></div>
+    <div class="kv"><span class="k">부품</span><span class="v">${esc(sv.parts)}</span></div>
+    <div class="kv"><span class="k">비용 구분</span><span class="v">${esc(sv.cost)}</span></div>`;
+}
+function carSideSvg(v){
+  const hex=HEXC[v.mid];
+  const low=v.md.seg.includes('세단'), van=v.md.seg.includes('미니밴');
+  const rY=low?11:van?4:7, bY=low?18:16;                   // 루프/벨트라인 — 차종 실루엣
+  const stroke=(v.mid==='TRN'||v.mid==='NOV')?'#6a6e78':'rgba(0,0,0,.35)';
+  return `<svg viewBox="0 0 130 40" style="width:100%;height:46px;margin:3px 0 1px;display:block">
+    <ellipse cx="65" cy="35" rx="52" ry="2.6" fill="rgba(0,0,0,.45)"/>
+    <path d="M8 31 L10 ${bY+4} Q12 ${bY} 24 ${bY-1} L36 ${rY+3} Q40 ${rY} 52 ${rY} L${van?92:84} ${rY} Q${van?100:94} ${rY} 100 ${bY-2} L114 ${bY} Q121 ${bY+2} 122 ${bY+8} L122 31 Q118 33 112 33 L18 33 Q10 33 8 31 Z"
+      fill="${hex}" stroke="${stroke}" stroke-width="1"/>
+    <path d="M39 ${rY+3.5} Q42 ${rY+1.5} 52 ${rY+1.5} L62 ${rY+1.5} L62 ${bY-1} L44 ${bY-1} Z" fill="rgba(16,22,32,.88)"/>
+    <path d="M66 ${rY+1.5} L${van?90:82} ${rY+1.5} Q${van?96:90} ${rY+1.5} ${van?97:95} ${bY-2} L66 ${bY-1} Z" fill="rgba(16,22,32,.88)"/>
+    <rect x="8" y="${bY+5}" width="5" height="3" rx="1" fill="#7e2a26"/>
+    <rect x="117" y="${bY+5}" width="5" height="3" rx="1" fill="#d8dbe0"/>
+    <circle cx="34" cy="31" r="6.5" fill="#101216"/><circle cx="34" cy="31" r="2.6" fill="#464b54"/>
+    <circle cx="98" cy="31" r="6.5" fill="#101216"/><circle cx="98" cy="31" r="2.6" fill="#464b54"/>
+    ${v.md.ev?'<text x="112" y="14" font-size="7" font-weight="700" fill="#58d1c9">EV</text>':''}
+  </svg>`;
+}
+function renderSideVin(){
+  const v=vehicle(selVin), obsD=obsOf(cursor), rk=riskOf(v,obsD);
+  const ev=v.events.find(e=>e.id===selEv);
+  const trip=v.trips.find(t=>t.id===selTrip);
+  const sold=v.soldD!=null&&obsD>=v.soldD;
+  let html=`<div class="railTtl">차량 프로필 — 트윈 원장</div>
+  <div class="card">
+    <div class="hd">${esc(v.md.name)} ${esc(v.trim)} <span class="k">${v.my}MY · ${esc(v.md.seg)}</span></div>
+    ${carSideSvg(v)}
+    <div class="kv"><span class="k">VIN</span><span class="v" style="font-family:ui-monospace,monospace">${maskVin(v.vin)}</span></div>
+    <div class="kv"><span class="k">엔진·구동</span><span class="v">${esc(ENGINES[v.mid])}</span></div>
+    <div class="kv"><span class="k">외장색</span><span class="v">${esc(COLORS[v.mid])}</span></div>
+    <div class="kv"><span class="k">생산</span><span class="v">${esc(v.plant.name)} · ${dateOf(v.prodD)}</span></div>
+    <div class="kv"><span class="k">딜러</span><span class="v">${esc(v.dealer)}</span></div>
+    <div class="kv"><span class="k">상태</span><span class="v">${sold?'판매 '+dateOf(v.soldD):(obsD>v.arriveD?'딜러 재고':'생산·운송')}</span></div>
+    <div class="kv"><span class="k">누적 주행</span><span class="v">${v.odo[clamp(obsD,v.prodD,NOWD)].toLocaleString()} km</span></div>
+    <div class="kv"><span class="k">12V SoC / SoH</span><span class="v">${Math.round(v.socAt(obsD))}% / ${v.soh}%</span></div>
+  </div>`;
+  // 선택 상세
+  if(ev){
+    html+=`<div class="railTtl">선택 이벤트 — ${dateOf(ev.d)}</div>
+    <div class="card"><div class="hd">${esc(ev.title)}</div>
+      <div class="ctx">${esc(ev.sub)}${ev.d>obsD?' · <span style="color:var(--warn)">관측 시점 이후 — 아직 도래하지 않음</span>':''}</div>
+      ${ev.kds?kdsHtml(ev):''}${ev.svc?svcHtml(ev.svc):''}</div>`;
+  } else if(trip){
+    html+=`<div class="railTtl">선택 트립 — ${dateOf(trip.d)}</div>
+    <div class="card"><div class="hd">${esc(trip.label)}</div>
+      <div class="kv"><span class="k">구분</span><span class="v">${CTXNM[trip.ctx]}${trip.tow?' · 트레일러':''}</span></div>
+      <div class="kv"><span class="k">주행</span><span class="v">${trip.dur}분 · ${trip.km} km</span></div>
+      <div class="ctx">시동 ON~OFF 신호(차속·12V·HDA·Terrain·경고등)를 하단 밴드에서 재생 중 — 실차 수집 데이터의 트윈.</div></div>`;
+  }
+  // AI 사전 진단
+  html+=`<div class="railTtl">AI 사전 진단 — 가상 정비 (관측 ${dateOf(obsD)})</div>
+  <div class="card"><div class="hd">위험도 ${rk.score} <span style="color:${rk.hex}">${rk.lbl}</span>
+      <span class="k">12V 방전·DTC·에이징 종합</span></div>
+    <div class="riskBarW"><i style="width:${rk.score}%;background:${rk.hex}"></i></div>
+    <div class="ctx">${rk.why.map(w=>'· '+esc(w)).join('<br>')}</div>
+    ${rk.recs.map(r=>{
+      const key=v.key+'|'+r.act+'|'+r.name;
+      const done=APPLIED.has(key);
+      return `<button class="recBtn${done?' done':''}" data-rec="${esc(key)}" data-act="${esc(r.act)}" data-name="${esc(r.name)}" ${done?'disabled':''}>
+        ${done?'✓ 등록됨 — ':''}${esc(r.act)} — ${esc(r.name)}</button>`;}).join('')}
+    ${rk.recs.length?'':'<div class="ctx" style="margin-top:4px">권고 조치 없음 — 모니터링 유지</div>'}
+    <div class="ctx" style="margin-top:5px;opacity:.8">사전 진단 → 서비스 예약·OTA 배포로 이어지는 고객 맞춤 AI 진단 루프${EMBED?' — 실행 시 트윈 월드 프로젝트로 환류':''}</div>
+  </div>`;
+  $('sideBody').innerHTML=html;
+  $('sideBody').querySelectorAll('[data-rec]').forEach(b=>b.addEventListener('click',()=>{
+    APPLIED.add(b.dataset.rec);
+    if(EMBED)window.parent.postMessage({type:'v11-svc-project',
+      name:`${b.dataset.act} — ${b.dataset.name} (${maskVin(vehicle(selVin).vin)})`,
+      tmpl:b.dataset.act==='OTA 배포'?'quality':'data', model:vehicle(selVin).mid, goal:'KPI-CSIS'},'*');
+    renderSide();
+  }));
+}
+function selectVin(key){
+  selVin=key;tpStop();closeDrive();tpCursor=0;
+  const v=vehicle(key), obsD=obsOf(cursor);
+  const noted=v.events.filter(e=>e.st!=='good'&&e.d<=obsD);
+  selEv=(noted[0]||v.events.filter(e=>e.d<=obsD).slice(-1)[0]||v.events[0]).id;
+  const past=v.trips.filter(t=>t.d<=obsD);
+  selTrip=past.length?past[past.length-1].id:null;
+  render();
+}
+function selectEvent(id){
+  const v=vehicle(selVin), ev=v.events.find(e=>e.id===id);if(!ev)return;
+  selEv=id;
+  const t=v.trips.find(t=>t.d===ev.d&&t.d<=obsOf(cursor));
+  if(t){selTrip=t.id;tpCursor=0;tpStop();}
+  render();
+}
+function selectTrip(id){
+  const v=vehicle(selVin), t=v.trips.find(x=>x.id===id);
+  if(!t||t.d>obsOf(cursor))return;
+  selTrip=id;selEv=null;tpCursor=0;tpStop();render();
+}
+/* ═══ PART F. 플릿 트렌드 · KPI — 카테고리 집계 + OTA 배포 전후 검증 ═══ */
+const VC=Object.fromEntries(D.vdata.cols.map((c,k)=>[c,k]));
+const VD={};D.vdata.rows.forEach(r=>{const i=MONTHS.indexOf(r[VC.ym]);(VD[r[VC.model_id]]=VD[r[VC.model_id]]||[])[i]=r;});
+const OTA=D.csi_actions.find(a=>a.project_id==='OTA-2606-LUM');
+const OTA_I=29;                                            // 2026-06 배포 개시
+const otaApplied=i=>{if(i<OTA_I)return 0;const m=OTA.months[MONTHS[Math.min(i,NOW)]];return m?m.applied:9500;};
+// 12V 방전 이슈/1k UIO — DTC 원장 파생 + LUM 암전류 결함(OTA로 소멸) 스토리
+function discharge(mid,i){
+  i=Math.min(i,NOW);
+  let val=VD[mid][i][VC.dtc_per_1k]*0.32*(mid==='NOV'?1.15:1);
+  if(mid==='LUM'){const hump=i>=24?2.6:(i>=20?1.1:0.35);val+=hump*(1-otaApplied(i)/OTA.target);}
+  return val;
+}
+const FLT={mids:new Set(MODELS.map(m=>m.id)),my:'전체',eng:'전체'};
+function fltModels(){
+  return MODELS.filter(m=>FLT.mids.has(m.id)&&(FLT.eng==='전체'||(FLT.eng==='EV')===(m.ev===1)));
+}
+const myF=()=>FLT.my==='2025'?1.12:FLT.my==='2026'?0.94:1;
+function fleetOf(fn,i){
+  const ms=fltModels();if(!ms.length)return 0;
+  const sw=ms.reduce((s,m)=>s+m.share,0);
+  return ms.reduce((s,m)=>s+fn(m.id,i)*m.share,0)/sw;
+}
+/* 하나의 서비스 — 고객 만족(서비스) KPI 트리: 최상위 CSI ← 팀별 하위 KPI 6종.
+   각 KPI는 {목표(target)·근거 데이터(fn·def)·문제 차량(vins)·조치(act)}를 가져
+   "확인 → 드릴 → 해결 → 검증" 폐루프가 데이터로 닫힌다. */
+const TEAMS={
+ dealer:{nm:'딜러 서비스',hex:'#eaa93e',role:'G3 인수 → 재고 관리 → G4 PDS 인도 — 판매 전 차량 컨디션 책임'},
+ quality:{nm:'품질팀',hex:'#e5484d',role:'결함 검출 → 원인 규명 → 시정(OTA·FSC) 배포 — 결함 근절 책임'},
+ service:{nm:'서비스팀',hex:'#4cc38a',role:'운행 고객 대응 — 사전 진단·예약·입고·환류 경험 책임'},
+};
+const METRICS=[
+ {key:'csis',top:1,name:'내부 CSI 서비스',unit:'pt',hex:'#79b8ff',dir:'+',target:92,
+  fn:i=>D.csi_internal[Math.min(i,NOW)].service,
+  def:'서비스 접점 내부 CSI — 최상위 결과 지표. 하위 6 KPI가 선행 지표로 이 값을 움직인다'},
+ {key:'stock12v',team:'dealer',name:'재고 12V 건전율',unit:'%',hex:'#eaa93e',dir:'+',target:96,
+  fn:i=>clamp(100-fleetOf(discharge,i)*myF()*2.0,86,99.5),
+  def:'재고 차량 중 12V SoC≥60%를 유지한 비율 — 딜러 보충 충전 SOP 준수의 결과 (VIN SoC 원장 파생)',
+  vins:['presale12v','aging'],act:{nm:'재고 보충 충전 SOP 강화 — 전 딜러',tmpl:'data'}},
+ {key:'aging90',team:'dealer',name:'장기 재고(90일+) 비중',unit:'%',hex:'#c98500',dir:'-',target:8,
+  fn:i=>{i=Math.min(i,NOW);return clamp(10.2+2.1*Math.sin(i*0.55+1.2)+(i>=28?-(i-27)*0.55:0),4,15);},
+  def:'입고 후 90일 초과 미판매 재고 비중 — 에이징 차량은 12V SoH 저하·인도 품질 리스크의 선행 신호',
+  vins:['aging'],act:{nm:'장기 재고 점검 캠페인 — SoH 측정·회전 촉진',tmpl:'data'}},
+ {key:'dtc',team:'quality',name:'DTC 발생/1k UIO',unit:'/1k',hex:'#e5484d',dir:'-',target:5.8,
+  fn:i=>fleetOf((mid,j)=>VD[mid][Math.min(j,NOW)][VC.dtc_per_1k],i)*myF(),
+  def:'전 계통 진단 트러블 코드 발생 건 / 1,000대 — feature_usage 원장',
+  vins:['connDtc','evDrive'],act:{nm:'품질 CAPA — FSC-2603 구동계 캠페인',tmpl:'quality'}},
+ {key:'ota',team:'quality',name:'시정(OTA-2606) 적용률',unit:'%',hex:'#b58cff',dir:'+',target:95,
+  fn:i=>otaApplied(i)/OTA.target*100,
+  def:'12V·커넥티드 결함 시정 S/W(OTA-2606-LUM) 적용 대수 / 대상 10,000대 — csi_actions 원장',
+  vins:['connDtc','presale12v'],act:{nm:'OTA-2606 배포 가속 — 미적용 잔여 타깃팅',tmpl:'quality'}},
+ {key:'disc',team:'service',name:'12V 방전 이슈/1k UIO',unit:'/1k',hex:'#4cc38a',dir:'-',target:2.0,
+  fn:i=>fleetOf(discharge,i)*myF(),
+  def:'주차 중 12V SoC<60% 도달로 시동 불능·점프 지원이 발생한 건 / 1,000 UIO — 차량 수집 SoC 원장 파생',
+  vins:['presale12v','aging'],act:{nm:'12V 전원관리 S/W 배포 — 암전류 시정',tmpl:'quality'}},
+ {key:'aiact',team:'service',name:'사전 진단 조치 전환율',unit:'%',hex:'#58d1c9',dir:'+',target:75,
+  fn:i=>{i=Math.min(i,NOW);return clamp(52+i*1.05+3*Math.sin(i*0.8),40,86);},
+  def:'AI 사전 진단 알림 후 30일 내 서비스 예약·OTA 실행으로 이어진 비율 — 진단이 조치로 닫히는가',
+  vins:['evDrive','presale12v'],act:{nm:'사전 진단 → 자동 예약 연동 확대',tmpl:'data'}},
+];
+const metOf=k=>METRICS.find(m=>m.key===k);
+const metCur=(mt,i)=>mt.fn(i);
+const metMet=(mt,i)=>{const c2=metCur(mt,i);return mt.dir==='+'?c2>=mt.target:c2<=mt.target;};
+let selMetric='disc';
+function preposts(fn){
+  const pre=(fn(26)+fn(27)+fn(28))/3, post=(fn(30)+fn(31))/2;
+  return {pre,post,dpct:pre?((post-pre)/pre*100):0};
+}
+function renderRailFleet(){
+  const host=$('kpiList');host.innerHTML='';
+  const addTile=mt=>{
+    const cur=mt.fn(cursor), prev=mt.fn(Math.max(0,cursor-1));
+    const d=cur-prev, goodUp=mt.dir==='+';
+    const cls=Math.abs(d)<1e-9?'':(d>0)===goodUp?'up':'dn';
+    const met=metMet(mt,cursor);
+    const b=document.createElement('button');
+    b.className='kpiTile'+(selMetric===mt.key?' sel':'');
+    b.style.borderLeftColor=mt.hex;
+    b.innerHTML=`<div class="nm">${mt.name} <span class="lamp ${met?'':'warn'}" style="float:right;margin-top:2px"></span></div>
+      <div class="v1">${mt.key==='csis'?f1(cur):cur.toFixed(2)}<span style="font-size:10px;color:var(--muted)"> ${mt.unit}</span>
+        <span style="font-size:10px;color:${met?'var(--good)':'var(--warn)'};font-weight:700"> · 목표 ${mt.target}${mt.unit} ${met?'달성':'미달'}</span></div>
+      <div class="v2">${MONTHS[cursor]} · 전월 比 <span class="${cls}">${d>=0?'+':''}${d.toFixed(2)}</span></div>`;
+    b.addEventListener('click',()=>{selMetric=mt.key;selKpi=mt.key;render();});
+    b.addEventListener('mousemove',e=>tipShow(e,`<b>${mt.name}</b>${esc(mt.def)}`));
+    b.addEventListener('mouseleave',tipHide);
+    host.appendChild(b);
+  };
+  const addHdr=txt=>{const h2=document.createElement('div');h2.className='railTtl';h2.textContent=txt;host.appendChild(h2);};
+  addHdr('최상위 — 결과 지표');
+  METRICS.filter(m=>m.top).forEach(addTile);
+  for(const tk2 of ['dealer','quality','service']){
+    addHdr(TEAMS[tk2].nm+' — 하위 KPI');
+    METRICS.filter(m=>m.team===tk2).forEach(addTile);
+  }
+  $('kpiNote').innerHTML=`하위 KPI 6종은 VIN 원장에서 카테고리(차종·MY·엔진)로 롤업되고
+    <b>목표 대비 + S/W 배포(OTA-2606) 전 3개월 vs 후 2개월</b> 변화량으로 달성을 검증한다.
+    MY 필터는 연식 가중 표본(2025 ×1.12 · 2026 ×0.94).`;
+}
+function chipRow(svg,x,y,items,cur,onPick){
+  items.forEach(it=>{
+    const w=it.length*10+22;
+    const on=cur instanceof Set?cur.has(it)||it==='전체'&&cur.size===MODELS.length:cur===it;
+    const g=el('g',{style:'cursor:pointer'},svg);
+    el('rect',{x,y,width:w,height:20,rx:10,fill:on?'color-mix(in srgb,var(--edge-hi) 18%,transparent)':'var(--surface2)',
+      stroke:on?'var(--edge-hi)':'var(--line)'},g);
+    el('text',{x:x+w/2,y:y+14,class:'gAxis','text-anchor':'middle',fill:on?'var(--ink)':'var(--muted)'},g).textContent=it;
+    g.addEventListener('click',()=>onPick(it));
+    x+=w+7;
+  });
+  return x;
+}
+function renderSceneFleet(){
+  const svg=$('scene');svg.innerHTML='';
+  const W=1000,PL=70,PR=26;
+  const mt=METRICS.find(m=>m.key===selMetric);
+  el('text',{x:24,y:24,class:'tierLbl'},svg).textContent=
+    `플릿 트렌드 · KPI — 카테고리 롤업 (차종·MY·엔진) · S/W 배포 전후 검증 · 칩 클릭: 필터 · 차트 클릭: 월 이동`;
+  /* 필터 칩 3열 */
+  let x=chipRow(svg,PL,40,['전체',...MODELS.map(m=>m.name)],FLT.mids.size===MODELS.length?'전체':null,nm=>{
+    if(nm==='전체')FLT.mids=new Set(MODELS.map(m=>m.id));
+    else{const id=MODELS.find(m=>m.name===nm).id;FLT.mids=new Set([id]);}
+    render();});
+  // 개별 선택 표시 보정 — 단일 차종 선택 시 해당 칩 강조
+  if(FLT.mids.size===1){const nm=MODELS.find(m=>FLT.mids.has(m.id)).name;
+    svg.querySelectorAll('text.gAxis').forEach(t=>{if(t.textContent===nm){t.setAttribute('fill','var(--ink)');
+      t.previousSibling.setAttribute('stroke','var(--edge-hi)');t.previousSibling.setAttribute('fill','color-mix(in srgb,var(--edge-hi) 18%,transparent)');}});}
+  chipRow(svg,PL,66,['MY 전체','2025','2026'],FLT.my==='전체'?'MY 전체':FLT.my,v2=>{FLT.my=v2==='MY 전체'?'전체':v2;render();});
+  chipRow(svg,PL+270,66,['엔진 전체','ICE','EV'],FLT.eng==='전체'?'엔진 전체':FLT.eng,v2=>{FLT.eng=v2==='엔진 전체'?'전체':v2;render();});
+  /* 메인 차트 — 선택 KPI 월 시계열 + OTA 전후 */
+  const T0=118,T1=330;
+  const vals=[];for(let i=0;i<=NOW;i++)vals.push(mt.fn(i));
+  const mn0=Math.min(...vals),mx0=Math.max(...vals),pad=(mx0-mn0)*0.1||1;
+  const mn=mn0-pad,mx=mx0+pad;
+  const X=i=>PL+i/NOW*(W-PL-PR), Y=val=>T1-(val-mn)/(mx-mn)*(T1-T0);
+  el('text',{x:24,y:T0-10,class:'gAxis'},svg).textContent=mt.name+' — '+(FLT.mids.size===MODELS.length?'전 차종':fltModels().map(m=>m.name).join('·'))+(FLT.my!=='전체'?' · '+FLT.my+'MY':'')+(FLT.eng!=='전체'?' · '+FLT.eng:'');
+  for(let k=0;k<=3;k++){const val=mn+(mx-mn)*k/3,y=Y(val);
+    el('line',{x1:PL,y1:y,x2:W-PR,y2:y,stroke:'var(--line)','stroke-width':1,opacity:k?0.5:0.9},svg);
+    el('text',{x:PL-7,y:y+3.5,class:'gAxis','text-anchor':'end'},svg).textContent=mt.key==='csis'?f1(val):val.toFixed(2);}
+  for(let i=0;i<=NOW;i+=4)el('text',{x:X(i),y:T1+16,class:'gAxis','text-anchor':'middle'},svg).textContent=MONTHS[i].slice(2);
+  // OTA 전/후 윈도우 셰이딩 (12V·DTC 지표)
+  if(mt.key==='disc'||mt.key==='dtc'){
+    el('rect',{x:X(26),y:T0,width:X(28.9)-X(26),height:T1-T0,fill:'rgba(229,72,77,.07)'},svg);
+    el('rect',{x:X(30),y:T0,width:X(NOW)-X(30),height:T1-T0,fill:'rgba(76,195,138,.08)'},svg);
+    el('text',{x:X(27.4),y:T0+13,class:'evSub','text-anchor':'middle',fill:'var(--crit)'},svg).textContent='배포 전 3개월';
+    el('text',{x:X(30.5),y:T0+13,class:'evSub','text-anchor':'middle',fill:'var(--good)'},svg).textContent='배포 후';
+  }
+  el('line',{x1:X(OTA_I),y1:T0,x2:X(OTA_I),y2:T1,stroke:'var(--ai)','stroke-width':1.3,'stroke-dasharray':'5 3'},svg);
+  el('text',{x:X(OTA_I)+4,y:T0+28,class:'evSub',fill:'var(--ai)'},svg).textContent='OTA-2606 배포 개시';
+  el('path',{d:vals.map((val,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(val).toFixed(1)).join(''),
+    fill:'none',stroke:mt.hex,'stroke-width':1.8,'vector-effect':'non-scaling-stroke'},svg);
+  // 전후 Δ 배지
+  const pp=preposts(mt.fn);
+  const good=(pp.dpct<0)===(mt.dir==='-');
+  el('text',{x:PL+6,y:T0+14,class:'gCur',fill:good?'var(--good)':'var(--crit)'},svg).textContent=
+    `배포 전후 Δ ${pp.dpct>=0?'+':''}${f1(pp.dpct)}% (${mt.key==='csis'?f1(pp.pre)+'→'+f1(pp.post):pp.pre.toFixed(2)+'→'+pp.post.toFixed(2)})`;
+  /* 보조 차트 — 내부 CSI 서비스·종합 */
+  const B0=376,B1=506;
+  el('text',{x:24,y:B0-10,class:'gAxis'},svg).textContent='내부 CSI — 서비스(녹) · 종합(백): KPI가 실제로 움직였는가';
+  const cs=[],ct=[];for(let i=0;i<=NOW;i++){cs.push(D.csi_internal[i].service);ct.push(D.csi_internal[i].total);}
+  const bmn=Math.min(...cs,...ct)-0.5,bmx=Math.max(...cs,...ct)+0.5;
+  const YB=val=>B1-(val-bmn)/(bmx-bmn)*(B1-B0);
+  for(let k=0;k<=2;k++){const val=bmn+(bmx-bmn)*k/2,y=YB(val);
+    el('line',{x1:PL,y1:y,x2:W-PR,y2:y,stroke:'var(--line)','stroke-width':1,opacity:.55},svg);
+    el('text',{x:PL-7,y:y+3.5,class:'gAxis','text-anchor':'end'},svg).textContent=f1(val);}
+  el('line',{x1:X(OTA_I),y1:B0,x2:X(OTA_I),y2:B1,stroke:'var(--ai)','stroke-width':1,'stroke-dasharray':'5 3',opacity:.7},svg);
+  el('path',{d:cs.map((val,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+YB(val).toFixed(1)).join(''),fill:'none',stroke:'var(--good)','stroke-width':1.6},svg);
+  el('path',{d:ct.map((val,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+YB(val).toFixed(1)).join(''),fill:'none',stroke:'var(--ink)','stroke-width':1.2,opacity:.8},svg);
+  /* 커서 + 호버·클릭 */
+  el('line',{x1:X(cursor),y1:T0,x2:X(cursor),y2:B1,stroke:'var(--warn)','stroke-width':1.2,opacity:.85},svg);
+  el('text',{x:Math.min(X(cursor)+4,W-PR-52),y:T1+30,class:'gCur'},svg).textContent=MONTHS[cursor];
+  const hv=el('rect',{x:PL,y:T0,width:W-PL-PR,height:B1-T0,fill:'transparent'},svg);
+  const iOf=e=>{const vb=svg.viewBox.baseVal,r=svg.getBoundingClientRect();
+    const ux=vb.x+(e.clientX-r.left)/r.width*vb.width;
+    return clamp(Math.round((ux-PL)/(W-PL-PR)*NOW),0,NOW);};
+  hv.addEventListener('mousemove',e=>{const i=iOf(e);
+    tipShow(e,`<b>${MONTHS[i]}</b>${mt.name} ${mt.key==='csis'?f1(mt.fn(i)):mt.fn(i).toFixed(2)} ${mt.unit}`+
+      `<br>CSI 서비스 ${f1(D.csi_internal[i].service)} · 종합 ${f1(D.csi_internal[i].total)}`+
+      `<br><span class="mut">OTA 적용 ${otaApplied(i).toLocaleString()}/${OTA.target.toLocaleString()}대 · 클릭: 월 이동</span>`);});
+  hv.addEventListener('mouseleave',tipHide);
+  hv.addEventListener('click',e=>seek(iOf(e)));
+}
+function renderSideFleet(){
+  const mt=metOf(selMetric), tm=mt.team?TEAMS[mt.team]:null;
+  const cur=mt.fn(cursor), met=metMet(mt,cursor);
+  const pp=preposts(mt.fn);
+  const ppGood=(pp.dpct<0)===(mt.dir==='-');
+  const claimNow=(OTA.months[MONTHS[Math.min(cursor,NOW)]]||{}).claim;
+  const fmt=x2=>mt.key==='csis'?f1(x2):x2.toFixed(2);
+  let html=`<div class="railTtl">선택 KPI — 목표 판정 (${MONTHS[cursor]})</div>
+  <div class="card"><div class="hd">${esc(mt.name)} <span class="k">${tm?esc(tm.nm):'최상위 결과'}</span></div>
+    <div class="kv"><span class="k">현재</span><span class="v">${fmt(cur)} ${mt.unit}</span></div>
+    <div class="kv"><span class="k">목표</span><span class="v">${mt.dir==='+'?'≥':'≤'} ${mt.target} ${mt.unit}</span></div>
+    <div class="kv"><span class="k">판정</span><span class="v" style="color:${met?'var(--good)':'var(--warn)'}">${met?'달성':'미달 — 조치 필요'}</span></div>
+    <div class="kv"><span class="k">OTA 전후 Δ</span><span class="v" style="color:${ppGood?'var(--good)':'var(--crit)'}">${pp.dpct>=0?'+':''}${f1(pp.dpct)}% (${fmt(pp.pre)}→${fmt(pp.post)})</span></div>
+    <div class="ctx">${esc(mt.def)}</div></div>`;
+  // 문제 차량 — KPI 근거 VIN 드릴
+  html+=`<div class="railTtl">문제 차량 — 데이터 근거 드릴</div><div class="card">`;
+  if(mt.vins&&mt.vins.length){
+    html+=`<div class="ctx">KPI를 움직인 대표 표본 — VIN 트윈으로 내려가 전 생애 데이터에서 원인을 본다.</div>`+
+      mt.vins.map(k=>{
+        const v=vehicle(k), rk=riskOf(v,obsOf(cursor));
+        return `<button class="recBtn" data-drill="${k}" style="border-color:${rk.hex};color:${rk.hex}">
+          ${esc(v.md.name)} ${v.my}MY — ${esc(v.tag)} (위험도 ${rk.score})</button>`;}).join('');
+  } else html+=`<div class="ctx">최상위 결과 지표 — 원인은 하위 KPI에서 드릴 (좌측 팀별 KPI 선택).</div>`;
+  html+=`</div>`;
+  // 조치 — 데이터 기반 해결
+  if(mt.act){
+    const done=APPLIED.has('kpi|'+mt.key);
+    html+=`<div class="railTtl">조치 — ${tm?esc(tm.nm):''} 실행</div>
+    <div class="card"><div class="ctx">미달 KPI는 조치를 등록해 트윈 월드 프로젝트로 환류하고, 다음 달부터 전후 변화량으로 재검증한다.</div>
+      <button class="recBtn${done?' done':''}" data-kact="${mt.key}" ${done?'disabled':''}>${done?'✓ 등록됨 — ':''}${esc(mt.act.nm)}</button></div>`;
+  }
+  // S/W 배포 검증 (폐루프 증거)
+  html+=`<div class="railTtl">S/W 배포 — 검증 원장 (폐루프)</div>
+  <div class="card"><div class="hd">${esc(OTA.name)} <span class="k">${OTA.project_id}</span></div>
+    <div class="kv"><span class="k">적용 (커서 월)</span><span class="v">${otaApplied(cursor).toLocaleString()}대 (${Math.round(otaApplied(cursor)/OTA.target*100)}%)</span></div>
+    <div class="kv"><span class="k">클레임/1k</span><span class="v">${OTA.claim0} → ${claimNow!=null?claimNow:'-'}</span></div>
+    <div class="ctx">배포 전 3개월 vs 후 변화량으로 하위 KPI 달성을 판정 — <code>csi_actions</code> 원장.</div></div>
+  <div class="railTtl">KPI 정의 — 온톨로지 근거</div>
+  <div class="card">${METRICS.map(m2=>`<div class="kv" title="${esc(m2.def)}"><span class="k">${m2.name}</span><span class="v" style="font-weight:400;color:var(--muted)">${m2.team?esc(TEAMS[m2.team].nm):'최상위'}</span></div>`).join('')}
+    <div class="ctx">그레인: 월 × 차종 (<code>feature_usage</code>·<code>csi_internal</code>·<code>csi_actions</code>) —
+      VIN 텔레메트리 원장(<code>telematicsEvent</code>)에서 롤업.</div></div>`;
+  $('sideBody').innerHTML=html;
+  $('sideBody').querySelectorAll('[data-drill]').forEach(b=>b.addEventListener('click',()=>{
+    setMode('vin');selectVin(b.dataset.drill);}));
+  $('sideBody').querySelectorAll('[data-kact]').forEach(b=>b.addEventListener('click',()=>{
+    APPLIED.add('kpi|'+b.dataset.kact);
+    if(EMBED)window.parent.postMessage({type:'v11-svc-project',
+      name:`${mt.act.nm} (KPI: ${mt.name})`,tmpl:mt.act.tmpl,model:'LUM',goal:'KPI-CSIS'},'*');
+    renderSideFleet();
+  }));
+}
+/* ═══ PART F2. 홈 — 고객 만족(서비스) KPI 트리 (하나의 서비스 진입점) ═══
+   최상위 CSI(결과 지표) ← 팀 레인 3(딜러 서비스·품질팀·서비스팀) × 하위 KPI 2(선행 지표).
+   카드마다 현재/목표 판정/전월Δ/24개월 스파크+목표선. 탐색 경로(폐루프):
+   KPI 선택 → ①데이터 확인(KPI 상세) → ②문제 VIN 드릴(차량 트윈) → ③조치 등록(환류) → ④재검증 */
+let selKpi='disc';
+function sparkPath(mt,x,y,w,h){
+  const n2=24, i0=Math.max(0,cursor-n2+1);
+  const vals=[];for(let i=i0;i<=cursor;i++)vals.push(mt.fn(i));
+  const mn=Math.min(...vals,mt.target),mx=Math.max(...vals,mt.target),sp=(mx-mn)||1;
+  const X=k=>x+k/Math.max(1,vals.length-1)*w, Y=v2=>y+h-(v2-mn)/sp*h;
+  return {d:vals.map((v2,k)=>(k?'L':'M')+X(k).toFixed(1)+' '+Y(v2).toFixed(1)).join(''),
+    ty:Y(mt.target),lastX:X(vals.length-1),lastY:Y(vals[vals.length-1])};
+}
+function renderSceneHome(){
+  const svg=$('scene');svg.innerHTML='';
+  el('text',{x:24,y:24,class:'tierLbl'},svg).textContent=
+    `고객 만족(서비스) KPI 트리 — 팀별 하위 KPI 분해 · 카드 클릭: 선택 · 우측: 데이터 확인 → VIN 드릴 → 조치 · 기준 월 ${MONTHS[cursor]}`;
+  const csi=metOf('csis'), csiCur=csi.fn(cursor), csiMet=metMet(csi,cursor);
+  const subs=METRICS.filter(m=>m.team);
+  const metN=subs.filter(m=>metMet(m,cursor)).length;
+  /* 최상위 노드 — 결과 지표 */
+  const cx0=355,cw0=290;
+  const g0=el('g',{class:'node'+(selKpi==='csis'?' sel':''),style:'cursor:pointer'},svg);
+  el('rect',{x:cx0,y:44,width:cw0,height:76,rx:9,class:'evDot',fill:'var(--surface2)',
+    stroke:selKpi==='csis'?'var(--edge-hi)':(csiMet?'var(--edge)':'var(--warn)'),'stroke-width':1.6},g0);
+  el('text',{x:cx0+14,y:64,class:'evLbl',style:'font-weight:700;font-size:12px'},g0).textContent='고객 만족(서비스) — 내부 CSI';
+  el('text',{x:cx0+14,y:92,fill:'var(--ink)',style:'font-weight:700;font-size:21px'},g0).textContent=f1(csiCur)+' pt';
+  el('text',{x:cx0+cw0-14,y:64,class:'evSub','text-anchor':'end',fill:csiMet?'var(--good)':'var(--warn)',style:'font-weight:700'},g0).textContent='목표 ≥'+csi.target+' · '+(csiMet?'달성':'미달');
+  el('text',{x:cx0+cw0-14,y:92,class:'gAxis','text-anchor':'end'},g0).textContent='하위 KPI '+metN+'/'+subs.length+' 달성';
+  const sp0=sparkPath(csi,cx0+14,100,cw0-28,13);
+  el('path',{d:sp0.d,fill:'none',stroke:'var(--edge-hi)','stroke-width':1.2},g0);
+  g0.addEventListener('click',()=>{selKpi='csis';selMetric='csis';render();});
+  g0.addEventListener('mousemove',e=>tipShow(e,`<b>내부 CSI 서비스 — 최상위 결과</b>${esc(csi.def)}`));
+  g0.addEventListener('mouseleave',tipHide);
+  /* 팀 레인 3 × KPI 카드 2 + 직교 엣지 (좌측 채널 → 조그 → CSI 하단 포트) */
+  ['dealer','quality','service'].forEach((tk2,li)=>{
+    const tm=TEAMS[tk2], lx=30+li*325, lw=290;
+    el('rect',{x:lx,y:148,width:lw,height:358,rx:10,fill:tm.hex,opacity:.07},svg);
+    el('rect',{x:lx,y:148,width:lw,height:3,fill:tm.hex,opacity:.85},svg);
+    el('text',{x:lx+12,y:169,class:'stageLbl',fill:tm.hex,style:'font-size:12px'},svg).textContent=tm.nm;
+    el('text',{x:lx+12,y:184,class:'evSub',fill:'var(--muted)'},svg).textContent=tm.role.length>36?tm.role.slice(0,35)+'…':tm.role;
+    METRICS.filter(m=>m.team===tk2).forEach((mt,mi)=>{
+      const gi=li*2+mi;
+      const kx=lx+10, ky=198+mi*156, kw=lw-20, kh=142;
+      const cur2=mt.fn(cursor), d2=cur2-mt.fn(Math.max(0,cursor-1));
+      const met2=metMet(mt,cursor), on=selKpi===mt.key;
+      // 엣지 — 카드 좌변 → 좌측 채널 → 조그 → CSI 하단 포트 (H-V-H, 카드 관통 없음)
+      const chX=lx-14+mi*5, jy=128+gi*3, port=cx0+cw0/2+(gi-2.5)*34;
+      el('path',{d:`M${kx} ${ky+22}L${chX} ${ky+22}L${chX} ${jy}L${port} ${jy}L${port} 122`,
+        fill:'none',stroke:on?mt.hex:'var(--edge)','stroke-width':on?1.8:1.1,opacity:on?1:.65},svg);
+      el('path',{d:`M${port-3.5} 126L${port+3.5} 126L${port} 120Z`,fill:on?mt.hex:'var(--edge)',opacity:on?1:.65},svg);
+      // 카드
+      const gCard=el('g',{class:'node'+(on?' sel':''),style:'cursor:pointer'},svg);
+      el('rect',{x:kx,y:ky,width:kw,height:kh,rx:8,class:'evDot',fill:'var(--surface2)',
+        stroke:on?'var(--edge-hi)':(met2?'var(--line)':'var(--warn)'),'stroke-width':on?2:1.3},gCard);
+      el('rect',{x:kx,y:ky,width:4,height:kh,rx:2,fill:mt.hex},gCard);
+      el('text',{x:kx+14,y:ky+21,class:'evLbl',style:'font-weight:700'},gCard).textContent=mt.name;
+      el('text',{x:kx+kw-11,y:ky+21,class:'evSub','text-anchor':'end',
+        fill:met2?'var(--good)':'var(--warn)',style:'font-weight:700'},gCard).textContent=(met2?'달성':'미달')+' · 목표 '+(mt.dir==='+'?'≥':'≤')+mt.target;
+      el('text',{x:kx+14,y:ky+48,fill:'var(--ink)',style:'font-weight:700;font-size:19px'},gCard).textContent=cur2.toFixed(2)+' '+mt.unit;
+      el('text',{x:kx+14,y:ky+66,class:'evSub',
+        fill:(d2>0)===(mt.dir==='+')?'var(--good)':'var(--crit)'},gCard).textContent=
+        '전월 比 '+(d2>=0?'+':'')+d2.toFixed(2)+(mt.vins?' · 문제 차량 '+mt.vins.length+'대 드릴 가능':'');
+      const spk=sparkPath(mt,kx+14,ky+80,kw-28,44);
+      el('line',{x1:kx+14,y1:spk.ty,x2:kx+kw-14,y2:spk.ty,
+        stroke:met2?'var(--good)':'var(--warn)','stroke-width':1,'stroke-dasharray':'4 3',opacity:.7},gCard);
+      el('text',{x:kx+kw-14,y:spk.ty-3,class:'evSub','text-anchor':'end',fill:'var(--muted)'},gCard).textContent='목표선';
+      el('path',{d:spk.d,fill:'none',stroke:mt.hex,'stroke-width':1.5},gCard);
+      el('circle',{cx:spk.lastX,cy:spk.lastY,r:3,fill:mt.hex,stroke:'var(--page)','stroke-width':1},gCard);
+      gCard.addEventListener('click',()=>{selKpi=mt.key;selMetric=mt.key;render();});
+      gCard.addEventListener('mousemove',e=>tipShow(e,
+        `<b>${mt.name} — ${tm.nm}</b>${esc(mt.def)}<br><span class="mut">클릭: 선택 → 우측 ① 데이터 확인 · ② 문제 VIN 드릴 · ③ 조치</span>`));
+      gCard.addEventListener('mouseleave',tipHide);
+    });
+  });
+  /* 하단 — 탐색 폐루프 경로 */
+  const steps=['① KPI 확인','② 데이터 확인 (KPI 상세)','③ 문제 VIN 드릴 (차량 트윈)','④ 조치 등록 (환류)','⑤ 전후 재검증'];
+  let fx=30;
+  steps.forEach((st,k)=>{
+    const w2=st.length*10.5+22;
+    el('rect',{x:fx,y:522,width:w2,height:22,rx:11,fill:'var(--surface2)',stroke:'var(--line)'},svg);
+    el('text',{x:fx+w2/2,y:537,class:'gAxis','text-anchor':'middle',fill:'var(--ink)'},svg).textContent=st;
+    if(k<steps.length-1)el('text',{x:fx+w2+8,y:537,class:'gAxis',fill:'var(--muted)'},svg).textContent='›';
+    fx+=w2+24;
+  });
+}
+function renderRailHome(){
+  const host=$('teamList');host.innerHTML='';
+  for(const tk2 of ['dealer','quality','service']){
+    const tm=TEAMS[tk2], ms=METRICS.filter(m=>m.team===tk2);
+    const metN=ms.filter(m=>metMet(m,cursor)).length;
+    const b=document.createElement('button');
+    b.className='kpiTile'+(ms.some(m=>m.key===selKpi)?' sel':'');
+    b.style.borderLeftColor=tm.hex;
+    b.innerHTML=`<div class="nm">${tm.nm}</div>
+      <div class="v1" style="font-size:13px">KPI ${metN}/${ms.length} <span style="font-size:10px;color:var(--muted)">달성</span></div>
+      <div class="v2">${esc(ms.map(m=>m.name).join(' · '))}</div>`;
+    b.addEventListener('click',()=>{
+      const miss=ms.find(m=>!metMet(m,cursor));
+      selKpi=(miss||ms[0]).key;selMetric=selKpi;render();});
+    b.addEventListener('mousemove',e=>tipShow(e,`<b>${tm.nm}</b>${esc(tm.role)}<br><span class="mut">클릭: 이 팀의 미달 KPI 선택</span>`));
+    b.addEventListener('mouseleave',tipHide);
+    host.appendChild(b);
+  }
+  $('homeNote').innerHTML=`한 서비스, 세 팀 — 같은 차량 트윈을 각자의 하위 KPI로 탐색한다.
+    <b>미달 KPI → 데이터 확인 → 문제 VIN 드릴 → 조치 등록 → 다음 달 전후 재검증</b> 폐루프.`;
+}
+function renderSideHome(){
+  const mt=metOf(selKpi), tm=mt.team?TEAMS[mt.team]:null;
+  const cur=mt.fn(cursor), met=metMet(mt,cursor);
+  const d2=cur-mt.fn(Math.max(0,cursor-1));
+  const fmt=x2=>mt.key==='csis'?f1(x2):x2.toFixed(2);
+  let html=`<div class="railTtl">선택 KPI — ${tm?esc(tm.nm):'최상위 결과'}</div>
+  <div class="card"><div class="hd">${esc(mt.name)} <span class="k">${MONTHS[cursor]}</span></div>
+    <div class="kv"><span class="k">현재 / 목표</span><span class="v">${fmt(cur)} / ${mt.dir==='+'?'≥':'≤'}${mt.target} ${mt.unit}</span></div>
+    <div class="kv"><span class="k">판정</span><span class="v" style="color:${met?'var(--good)':'var(--warn)'}">${met?'달성':'미달 — 조치 필요'}</span></div>
+    <div class="kv"><span class="k">전월 比</span><span class="v">${d2>=0?'+':''}${d2.toFixed(2)}</span></div>
+    <div class="ctx">${esc(mt.def)}</div>
+    <button class="recBtn" id="btnKpiData">① 데이터로 확인 — KPI 상세</button>
+    ${mt.vins?'<button class="recBtn" id="btnKpiDrill">② 문제 차량 드릴 — VIN 트윈</button>':''}
+    ${mt.team==='service'?'<button class="recBtn" id="btnKpiCtl">실시간 관제 — 피트월</button>':''}</div>
+  <div class="railTtl">탐색 폐루프 — 데이터 기반 해결</div>
+  <div class="card"><div class="ctx">
+    ① KPI 상세 — 카테고리(차종·MY·엔진) 롤업·목표 판정·OTA 전후 Δ로 <b>확인</b><br>
+    ② VIN 트윈 — 문제 차량 전 생애(게이트 KDS·트립 신호·상태 리플레이)에서 <b>원인</b><br>
+    ③ 조치 — 예약·캠페인·OTA를 등록해 트윈 월드 프로젝트로 <b>환류</b><br>
+    ④ 검증 — 다음 달 커서에서 목표 재판정·전후 Δ로 루프를 <b>닫음</b></div></div>
+  <div class="railTtl">최상위 — 내부 CSI 서비스</div>
+  <div class="card">${(()=>{
+    const c2=metOf('csis'), v2=c2.fn(cursor), m2=metMet(c2,cursor);
+    const subs=METRICS.filter(m=>m.team), n2=subs.filter(m=>metMet(m,cursor)).length;
+    return `<div class="kv"><span class="k">CSI 서비스</span><span class="v">${f1(v2)} pt</span></div>
+    <div class="kv"><span class="k">목표</span><span class="v" style="color:${m2?'var(--good)':'var(--warn)'}">≥${c2.target} · ${m2?'달성':'미달'}</span></div>
+    <div class="kv"><span class="k">하위 KPI</span><span class="v">${n2}/${subs.length} 달성</span></div>`;})()}
+    <div class="ctx">하위 6 KPI는 선행 지표 — 각 팀이 자기 KPI를 닫으면 결과 지표가 따라온다.</div></div>`;
+  $('sideBody').innerHTML=html;
+  $('btnKpiData').addEventListener('click',()=>{selMetric=selKpi;setMode('fleet');});
+  const bd=$('btnKpiDrill');
+  if(bd)bd.addEventListener('click',()=>{setMode('vin');selectVin(mt.vins[0]);});
+  const bc=$('btnKpiCtl');
+  if(bc)bc.addEventListener('click',()=>setMode('ctl'));
+}
+/* ═══ PART H. 관제 (피트월) — F1 레이스 엔지니어링 방식 (docs/f1-telemetry-research.md) ═══
+   F1: 차량당 ~300 센서·초당 110만+ 포인트 → 피트월·원격 운영실, ATLAS 다채널 트레이스와
+   레퍼런스 랩 델타로 판독, 레이스 엔지니어가 단일 채널(single voice)로 지시, 전략은
+   몬테카를로 재시뮬레이션. 양방향 원격 제어는 금지 — 조치는 "지시"로만 전달.
+   트윈 대응: 타이밍 타워 · 채널 스택+기준차 델타 · 엔지니어 콜 피드(지시 전송) · 개입 전략 MC. */
+var CTL=null;                                              // var — 초기 렌더 경로 TDZ 방지 (D2 DV와 동일)
+let ctlSeq=0;
+function liveTripOf(key,obsD){                             // 세션 라이브 = 관측일 기준 최근 트립 리플레이
+  const v=vehicle(key);
+  const past=v.trips.filter(t=>t.d<=obsD);
+  return past.length?{t:past[past.length-1],S:tripSeries(key,past[past.length-1].id)}:null;
+}
+function refLive(obsD){                                    // 레퍼런스 랩 = 기준차(baseline)의 최근 고객 트립
+  const b=vehicle('baseline');
+  const cust=b.trips.filter(t=>t.ctx==='cust'&&t.d<=obsD);
+  return cust.length?tripSeries('baseline',cust[cust.length-1].id):null;
+}
+const rsAt=(arr,rn,i,n)=>{                                 // 기준 트레이스를 관측 트립 길이로 리샘플
+  const x=i/Math.max(1,n-1)*(rn-1),a=Math.floor(x),u=x-a;
+  return arr[Math.min(a,rn-1)]*(1-u)+arr[Math.min(a+1,rn-1)]*u;};
+function lifeDeltaSeries(v,obsD){                          // 생애 정렬 Δ12V — 레퍼런스 랩 델타의 생애 버전
+  const b=vehicle('baseline');
+  const maxAge=Math.min(obsD-v.prodD,NOWD-b.prodD);
+  if(v.key==='baseline'||maxAge<10)return null;
+  const arr=[];
+  for(let a=0;a<=maxAge;a++)arr.push(v.soc[v.prodD+a]-b.soc[b.prodD+a]);
+  return arr;
+}
+/* 개입 전략 몬테카를로 — F1 피트스톱(언더컷) 판단과 동형: 열화 계수는 실측 14일 기울기로 갱신 */
+function stratScenarios(key,obsD){
+  const v=vehicle(key), s0=v.socAt(obsD);
+  // 열화 계수 = 최근 21일 실측 최대 일 강하 — F1 타이어 열화 계수의 레이스 중 실측 갱신과 동형
+  let dark0=0.35;
+  for(let d=Math.max(v.prodD+1,obsD-21);d<=Math.min(obsD,NOWD);d++)
+    dark0=Math.max(dark0,Math.min(1.6,v.soc[d-1]-v.soc[d]));
+  const sold=v.soldD!=null&&obsD>=v.soldD;
+  const drvP=sold?(v.heavy?0.75:0.6):0;
+  const H=60,RUNS=24;
+  const mk=at=>{
+    const runs=[];
+    for(let r=0;r<RUNS;r++){
+      const rnd=mulberry32(v.vh+r*911+(at==null?7:at));
+      let s=s0;const risk=[];
+      for(let h=0;h<=H;h++){
+        if(at!=null&&h===at)s=79;                          // 개입 = 보충 충전 + 암전류 시정
+        const dk=(at!=null&&h>=at)?0.35:dark0;
+        if(h>0)s=clamp(rnd()<drvP?Math.min(83,s+8+rnd()*3):s-dk*(0.85+rnd()*0.5),30,84);
+        risk.push(Math.round(clamp((62-s)*1.6,0,40)+(dk>0.8?18:0)+(s<50?12:0)+2));
+      }
+      runs.push(risk);
+    }
+    const med=[],lo=[],hi=[];
+    for(let h=0;h<=H;h++){
+      const col=runs.map(rr=>rr[h]).sort((a,b)=>a-b);
+      med.push(col[RUNS>>1]);lo.push(col[2]);hi.push(col[RUNS-3]);
+    }
+    return {med,lo,hi};
+  };
+  return [
+    {nm:'즉시 개입',at:0,hex:'var(--good)',...mk(0)},
+    {nm:'14일 지연',at:14,hex:'var(--warn)',...mk(14)},
+    {nm:'미개입',at:null,hex:'var(--crit)',...mk(null)},
+  ];
+}
+function enterCtl(){
+  ctlStop();
+  const obsD=obsOf(cursor);
+  const live={};let maxN=0;
+  EXEMPLARS.forEach(ex=>{
+    if(vehicle(ex.key).prodD>obsD)return;
+    const lv=liveTripOf(ex.key,obsD);
+    if(lv){live[ex.key]=lv;maxN=Math.max(maxN,lv.S.n);}
+  });
+  const order=EXEMPLARS.map(e=>e.key).filter(k=>vehicle(k).prodD<=obsD)
+    .sort((a,b)=>riskOf(vehicle(b),obsD).score-riskOf(vehicle(a),obsD).score);
+  CTL={obsD,live,ref:refLive(obsD),order,maxN,tick:0,playing:maxN>0,ended:maxN===0,calls:[],seen:new Set(),timer:null};
+  if(order.length&&!live[selVin])selVin=order.find(k=>live[k])||order[0];
+  ctlBoot();
+  if(maxN>0)ctlStart();
+}
+function ctlBoot(){                                        // 세션 개시 판단 — BOX 콜·기준차 델타 (관측 시점 기준)
+  ctlCall(null,'info','세션 개시 — 라이브 '+Object.keys(CTL.live).length+'대 병렬 재생',
+    '표본 '+CTL.order.length+'대 · 위험도 순 타이밍 타워 정렬',null);
+  CTL.order.forEach(k=>{
+    const v=vehicle(k),rk=riskOf(v,CTL.obsD);
+    if(rk.score>=55)ctlCall(k,'crit','BOX BOX — 서비스 입고 콜','위험도 '+rk.score+' — '+(rk.why[0]||'')+' · 입고 예약 지시','서비스 예약');
+    else if(rk.score>=18)ctlCall(k,'warn','모니터링 강화 — 위험도 '+rk.score,rk.why[0]||'',rk.recs.length?rk.recs[0].act:null);
+    const dl=lifeDeltaSeries(v,CTL.obsD);
+    if(dl&&dl[dl.length-1]<=-5)
+      ctlCall(k,'warn','기준차 대비 Δ12V '+f1(dl[dl.length-1])+'%p','생애 정렬 델타 격차 확대 — 암전류 의심, 원격 진단 스캔 지시','원격 진단');
+  });
+}
+function ctlCall(key,sev,title,sub,act){
+  CTL.calls.push({id:'C'+(++ctlSeq),i:CTL.tick,key,sev,title,sub:sub||'',act:act||null});
+  if(mode==='ctl')renderSideCtl();
+}
+function ctlRules(){                                       // 채널 임계·패턴 감지 → 콜 (F1 이상 감지 자동 하이라이트)
+  const i=CTL.tick;
+  for(const k of CTL.order){
+    const lv=CTL.live[k];if(!lv)continue;
+    const S=lv.S;if(i>=S.n)continue;
+    const kk=s=>k+'|'+s;
+    for(const l of S.lamps)if(l.a===i&&!CTL.seen.has(kk('lamp'+l.a))){
+      CTL.seen.add(kk('lamp'+l.a));
+      ctlCall(k,'crit','경고등 점등 — '+l.v,'채널 이상 감지 — 원격 진단 스캔 지시','원격 진단');}
+    if(i>0&&S.soc[i]<60&&S.soc[i-1]>=60&&!CTL.seen.has(kk('soc'))){
+      CTL.seen.add(kk('soc'));
+      ctlCall(k,'warn','12V SoC 임계(60%) 하회','방전 리스크 — 보충 충전 지시 (리프트&코스트 대응과 동형)','보충 충전');}
+    for(const h of S.hdaSeg)if(h.a===i&&!CTL.seen.has(kk('hda'+h.a))){
+      CTL.seen.add(kk('hda'+h.a));
+      ctlCall(k,'ai','HDA 활성','고속 구간 주행 보조 개시 — 채널 정상',null);}
+    for(const tg of S.terSeg)if(tg.a===i&&!CTL.seen.has(kk('ter'+tg.a))){
+      CTL.seen.add(kk('ter'+tg.a));
+      ctlCall(k,'warn','Terrain '+tg.v+' 진입','고부하 노면 — 12V 부하 모니터링',null);}
+    if(i===S.n-1&&!CTL.seen.has(kk('off'))){
+      CTL.seen.add(kk('off'));
+      ctlCall(k,'info','IG-OFF — 트립 종료',lv.t.km+'km · 12V '+f1(S.soc[S.n-1])+'%',null);}
+  }
+}
+function ctlStart(){
+  CTL.timer=setInterval(()=>{
+    if(!CTL||!CTL.playing)return;
+    CTL.tick++;
+    if(CTL.tick>=CTL.maxN-1){CTL.tick=Math.max(0,CTL.maxN-1);CTL.playing=false;CTL.ended=true;}
+    ctlRules();
+    if(mode==='ctl'){renderSceneCtl();ctlTowerTick();}
+  },110);
+}
+function ctlStop(){if(CTL&&CTL.timer){clearInterval(CTL.timer);CTL.timer=null;}}
+function ctlSelect(k){
+  if(selVin===k)return;
+  selVin=k;
+  renderSceneCtl();renderRailCtl();renderSideCtl();
+}
+/* 타이밍 타워 — DOM 1회 구축, 틱마다 값만 갱신 (위험도 순위는 세션 내 고정) */
+function renderRailCtl(){
+  const host=$('towerList');host.innerHTML='';
+  CTL.order.forEach((k,idx)=>{
+    const v=vehicle(k),rk=riskOf(v,CTL.obsD),lv=CTL.live[k];
+    const dl=lifeDeltaSeries(v,CTL.obsD),cur=dl?dl[dl.length-1]:null;
+    const b=document.createElement('button');
+    b.className='vinTile'+(selVin===k?' sel':'');
+    b.dataset.tw=k;
+    b.style.borderLeftColor=rk.hex;
+    b.innerHTML=`<div class="nm"><span class="twPos">P${idx+1}</span>${esc(v.md.name)}
+        <span style="font-weight:400;color:var(--muted)">${v.my}MY</span>
+        <span class="lamp ${rk.score>=55?'crit':rk.score>=25?'warn':''}"></span></div>
+      <div class="v1">${maskVin(v.vin)} · ${lv?dateOf(lv.t.d)+' 트립':'가라지'}</div>
+      <div class="v2"><b class="twSpd">—</b> · 12V <b class="twSoc">—</b> · Δ기준
+        <span class="${cur!=null&&cur<-4?'dn':'up'}" style="font-weight:700">${k==='baseline'?'REF':cur!=null?(cur>=0?'+':'')+f1(cur)+'%p':'—'}</span></div>`;
+    b.addEventListener('click',()=>ctlSelect(k));
+    b.addEventListener('mousemove',e=>tipShow(e,
+      `<b>P${idx+1} · ${esc(v.md.name)} — ${esc(v.tag)}</b>AI 위험도 ${rk.score} (${rk.lbl})`+
+      (lv?`<br><span class="mut">라이브: ${esc(lv.t.label)} · ${dateOf(lv.t.d)}</span>`:'<br><span class="mut">가라지 — 재생할 트립 없음</span>')));
+    b.addEventListener('mouseleave',tipHide);
+    host.appendChild(b);
+  });
+  ctlTowerTick();
+  $('ctlNote').innerHTML=`F1 피트월 방식 — 차량당 ~300 센서·초당 110만+ 포인트가 피트월·원격 운영실로 흐르고
+    타이밍 타워로 전 차량을 훑는다. 여기서는 표본을 <b>AI 위험도 순(P1=최우선)</b>으로 정렬하고
+    기준차 대비 Δ12V를 갭처럼 본다 — <code>docs/f1-telemetry-research.md</code>`;
+}
+function ctlTowerTick(){
+  document.querySelectorAll('#towerList [data-tw]').forEach(b=>{
+    const lv=CTL.live[b.dataset.tw];
+    const sp=b.querySelector('.twSpd'),so=b.querySelector('.twSoc');
+    if(!lv){sp.textContent='정지';so.textContent=f1(vehicle(b.dataset.tw).socAt(CTL.obsD))+'%';return;}
+    const i=Math.min(CTL.tick,lv.S.n-1);
+    sp.textContent=CTL.tick>=lv.S.n-1?'IG-OFF':Math.round(lv.S.spd[i])+'km/h';
+    so.textContent=f1(lv.S.soc[i])+'%';
+  });
+}
+/* 중앙 씬 — ATLAS식 채널 스택: 차속·12V(기준차 오버레이)·델타 바·상태 스트립·생애 델타 */
+function renderSceneCtl(){
+  const svg=$('scene');svg.innerHTML='';
+  if(!CTL)return;
+  const W=1000,PL=70,PR=62;
+  const v=vehicle(selVin),lv=CTL.live[selVin];
+  el('text',{x:24,y:24,class:'tierLbl'},svg).textContent=
+    `관제 (피트월) — F1 레이스 엔지니어링 방식 · 세션 ${dateOf(CTL.obsD)} · 다채널 라이브 + 기준차 델타 · 타워 클릭: 차량 전환`;
+  // 세션 헤더 — LIVE·관제 시계·재생 토글
+  el('circle',{cx:PL+6,cy:44,r:4.5,fill:CTL.playing?'var(--crit)':'var(--na)',
+    style:CTL.playing?'animation:liveBlink 1s step-end infinite':''},svg);
+  el('text',{x:PL+16,y:48,class:'gCur',fill:CTL.playing?'var(--crit)':'var(--muted)'},svg).textContent=
+    (CTL.ended?'세션 종료':CTL.playing?'LIVE':'일시정지')+' · 관제 시계 '+mmss(CTL.tick*10)+' · '+v.md.name+(lv?' — '+lv.t.label:'');
+  const pb=el('g',{style:'cursor:pointer'},svg);
+  el('rect',{x:W-PR-96,y:32,width:96,height:20,rx:6,fill:'var(--surface2)',stroke:'var(--line)'},pb);
+  el('text',{x:W-PR-48,y:46,class:'gAxis','text-anchor':'middle',fill:'var(--ink)'},pb).textContent=
+    CTL.ended?'▶ 재생':CTL.playing?'∥ 일시정지':'▶ 재생';
+  pb.addEventListener('click',()=>{
+    if(CTL.ended){CTL.tick=0;CTL.ended=false;CTL.playing=true;}
+    else CTL.playing=!CTL.playing;
+    renderSceneCtl();
+  });
+  if(!lv){
+    el('text',{x:W/2,y:220,class:'gCur','text-anchor':'middle',fill:'var(--muted)'},svg).textContent=
+      '가라지 — 이 차량은 관측일 기준 재생할 트립이 없습니다 (12V 일 시계열은 VIN 모드에서)';
+    renderLifeDelta(svg,v,W,PL,PR);
+    return;
+  }
+  const S=lv.S,n=S.n,upto=Math.min(CTL.tick,n-1);
+  const X=i=>PL+i/(n-1)*(W-PL-PR);
+  const ref=selVin!=='baseline'?CTL.ref:null;
+  const chan=(label,y0,y1,lo,hi,unit)=>{
+    el('text',{x:24,y:y0-7,class:'gAxis'},svg).textContent=label;
+    const Y=val=>y1-(val-lo)/((hi-lo)||1)*(y1-y0);
+    for(const kf of [0,0.5,1]){
+      const val=lo+(hi-lo)*kf,y=Y(val);
+      el('line',{x1:PL,y1:y,x2:W-PR,y2:y,stroke:'var(--line)','stroke-width':1,opacity:kf===0?0.9:0.5},svg);
+      el('text',{x:PL-7,y:y+3.5,class:'gAxis','text-anchor':'end'},svg).textContent=Math.round(val)+(unit||'');
+    }
+    return Y;
+  };
+  const path=(fn,to,Y)=>{let p='';for(let i=0;i<=to;i++)p+=(p?'L':'M')+X(i).toFixed(1)+' '+Y(fn(i)).toFixed(1);return p;};
+  /* 채널 1 — 차속 (기준차 레퍼런스 점선 오버레이) */
+  const vHi=Math.max(...S.spd,ref?Math.max(...ref.spd):0)*1.12||20;
+  const Y1=chan('CH1 차속 (km/h) — 실선: 관측차 · 점선: 기준차 레퍼런스',84,178,0,vHi,'');
+  if(ref)el('path',{d:path(i=>rsAt(ref.spd,ref.n,i,n),n-1,Y1),fill:'none',stroke:'var(--na)','stroke-width':1.2,'stroke-dasharray':'4 3'},svg);
+  el('path',{d:path(i=>S.spd[i],upto,Y1),fill:'none',stroke:'var(--ink)','stroke-width':1.6},svg);
+  /* 채널 2 — 12V SoC */
+  const sAll=ref?S.soc.concat(ref.soc):S.soc;
+  const sLo=Math.floor(Math.min(...sAll))-2,sHi=Math.ceil(Math.max(...sAll))+2;
+  const Y2=chan('CH2 12V SoC (%)',206,286,sLo,sHi,'');
+  el('line',{x1:PL,y1:Y2(60),x2:W-PR,y2:Y2(60),stroke:'var(--crit)','stroke-width':1,'stroke-dasharray':'4 3',opacity:sLo<60?0.6:0},svg);
+  if(ref)el('path',{d:path(i=>rsAt(ref.soc,ref.n,i,n),n-1,Y2),fill:'none',stroke:'var(--na)','stroke-width':1.2,'stroke-dasharray':'4 3'},svg);
+  el('path',{d:path(i=>S.soc[i],upto,Y2),fill:'none',stroke:'var(--edge-hi)','stroke-width':1.6},svg);
+  /* 채널 3 — Δ12V 델타 바 (관측차 − 기준차) : F1 델타 트레이스 문법 */
+  if(ref){
+    const dAt=i=>S.soc[i]-rsAt(ref.soc,ref.n,i,n);
+    let dm=3;for(let i=0;i<n;i++)dm=Math.max(dm,Math.abs(dAt(i)));
+    const D0=314,D1=378,Yd=val=>((D0+D1)/2)-val/dm*((D1-D0)/2);
+    el('text',{x:24,y:D0-7,class:'gAxis'},svg).textContent='CH3 Δ12V vs 기준차 (%p) — 녹: 우세 · 적: 열세';
+    el('line',{x1:PL,y1:Yd(0),x2:W-PR,y2:Yd(0),stroke:'var(--edge)','stroke-width':1},svg);
+    el('text',{x:PL-7,y:Yd(dm*0.8)+3.5,class:'gAxis','text-anchor':'end'},svg).textContent='+'+f1(dm*0.8);
+    el('text',{x:PL-7,y:Yd(-dm*0.8)+3.5,class:'gAxis','text-anchor':'end'},svg).textContent=f1(-dm*0.8);
+    const bw=Math.max(1.2,(W-PL-PR)/n-0.6);
+    for(let i=0;i<=upto;i++){
+      const d=dAt(i);
+      el('rect',{x:X(i)-bw/2,y:Math.min(Yd(0),Yd(d)),width:bw,height:Math.max(0.8,Math.abs(Yd(d)-Yd(0))),
+        fill:d>=0?'var(--good)':'var(--crit)',opacity:.75},svg);
+    }
+  } else {
+    el('text',{x:24,y:314-7,class:'gAxis'},svg).textContent='CH3 Δ12V — 이 차량이 레퍼런스(기준차) 또는 기준 트립 없음';
+  }
+  /* 상태 스트립 — HDA·Terrain·경고등 (재생 시점까지) */
+  const SY=396,RH=13;
+  const rows=[
+    {nm:'HDA',hex:'var(--ai)',segs:S.hdaSeg.map(x=>({...x,lbl:'ON'}))},
+    {nm:'Terrain',hex:'var(--warn)',segs:S.terSeg.map(x=>({...x,lbl:x.v}))},
+    {nm:'경고등',hex:'var(--crit)',segs:S.lamps.map(x=>({...x,lbl:x.v}))},
+  ];
+  rows.forEach((r,ri)=>{
+    const y=SY+ri*RH;
+    el('text',{x:PL-7,y:y+RH-4,class:'evSub','text-anchor':'end',fill:'var(--muted)'},svg).textContent=r.nm;
+    el('rect',{x:PL,y,width:W-PL-PR,height:RH-3,rx:2,fill:'var(--surface2)',stroke:'var(--line)','stroke-width':.6},svg);
+    r.segs.forEach(sg=>{
+      if(sg.a>upto)return;
+      const b2=Math.min(sg.b,upto);
+      const x=X(sg.a),w2=Math.max(3,X(b2)-x);
+      el('rect',{x,y:y+1,width:w2,height:RH-5,rx:2,fill:r.hex,opacity:.6},svg);
+      if(w2>44)el('text',{x:x+4,y:y+RH-5,class:'evSub',fill:'var(--page)',style:'font-weight:700'},svg).textContent=sg.lbl;
+    });
+  });
+  for(let i=0;i<n;i+=Math.max(6,Math.round(n/10)))
+    el('text',{x:X(i),y:SY+3*RH+13,class:'gAxis','text-anchor':'middle'},svg).textContent=mmss(i*S.dt);
+  /* 라이브 커서 + 판독 */
+  el('line',{x1:X(upto),y1:76,x2:X(upto),y2:SY+3*RH,stroke:'var(--warn)','stroke-width':1.2},svg);
+  el('text',{x:W-PR+6,y:Y1(S.spd[upto])+3.5,class:'gCur'},svg).textContent=Math.round(S.spd[upto]);
+  el('text',{x:W-PR+6,y:Y2(S.soc[upto])+3.5,class:'gCur',fill:'var(--edge-hi)'},svg).textContent=f1(S.soc[upto]);
+  renderLifeDelta(svg,v,W,PL,PR);
+}
+function renderLifeDelta(svg,v,W,PL,PR){                   // 생애 정렬 Δ12V — 레퍼런스 랩 델타의 생애 버전
+  const L0=474,L1=542;
+  const dl=lifeDeltaSeries(v,CTL.obsD);
+  el('text',{x:24,y:L0-8,class:'gAxis'},svg).textContent=
+    'Δ12V 생애 정렬 (관측차-기준차, 생산 후 경과일 기준) — 음수 확대 = 기준차보다 열세 (암전류·에이징 신호)';
+  if(!dl){
+    el('text',{x:PL,y:(L0+L1)/2,class:'gAxis',fill:'var(--muted)'},svg).textContent=
+      v.key==='baseline'?'이 차량이 레퍼런스(기준차)입니다 — 델타 0 기준선':'생애 데이터 부족 (10일 미만)';
+    return;
+  }
+  const mn=Math.min(...dl,-1),mx=Math.max(...dl,1);
+  const Xa=a=>PL+a/(dl.length-1)*(W-PL-PR), Ya=val=>L1-(val-mn)/(mx-mn)*(L1-L0);
+  el('line',{x1:PL,y1:Ya(0),x2:W-PR,y2:Ya(0),stroke:'var(--edge)','stroke-width':1,'stroke-dasharray':'4 3'},svg);
+  el('text',{x:PL-7,y:Ya(0)+3.5,class:'gAxis','text-anchor':'end'},svg).textContent='0';
+  el('path',{d:dl.map((val,a)=>(a?'L':'M')+Xa(a).toFixed(1)+' '+Ya(val).toFixed(1)).join(''),
+    fill:'none',stroke:dl[dl.length-1]<-4?'var(--crit)':'var(--edge-hi)','stroke-width':1.5},svg);
+  if(v.fixD!=null&&v.fixD<=CTL.obsD&&v.fixD-v.prodD<dl.length){
+    el('line',{x1:Xa(v.fixD-v.prodD),y1:L0,x2:Xa(v.fixD-v.prodD),y2:L1,stroke:'var(--ai)','stroke-width':1,'stroke-dasharray':'5 3'},svg);
+    el('text',{x:Xa(v.fixD-v.prodD)+4,y:L0+9,class:'evSub',fill:'var(--ai)'},svg).textContent=v.fixKind+' 시정';
+  }
+  el('text',{x:Math.min(Xa(dl.length-1)+5,W-PR+4),y:Ya(dl[dl.length-1])+3.5,class:'gCur',
+    fill:dl[dl.length-1]<-4?'var(--crit)':'var(--good)'},svg).textContent=(dl[dl.length-1]>=0?'+':'')+f1(dl[dl.length-1])+'%p';
+}
+/* 우 레일 — 피트월 요약 · 엔지니어 콜 피드(single voice) · 개입 전략 MC */
+function stratSvg(sc){
+  const W2=282,H2=100,PL2=28,PB2=16,PT2=8,PR2=18;
+  const mx=Math.max(...sc.flatMap(s=>s.hi),20);
+  const X2=h=>PL2+h/60*(W2-PL2-PR2), Y2=val=>H2-PB2-val/mx*(H2-PT2-PB2);
+  const worst=sc[2];
+  let band='M'+X2(0)+' '+Y2(worst.hi[0]);
+  for(let h=1;h<=60;h++)band+='L'+X2(h).toFixed(1)+' '+Y2(worst.hi[h]).toFixed(1);
+  for(let h=60;h>=0;h--)band+='L'+X2(h).toFixed(1)+' '+Y2(worst.lo[h]).toFixed(1);
+  let out=`<svg viewBox="0 0 ${W2} ${H2}" style="width:100%;display:block;margin-top:4px">
+    <path d="${band}Z" fill="rgba(229,72,77,.12)"/>`;
+  for(const yv of [0,Math.round(mx/2),Math.round(mx)])
+    out+=`<line x1="${PL2}" y1="${Y2(yv)}" x2="${W2-PR2}" y2="${Y2(yv)}" stroke="var(--line)" stroke-width="1" opacity=".6"/>
+      <text x="${PL2-4}" y="${Y2(yv)+3.5}" class="gAxis" text-anchor="end" fill="var(--muted)" font-size="10">${yv}</text>`;
+  for(const s of sc){
+    let p='';for(let h=0;h<=60;h++)p+=(p?'L':'M')+X2(h).toFixed(1)+' '+Y2(s.med[h]).toFixed(1);
+    out+=`<path d="${p}" fill="none" stroke="${s.hex}" stroke-width="1.6"/>`;
+  }
+  for(const dx of [0,30,60])
+    out+=`<text x="${X2(dx)}" y="${H2-3}" text-anchor="middle" fill="var(--muted)" font-size="10">+${dx}일</text>`;
+  return out+'</svg>';
+}
+function renderSideCtl(){
+  if(!CTL)return;
+  const nLive=CTL.order.filter(k=>CTL.live[k]).length;
+  const nCrit=CTL.calls.filter(c=>c.sev==='crit').length;
+  const sc=stratScenarios(selVin,CTL.obsD);
+  const saved=sc[2].med[60]-sc[0].med[60];
+  let html=`<div class="railTtl">관제 세션 — ${dateOf(CTL.obsD)}</div>
+  <div class="card"><div class="hd">피트월 요약 <span class="k">원격 운영실 관점</span></div>
+    <div class="kv"><span class="k">라이브 재생</span><span class="v">${nLive}대 / 표본 ${CTL.order.length}대</span></div>
+    <div class="kv"><span class="k">엔지니어 콜</span><span class="v">${CTL.calls.length}건 · 중대 ${nCrit}</span></div>
+    <div class="ctx">차량→관제 단방향 텔레메트리 — 조치는 원격 제어가 아닌 <b>지시</b>(입고·충전·OTA 승인)로 전달.
+      F1의 양방향 텔레메트리 금지(2003~) 원칙과 동형.</div></div>
+  <div class="railTtl">레이스 엔지니어 콜 — single voice</div>
+  <div class="card"><div id="callFeed">${
+    CTL.calls.slice(-30).reverse().map(c=>{
+      const v2=c.key?vehicle(c.key):null, sent=APPLIED.has('ctl|'+c.id);
+      return `<div class="callRow ${c.sev}">
+        <span class="ct">${mmss(c.i*10)}</span>
+        <span class="cm"><b>${v2?esc(v2.md.name):'관제'}</b> — ${esc(c.title)}<br><span style="color:var(--muted)">${esc(c.sub)}</span></span>
+        ${c.act?`<button class="sendBtn${sent?' sent':''}" data-call="${c.id}" ${sent?'disabled':''}>${sent?'✓ 전송':'지시 전송'}</button>`:''}
+      </div>`;}).join('')||'<div class="ctx">콜 없음 — 세션 재생 중 임계 이벤트가 발생하면 이 피드로 수렴합니다</div>'
+  }</div></div>
+  <div class="railTtl">개입 전략 — 몬테카를로 재시뮬레이션</div>
+  <div class="card"><div class="hd">${esc(vehicle(selVin).md.name)} · 60일 위험도 전망 <span class="k">24회 × 3시나리오</span></div>
+    ${stratSvg(sc)}
+    <div class="ctx">${sc.map(s=>`<span style="color:${s.hex}">■</span> ${esc(s.nm)} — 60일 후 위험도 <b>${s.med[60]}</b>`).join('<br>')}</div>
+    <div class="ctx" style="margin-top:4px">${saved>8
+      ?`판정: <b style="color:var(--good)">즉시 개입 우세</b> — 미개입 대비 위험도 ${saved} 절감 (언더컷과 동형)`
+      :'판정: 개입 이득 제한적 — 모니터링 유지'} · 열화 계수는 실측 14일 기울기로 갱신, 관측 시점마다 재시뮬레이션.</div></div>`;
+  $('sideBody').innerHTML=html;
+  $('sideBody').querySelectorAll('[data-call]').forEach(b=>b.addEventListener('click',()=>{
+    const c=CTL.calls.find(x=>x.id===b.dataset.call);if(!c)return;
+    APPLIED.add('ctl|'+c.id);
+    if(EMBED)window.parent.postMessage({type:'v11-svc-project',
+      name:`${c.act} — ${c.title} (${maskVin(vehicle(c.key).vin)})`,
+      tmpl:c.act==='OTA 배포'?'quality':'data',model:vehicle(c.key).mid,goal:'KPI-CSIS'},'*');
+    renderSideCtl();
+  }));
+}
+/* ═══ PART G. 렌더 디스패치 · 씬 줌 · 타임라인 · 초기화 ═══ */
+function renderSide(){
+  if(mode==='vin')renderSideVin();
+  else if(mode==='ctl')renderSideCtl();
+  else if(mode==='home')renderSideHome();
+  else renderSideFleet();
+}
+// 씬 확대(휠)·이동(드래그)·초기화(더블클릭) — V10 트윈 월드와 동일 문법
+function enableZoomPan(svg,W,H){
+  const vb={x:0,y:0,w:W,h:H};
+  const apply=()=>{
+    if(vb.w<=W)vb.x=Math.max(0,Math.min(W-vb.w,vb.x));
+    if(vb.h<=H)vb.y=Math.max(0,Math.min(H-vb.h,vb.y));
+    svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  };
+  const pt=e=>{const r=svg.getBoundingClientRect();
+    return {x:vb.x+(e.clientX-r.left)/r.width*vb.w,y:vb.y+(e.clientY-r.top)/r.height*vb.h};};
+  svg.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const k=e.deltaY>0?1.12:1/1.12,p=pt(e);
+    const nw=Math.min(W*1.4,Math.max(W*0.15,vb.w*k)),nh=nw*H/W;
+    vb.x=p.x-(p.x-vb.x)*nw/vb.w;vb.y=p.y-(p.y-vb.y)*nh/vb.h;vb.w=nw;vb.h=nh;apply();
+  },{passive:false});
+  let pan=null,moved=false;
+  svg.addEventListener('pointerdown',e=>{pan={x:e.clientX,y:e.clientY,vx:vb.x,vy:vb.y,go:vb.w<W-0.5};moved=false;});
+  window.addEventListener('pointermove',e=>{
+    if(!pan)return;
+    if(!(e.buttons&1)){pan=null;return;}
+    if(Math.abs(e.clientX-pan.x)+Math.abs(e.clientY-pan.y)>4)moved=true;
+    if(!moved||!pan.go)return;
+    const r=svg.getBoundingClientRect();
+    vb.x=pan.vx-(e.clientX-pan.x)*vb.w/r.width;
+    vb.y=pan.vy-(e.clientY-pan.y)*vb.h/r.height;
+    apply();
+  });
+  window.addEventListener('pointerup',()=>{pan=null;setTimeout(()=>moved=false,0);});
+  svg.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();}},true);
+  svg.addEventListener('dblclick',()=>{vb.x=0;vb.y=0;vb.w=W;vb.h=H;apply();});
+  return {view:()=>({...vb})};
+}
+function render(){
+  const vinM=mode==='vin', ctlM=mode==='ctl', homeM=mode==='home';
+  $('railVin').style.display=vinM?'':'none';
+  $('railFleet').style.display=mode==='fleet'?'':'none';
+  $('railCtl').style.display=ctlM?'':'none';
+  $('railHome').style.display=homeM?'':'none';
+  const bandOff=msg=>{
+    $('tripVeil').style.display='flex';$('tripTtl').textContent='';$('tpPlay').style.display='none';$('btnDrive').style.display='none';$('tripChart').innerHTML='';
+    $('tripVeil').textContent=msg;};
+  if(vinM){renderSceneVin();renderRailVin();renderTrip();}
+  else if(homeM){renderSceneHome();renderRailHome();
+    bandOff('홈 — KPI 카드를 선택하고 우측 ①②③ 버튼으로 확인 → 드릴 → 조치 폐루프를 진행합니다');}
+  else if(ctlM){
+    if(!CTL||CTL.obsD!==obsOf(cursor))enterCtl();
+    renderSceneCtl();renderRailCtl();
+    bandOff('관제 모드 — 임계 이벤트는 우측 엔지니어 콜 피드로 수렴합니다 (F1 single voice 방식)');}
+  else{renderSceneFleet();renderRailFleet();
+    bandOff('KPI 상세 — 문제 차량 드릴은 우측, 트립 신호 재생은 VIN 트윈 모드에서');}
+  renderSide();
+  $('ymLbl').textContent=MONTHS[cursor];
+  $('modeLbl').textContent=vinM?'관측 '+dateOf(obsOf(cursor)):ctlM?'실시간 관제':homeM?'서비스 홈':'KPI 집계';
+  $('ftNote').textContent=vinM?'월 커서 = 관측 시점 — 커서 이후 이벤트는 아직 도래하지 않음'
+    :ctlM?'월 커서 = 관제 세션 관측일 — 각 차량의 최근 트립을 병렬 라이브 재생 (F1 피트월 방식)'
+    :homeM?'월 커서 = KPI 기준 월 — 하위 KPI는 팀별 목표 대비로 판정 (Play: 개선 추이 재생)'
+    :'월 커서 = 집계 기준 월 — 목표 대비 + S/W(OTA-2606) 배포 전후 변화량으로 KPI 검증';
+  $('tl').value=cursor;
+}
+function seek(i){cursor=clamp(Math.round(i),0,NOW);render();}
+function setMode(m){
+  mode=m;tpStop();closeDrive();
+  if(m!=='ctl'&&CTL){ctlStop();CTL=null;}
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+  render();
+}
+document.querySelectorAll('#modeSeg button').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.m)));
+$('tl').addEventListener('input',e=>seek(+e.target.value));
+let playing=null;
+$('btnPlay').addEventListener('click',()=>{
+  if(playing){clearInterval(playing);playing=null;$('btnPlay').textContent='▶ Play';return;}
+  if(cursor>=NOW)cursor=-1;
+  $('btnPlay').textContent='❚❚ 정지';
+  playing=setInterval(()=>{
+    if(cursor>=NOW){clearInterval(playing);playing=null;$('btnPlay').textContent='▶ Play';return;}
+    seek(cursor+1);
+  },700);
+});
+if(EMBED)document.querySelector('header').style.display='none';   // 제목줄 1개 원칙
+/* 해시 진입 (#i=월커서&vin=표본키&m=vin|fleet) — 상태 선적용 후 첫 렌더 (무플래시) */
+const HH=Object.fromEntries(location.hash.slice(1).split('&').filter(Boolean).map(s=>s.split('=')));
+if(HH.i!=null&&!Number.isNaN(+HH.i))cursor=clamp(+HH.i,0,NOW);
+if(['vin','fleet','ctl','home'].includes(HH.m))mode=HH.m;
+if(HH.vin&&EXEMPLARS.some(e=>e.key===HH.vin))selVin=HH.vin;
+document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
+sceneZoom=enableZoomPan($('scene'),1000,560);
+selectVin(selVin);                                        // 초기 렌더 포함
+/* 테스트 훅 */
+window._v11={
+  EXEMPLARS,vehicle,riskOf,tripSeries,discharge,otaApplied,OTA,
+  metric:(k,i)=>METRICS.find(m=>m.key===k).fn(i),
+  prepost:k=>preposts(METRICS.find(m=>m.key===k).fn),
+  selectVin,selectEvent,selectTrip,setMode,seek,obsOf,NOWD,EMBED,APPLIED,FLT,
+  openDrive:id=>openDrive(id||selTrip),closeDrive:()=>closeDrive(),
+  ctl:()=>CTL?{tick:CTL.tick,playing:CTL.playing,ended:CTL.ended,calls:CTL.calls.length,
+    crit:CTL.calls.filter(c=>c.sev==='crit').length,live:Object.keys(CTL.live).length,
+    order:CTL.order.slice(),obsD:CTL.obsD}:null,
+  ctlSelect,stratScenarios,lifeDelta:(k,d)=>lifeDeltaSeries(vehicle(k),d),
+  kpis:()=>METRICS.map(m=>({key:m.key,team:m.team||null,target:m.target,
+    cur:m.fn(cursor),met:metMet(m,cursor)})),
+  setKpi:k=>{selKpi=k;selMetric=k;render();},
+  drive:()=>DV?{open:true,tick:DV.tick,pos:DV.pos,speed:DV.speed,playing:DV.playing,ended:DV.ended,rate:DV.rate}:{open:false},
+  state:()=>({mode,cursor,selVin,selEv,selTrip,tpCursor,selMetric,selKpi}),
+};
+/* ═══ PART D2. 상태 리플레이 — 홀로 트윈 콕핏 (홀로그램 차량 + 둘레 데이터 패널) ═══
+   주행 연출(도로·바퀴·벨트) 없이 그 시점의 차량 "상태"만 재생한다. 중앙: 발광 원형 패드
+   위 3/4 와이어프레임 홀로그램 차량(부유·스캔라인·이상 부품 펄스). 둘레: 상단 차속·12V
+   차트(진행 reveal), 좌열 차대 상태도(탑뷰 부품 하이라이트)·지표 타일·상태 트랙, 우열
+   루트 미니맵(시드 결정론)·부품 클로즈업(12V X-ray·HDA — 리더로 차량 앵커)·이벤트 로그.
+   데이터 시계는 배속 압축(기본 ×20), 홀로 애니(회전 링·스캔)만 실시간. */
+var DV=null;                                              // var — PART G 초기 렌더(선언 전 closeDrive 호출)에서 TDZ 방지
+const lerpAt=(arr,n,tf)=>{const i=Math.floor(tf),u=tf-i,a=arr[Math.min(i,n-1)],b=arr[Math.min(i+1,n-1)];return a+(b-a)*u;};
+const surfAt=(S,tf)=>{const i=Math.round(tf);const sg=S.terSeg.find(x=>i>=x.a&&i<=x.b);return sg?sg.v:'NORMAL';};
+const lampAtF=(S,tf)=>{const i=Math.round(tf);return S.lamps.find(l=>i>=l.a&&i<=l.b)||null;};
+const hdaAtF=(S,tf)=>{const i=Math.round(tf);return S.hdaSeg.some(h=>i>=h.a&&i<=h.b);};
+function openDrive(tripId){
+  if(!tripId)return;
+  tpStop(); if(DV)closeDrive();
+  const S=tripSeries(selVin,tripId), v=vehicle(selVin), t=S.t;
+  const rnd=mulberry32(v.vh+hash(t.id)*7);
+  const hour=6+((v.vh>>3)+t.d)%14;                        // 06~19시 — 트립별 결정론
+  DV={S,v,t,rnd,hour,night:hour>=19,dusk:hour>=17,
+    tick:0,speed:0,pos:0,lastTs:0,playing:true,rate:2,ended:false,
+    holoT:0,lastLamp:null,evtUntil:0,raf:0};
+  $('drive').classList.add('open');
+  $('dvTtl').textContent='상태 리플레이 — '+t.label;
+  $('dvSub').textContent=`${dateOf(t.d)} ${String(hour).padStart(2,'0')}시 · ${v.md.name} ${v.my}MY · ${t.dur}분 · ${t.km}km — 실차 신호 원장, 시점 상태 재생`;
+  $('dvPlay').textContent='∥ 일시정지';
+  $('dvRate').textContent='배속 ×'+DV.rate*10;
+  $('dvMsg').style.display='none';$('dvEvt').style.display='none';
+  buildSpeedo();
+  dvSize();
+  DV.raf=requestAnimationFrame(dvFrame);
+}
+function closeDrive(){
+  if(!DV)return;
+  cancelAnimationFrame(DV.raf);DV=null;
+  $('drive').classList.remove('open');
+}
+function dvSize(){
+  for(const id of ['driveCv','dvScrub']){
+    const cv=$(id);
+    cv.width=Math.max(200,cv.clientWidth);cv.height=Math.max(60,cv.clientHeight);
+  }
+}
+new ResizeObserver(()=>{if(DV)dvSize();}).observe($('dvWrap'));
+/* ── 계기판(속도계) — 1회 구축 · 프레임마다 바늘/디지털만 갱신 ── */
+function buildSpeedo(){
+  const svg=$('spdSvg');svg.innerHTML='';
+  const CX=95,CY=86,R=72;
+  const ang=val=>(-210+val/160*240)*Math.PI/180;
+  el('path',{d:`M${CX+R*Math.cos(ang(0))} ${CY+R*Math.sin(ang(0))} A${R} ${R} 0 1 1 ${CX+R*Math.cos(ang(160))} ${CY+R*Math.sin(ang(160))}`,
+    fill:'none',stroke:'#2b2e34','stroke-width':10},svg);
+  for(let s=0;s<=160;s+=10){
+    const a=ang(s),big=s%20===0,r1=R-(big?11:6),r2=R+2;
+    el('line',{x1:CX+r1*Math.cos(a),y1:CY+r1*Math.sin(a),x2:CX+r2*Math.cos(a),y2:CY+r2*Math.sin(a),
+      stroke:big?'#9aa0aa':'#4a4e56','stroke-width':big?2:1},svg);
+    if(big&&s%40===0)el('text',{x:CX+(R-22)*Math.cos(a),y:CY+(R-22)*Math.sin(a)+3,class:'gAxis','text-anchor':'middle'},svg).textContent=s;
+  }
+  el('text',{x:CX,y:CY-24,id:'dvDig',fill:'var(--ink)','text-anchor':'middle',
+    style:'font-size:26px;font-weight:700;font-variant-numeric:tabular-nums'},svg).textContent='0';
+  el('text',{x:CX,y:CY-10,class:'gAxis','text-anchor':'middle'},svg).textContent='km/h';
+  el('line',{x1:CX,y1:CY,x2:CX,y2:CY-R+14,id:'dvNeedle',stroke:'var(--crit)','stroke-width':2.5,'stroke-linecap':'round'},svg);
+  el('circle',{cx:CX,cy:CY,r:5,fill:'#3a3e46',stroke:'#6a6e78'},svg);
+}
+/* ── 메인 루프 — 시각은 실시간 물리, 데이터 시계는 배속 ── */
+function dvFrame(ts){
+  if(!DV)return;
+  if(!DV.lastTs)DV.lastTs=ts;
+  const dt=Math.min(0.05,(ts-DV.lastTs)/1000||0.016);DV.lastTs=ts;
+  const S=DV.S;
+  if(DV.playing&&!DV.ended){
+    DV.tick+=dt*DV.rate;
+    if(DV.tick>=S.n-1){
+      DV.tick=S.n-1;DV.ended=true;DV.playing=false;
+      $('dvMsg').innerHTML=`IG-OFF — 트립 종료<br><span style="font-size:11px;color:var(--muted)">${esc(DV.t.label)} · ${DV.t.km}km · 12V ${f1(S.soc[S.n-1])}%</span>`;
+      $('dvMsg').style.display='block';$('dvPlay').textContent='▶ 다시 재생';
+    }
+  }
+  const target=lerpAt(S.spd,S.n,DV.tick);
+  DV.braking=target<DV.speed-2.5;
+  DV.speed+=(target-DV.speed)*Math.min(1,dt*2.2);
+  if(DV.speed<0.1)DV.speed=Math.max(0,DV.speed);
+  DV.pos+=DV.speed/3.6*dt;
+  drawStage(dt);drawHud();drawScrub();
+  DV.raf=requestAnimationFrame(dvFrame);
+}
+/* ── 홀로 트윈 콕핏 — 홀로그램 차량 + 둘레 데이터 패널 (주행 연출 없음, 시점 상태만 재생) ── */
+const HOLO={cy:'#45d7ff',line:'rgba(80,170,230,.20)',panel:'rgba(8,18,34,.80)',
+  border:'rgba(70,180,255,.30)',txt:'#cfeaff',mut:'#6f9cc0',
+  warn:'#eaa93e',crit:'#ff5a5f',good:'#4cc38a'};
+function holoPanel(c,x,y,w,h,title){
+  c.fillStyle=HOLO.panel;c.strokeStyle=HOLO.border;c.lineWidth=1;
+  c.beginPath();c.roundRect(x,y,w,h,6);c.fill();c.stroke();
+  c.strokeStyle=HOLO.cy;c.lineWidth=1.3;                   // 코너 브래킷
+  for(const [bx,by,dx,dy] of [[x,y,1,1],[x+w,y,-1,1],[x,y+h,1,-1],[x+w,y+h,-1,-1]]){
+    c.beginPath();c.moveTo(bx+dx*8,by);c.lineTo(bx,by);c.lineTo(bx,by+dy*8);c.stroke();}
+  if(title){c.fillStyle=HOLO.mut;c.font='10px Pretendard,sans-serif';c.textAlign='left';c.fillText(title,x+9,y+15);}
+}
+function holoLeader(c,sx,sy,ax,ay,hex,on,dropY){           // 패널 → 부위 앵커 리더 (dropY: 차트 우회 수직 조그)
+  c.strokeStyle=on?hex:'rgba(110,150,190,.45)';c.lineWidth=1.1;
+  const jx=sx+(ax>sx?12:-12);
+  c.beginPath();c.moveTo(sx,sy);c.lineTo(jx,sy);
+  if(dropY!=null&&dropY>sy)c.lineTo(jx,dropY);
+  c.lineTo(ax,ay);c.stroke();
+  c.fillStyle=on?hex:'#6f9cc0';
+  c.beginPath();c.arc(ax,ay,3,0,7);c.fill();
+  c.strokeStyle=on?hex:'#6f9cc0';c.globalAlpha=.45;
+  c.beginPath();c.arc(ax,ay,6,0,7);c.stroke();c.globalAlpha=1;
+}
+function holoChart(c,x,y,w,h,arr,n,tk,hex,label,fmt){      // 시계열 — 전체 dim + 진행 reveal + 커서
+  holoPanel(c,x,y,w,h,label);
+  const px=x+10,pw=w-20,py=y+22,ph=h-32;
+  const mn=Math.min(...arr),mx=Math.max(...arr),sp=(mx-mn)||1;
+  const X=i=>px+i/(n-1)*pw, Y=v2=>py+ph-(v2-mn)/sp*ph;
+  c.strokeStyle=HOLO.line;c.lineWidth=1;
+  for(const k of [0,.5,1]){c.beginPath();c.moveTo(px,py+ph*k);c.lineTo(px+pw,py+ph*k);c.stroke();}
+  c.strokeStyle='rgba(130,180,220,.28)';c.lineWidth=1;
+  c.beginPath();for(let i=0;i<n;i++)i?c.lineTo(X(i),Y(arr[i])):c.moveTo(X(i),Y(arr[i]));c.stroke();
+  const up=Math.min(Math.floor(tk),n-1);
+  c.strokeStyle=hex;c.lineWidth=1.6;c.shadowColor=hex;c.shadowBlur=6;
+  c.beginPath();for(let i=0;i<=up;i++)i?c.lineTo(X(i),Y(arr[i])):c.moveTo(X(i),Y(arr[i]));c.stroke();
+  c.shadowBlur=0;
+  c.strokeStyle='rgba(234,169,62,.85)';c.beginPath();c.moveTo(X(up),py);c.lineTo(X(up),py+ph);c.stroke();
+  c.fillStyle=hex;c.beginPath();c.arc(X(up),Y(arr[up]),3,0,7);c.fill();
+  c.fillStyle=HOLO.txt;c.font='700 12px Pretendard,sans-serif';c.textAlign='right';
+  c.fillText(fmt(arr[up]),x+w-9,y+15);c.textAlign='left';
+}
+function tripRoute(S,v,t){                                 // 시드 맨해튼 루트 — 내비 미니맵용 (결정론)
+  if(S._route)return S._route;
+  const rnd=mulberry32(v.vh+hash(t.id)*13);
+  const pts=[[0.14,0.86]];let x=0.14,y=0.86,horiz=rnd()<0.5;
+  while(pts.length<14){
+    const len=0.10+rnd()*0.20;
+    if(horiz)x=clamp(x+(rnd()<0.8?1:-1)*len,0.08,0.92);
+    else y=clamp(y-(rnd()<0.85?1:-1)*len*0.9,0.10,0.90);
+    horiz=!horiz;pts.push([x,y]);
+  }
+  let tot=0;const seg=[0];
+  for(let i=1;i<pts.length;i++){tot+=Math.abs(pts[i][0]-pts[i-1][0])+Math.abs(pts[i][1]-pts[i-1][1]);seg.push(tot);}
+  return S._route={pts,seg,tot};
+}
+function routeAt(R,u){
+  const d=clamp(u,0,1)*R.tot;
+  let i=1;while(i<R.seg.length-1&&R.seg[i]<d)i++;
+  const a=R.pts[i-1],b=R.pts[i],s0=R.seg[i-1],s1=R.seg[i];
+  const f=s1>s0?(d-s0)/(s1-s0):0;
+  return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f];
+}
+/* ── 스테이지 렌더 — 홀로 콕핏 (참조 구성: 중앙 홀로 차량 · 좌 차대/타일/상태 · 상단 차트 · 우 루트/부품/로그) ── */
+function drawStage(dt){
+  const cv=$('driveCv'),c=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  const S=DV.S,tk=DV.tick,v=DV.v,t=DV.t;
+  const surf=surfAt(S,tk),lamp=lampAtF(S,tk),hda=hdaAtF(S,tk);
+  const soc=lerpAt(S.soc,S.n,tk);
+  const socHex=soc<58?HOLO.crit:soc<65?HOLO.warn:HOLO.cy;
+  DV.holoT+=dt;
+  /* 배경 — 딥 네이비 그라데이션 + 미세 그리드 */
+  const bg=c.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#040a16');bg.addColorStop(0.6,'#081226');bg.addColorStop(1,'#050b18');
+  c.fillStyle=bg;c.fillRect(0,0,W,H);
+  c.strokeStyle='rgba(60,120,180,.07)';c.lineWidth=1;
+  for(let gx=0;gx<W;gx+=44){c.beginPath();c.moveTo(gx,0);c.lineTo(gx,H);c.stroke();}
+  for(let gy=0;gy<H;gy+=44){c.beginPath();c.moveTo(0,gy);c.lineTo(W,gy);c.stroke();}
+  const compact=W<980;
+  const colW=compact?0:238, M=12;
+  const cx=W/2, padY=H*0.76;
+  /* ── 중앙: 홀로 패드 (동심 링·회전 틱·광기둥·광원 콘) ── */
+  const padR=Math.min((W-2*colW)*0.40,H*0.34);
+  const pry=padR*0.26;
+  const spin=DV.holoT*0.35;
+  c.save();
+  const cone=c.createLinearGradient(0,padY-H*0.52,0,padY);   // 광원 콘
+  cone.addColorStop(0,'rgba(69,215,255,0)');cone.addColorStop(1,'rgba(69,215,255,.13)');
+  c.fillStyle=cone;
+  c.beginPath();c.moveTo(cx-padR*0.55,padY-H*0.52);c.lineTo(cx+padR*0.55,padY-H*0.52);
+  c.lineTo(cx+padR*0.92,padY);c.lineTo(cx-padR*0.92,padY);c.closePath();c.fill();
+  const pg=c.createRadialGradient(cx,padY,2,cx,padY,padR);   // 패드 발광
+  pg.addColorStop(0,'rgba(69,215,255,.30)');pg.addColorStop(0.6,'rgba(40,130,200,.12)');pg.addColorStop(1,'rgba(0,0,0,0)');
+  c.save();c.translate(cx,padY);c.scale(1,0.26);
+  c.fillStyle=pg;c.beginPath();c.arc(0,0,padR,0,7);c.fill();
+  for(const rr of [1,0.78,0.5]){
+    c.strokeStyle=`rgba(69,215,255,${rr===1?0.55:0.3})`;c.lineWidth=rr===1?1.6:1;
+    c.beginPath();c.arc(0,0,padR*rr,0,7);c.stroke();
+  }
+  c.strokeStyle='rgba(69,215,255,.6)';c.lineWidth=2;         // 회전 틱 링
+  for(let k=0;k<48;k++){
+    const a2=spin+k*Math.PI/24;
+    if(k%6===0)continue;
+    c.beginPath();c.moveTo(Math.cos(a2)*padR*0.90,Math.sin(a2)*padR*0.90);
+    c.lineTo(Math.cos(a2)*padR*0.96,Math.sin(a2)*padR*0.96);c.stroke();
+  }
+  c.restore();
+  for(let k=0;k<8;k++){                                      // 림 광기둥
+    const a2=spin*0.5+k*Math.PI/4;
+    const lx=cx+Math.cos(a2)*padR*0.97, ly=padY+Math.sin(a2)*pry*0.97;
+    const hgt=8+6*Math.sin(DV.holoT*2+k*1.3);
+    c.fillStyle='rgba(69,215,255,.55)';c.fillRect(lx-1.2,ly-hgt,2.4,hgt);
+  }
+  c.restore();
+  /* ── 중앙: 홀로그램 차량 (3/4 와이어프레임 — 부유·스캔라인, 주행 연출 없음) ── */
+  const carW2=padR*1.85, sc=carW2/210;
+  const bob=Math.sin(DV.holoT*1.5)*3;
+  const ox=cx-105*sc, oy=padY-pry-96*sc+bob-6;
+  const P=(lx,ly)=>[ox+lx*sc,oy+ly*sc];
+  const roofY=v.md.seg.includes('미니밴')?22:v.md.seg.includes('세단')?33:28;
+  const path=pp=>{c.beginPath();pp.forEach((q,i)=>i?c.lineTo(...P(q[0],q[1])):c.moveTo(...P(q[0],q[1])));};
+  const OUT=[[10,84],[7,68],[16,56],[44,51],[76,46],[98,roofY+1],[146,roofY-1],[176,42],[198,50],[204,60],[200,80],[176,90]];
+  c.save();
+  // 차체 외곽 — 글로우 스트로크 + 반투명 필
+  path(OUT);
+  { const [wx1,wy1]=P(154,92),[wx2,wy2]=P(64,94);
+    c.lineTo(...P(175,92));c.arc(wx1,wy1,21*sc,0,Math.PI,true);
+    c.lineTo(...P(85,94));c.arc(wx2,wy2,21*sc,0,Math.PI,true);
+    c.lineTo(...P(20,90));c.closePath(); }
+  c.fillStyle='rgba(40,140,220,.10)';c.fill();
+  c.strokeStyle=HOLO.cy;c.lineWidth=1.6;c.shadowColor=HOLO.cy;c.shadowBlur=12;c.stroke();
+  c.shadowBlur=0;
+  // 휠 — 정지 상태 (림 이중 타원)
+  for(const [wx,wy] of [[64,94],[154,92]]){
+    const [ax2,ay2]=P(wx,wy);
+    c.fillStyle='rgba(8,28,52,.7)';c.beginPath();c.ellipse(ax2,ay2,20*sc,19*sc,0,0,7);c.fill();
+    c.strokeStyle=HOLO.cy;c.lineWidth=1.3;c.beginPath();c.ellipse(ax2,ay2,20*sc,19*sc,0,0,7);c.stroke();
+    c.strokeStyle='rgba(69,215,255,.55)';c.beginPath();c.ellipse(ax2,ay2,11*sc,10.5*sc,0,0,7);c.stroke();
+    c.fillStyle='rgba(69,215,255,.5)';c.beginPath();c.arc(ax2,ay2,2.2*sc,0,7);c.fill();
+  }
+  // 그린하우스·패널 라인 (와이어)
+  c.strokeStyle='rgba(120,215,255,.75)';c.lineWidth=1;
+  path([[76,47],[98,roofY+2],[114,roofY+1],[96,49]]);c.closePath();
+  c.fillStyle='rgba(90,190,255,.14)';c.fill();c.stroke();
+  path([[100,roofY+2],[144,roofY],[168,43],[102,50]]);c.closePath();
+  c.fillStyle='rgba(90,190,255,.10)';c.fill();c.stroke();
+  c.strokeStyle='rgba(120,215,255,.5)';
+  for(const ln of [[[122,roofY+1],[120,50]],[[96,50],[94,88]],[[134,49],[133,90]],[[18,64],[196,58]],[[44,51],[76,47]]]){
+    path(ln);c.stroke();}
+  // 메시 대각선 — 홀로그램 삼각망 느낌
+  c.strokeStyle='rgba(90,190,255,.16)';
+  for(const ln of [[[16,56],[76,46]],[[96,50],[133,90]],[[134,49],[94,88]],[[146,roofY-1],[176,60]],[[176,42],[204,60]],[[98,roofY+1],[146,42]],[[44,51],[62,73]]]){
+    path(ln);c.stroke();}
+  // 헤드램프·그릴·미러
+  path([[16,56],[40,53],[40,57],[20,60]]);c.closePath();
+  c.fillStyle='rgba(160,235,255,.8)';c.fill();
+  c.strokeStyle='rgba(120,215,255,.6)';
+  for(let k=0;k<3;k++){path([[9,66+k*4],[26,64+k*4]]);c.stroke();}
+  path([[77,45],[86,42],[86,45],[78,47]]);c.closePath();c.fillStyle='rgba(120,215,255,.7)';c.fill();
+  // 정점 도트 — 펄스
+  c.fillStyle=`rgba(180,240,255,${0.5+0.3*Math.sin(DV.holoT*3)})`;
+  for(const q of OUT)if(q[1]<70){const [dx2,dy2]=P(q[0],q[1]);c.fillRect(dx2-1.2,dy2-1.2,2.4,2.4);}
+  // 스캔라인 스윕
+  { const bbY=oy+roofY*sc-8, bbH=(100-roofY)*sc+16;
+    const sy2=bbY+((DV.holoT*34)%bbH);
+    const sg=c.createLinearGradient(0,sy2-6,0,sy2+6);
+    sg.addColorStop(0,'rgba(160,235,255,0)');sg.addColorStop(.5,'rgba(160,235,255,.22)');sg.addColorStop(1,'rgba(160,235,255,0)');
+    c.fillStyle=sg;c.fillRect(ox,sy2-6,210*sc,12); }
+  c.restore();
+  /* 부위 이상 펄스 — 경고등 원인 부품 (12V→후드·커넥티드→루프 안테나·EV→플로어·기타→클러스터) */
+  const partAnchor=lamp?(lamp.v.includes('12V')?P(40,56):lamp.v.includes('커넥티드')?P(126,roofY-2):lamp.v.includes('EV')?P(120,80):P(102,44)):null;
+  if(partAnchor){
+    const pr=6+3*Math.sin(DV.holoT*6);
+    c.strokeStyle=`rgba(255,90,95,${0.6+0.3*Math.sin(DV.holoT*6)})`;c.lineWidth=1.6;
+    c.beginPath();c.arc(partAnchor[0],partAnchor[1],pr,0,7);c.stroke();
+    c.fillStyle='rgba(255,90,95,.85)';c.beginPath();c.arc(partAnchor[0],partAnchor[1],2.4,0,7);c.fill();
+  }
+  /* 차량 아래 명판 */
+  c.fillStyle=HOLO.txt;c.font='700 13px Pretendard,sans-serif';c.textAlign='center';
+  c.fillText(`${v.md.name} ${v.trim} · ${v.my}MY`,cx,padY+pry+22);
+  c.fillStyle=HOLO.mut;c.font='10.5px ui-monospace,monospace';
+  c.fillText(`${maskVin(v.vin)} · ${COLORS[v.mid]}`,cx,padY+pry+38);
+  c.textAlign='left';
+  if(compact)return;
+  /* ── 상단 차트 2종 — 차속·12V SoC (진행 reveal) ── */
+  const chW=(W-2*colW-4*M)/2;
+  holoChart(c,colW+M,M,chW,104,S.spd,S.n,tk,HOLO.cy,'차속 (km/h) — 신호 원장 재생',x2=>Math.round(x2)+' km/h');
+  holoChart(c,colW+M*2+chW,M,chW,104,S.soc,S.n,tk,socHex,'12V SoC (%)',x2=>f1(x2)+'%');
+  const ax=M, aw=colW-M, rx0=W-colW, rw=colW-M;
+  /* ── 좌열 ① 부품 클로즈업 — 12V 배터리 X-ray (리더 → 후드) ── */
+  { const dh=64;
+    holoPanel(c,ax,M,aw,dh,'12V 배터리 — X-ray');
+    const ix=ax+12,iy=M+28,iw2=46,ih2=22;
+    c.fillStyle='rgba(10,30,55,.9)';c.beginPath();c.roundRect(ix,iy,iw2,ih2,3);c.fill();
+    c.fillStyle=socHex;c.fillRect(ix+2,iy+2,(iw2-4)*clamp(soc,0,100)/100,ih2-4);
+    c.fillStyle='#39506b';c.fillRect(ix+7,iy-3,6,3);c.fillRect(ix+31,iy-3,6,3);
+    c.fillStyle=HOLO.txt;c.font='700 15px Pretendard,sans-serif';c.fillText(f1(soc)+'%',ix+iw2+12,iy+15);
+    c.fillStyle=HOLO.mut;c.font='10px Pretendard,sans-serif';
+    c.fillText(DV.speed>3?'주행 충전 ↑':'암전류 방전 ↓',ix+iw2+12,iy+28);
+    holoLeader(c,ax+aw,M+dh/2,...P(40,56),socHex,soc<65||!!(lamp&&lamp.v.includes('12V')),M+104+16);
+    /* ── 좌열 ② HDA 전방 센서 (리더 → 윈드실드) ── */
+    const hy0=M+dh+10;
+    holoPanel(c,ax,hy0,aw,dh,'HDA 전방 센서');
+    const hx2=ax+12+20,hy2=hy0+42;
+    c.fillStyle=hda?HOLO.cy:'#39506b';c.beginPath();c.arc(hx2,hy2,4,0,7);c.fill();
+    c.strokeStyle=hda?'rgba(69,215,255,.7)':'rgba(110,150,190,.4)';c.lineWidth=1.3;
+    for(const rr of [8,13,18]){c.beginPath();c.arc(hx2,hy2,rr,-1.9,-1.2);c.stroke();}
+    c.fillStyle=hda?HOLO.cy:HOLO.mut;c.font='700 15px Pretendard,sans-serif';
+    c.fillText(hda?'활성':'대기',ax+70,hy0+42);
+    c.fillStyle=HOLO.mut;c.font='10px Pretendard,sans-serif';c.fillText('차선 유지 · 고속',ax+70,hy0+55);
+    holoLeader(c,ax+aw,hy0+dh/2,...P(98,roofY+2),HOLO.cy,hda);
+  }
+  /* ── 좌열 ③ 상태 트랙 — HDA/Terrain/경고등 진행 ── */
+  { const sy0=M+64+10+64+10, sh=132;
+    holoPanel(c,ax,sy0,aw,sh,'상태 트랙 — 시동 ON~OFF');
+    const rows2=[['HDA',HOLO.cy,S.hdaSeg],['Terrain',HOLO.warn,S.terSeg],['경고등',HOLO.crit,S.lamps]];
+    const rh=(sh-30)/3;
+    rows2.forEach((r2,ri)=>{
+      const yy=sy0+22+ri*rh;
+      c.fillStyle=HOLO.mut;c.font='9px Pretendard,sans-serif';c.fillText(r2[0],ax+9,yy+rh*0.62);
+      const tx0=ax+56,tw2=aw-66;
+      c.fillStyle='rgba(15,35,60,.8)';c.fillRect(tx0,yy+rh*0.2,tw2,rh*0.5);
+      for(const sg of r2[2]){
+        const x1=tx0+sg.a/(S.n-1)*tw2,x2=tx0+sg.b/(S.n-1)*tw2;
+        c.fillStyle=r2[1];c.globalAlpha=sg.a<=tk?0.85:0.28;
+        c.fillRect(x1,yy+rh*0.2,Math.max(2,x2-x1),rh*0.5);c.globalAlpha=1;}
+      c.strokeStyle='rgba(234,169,62,.85)';
+      c.beginPath();c.moveTo(tx0+Math.min(tk/(S.n-1),1)*tw2,yy+rh*0.1);
+      c.lineTo(tx0+Math.min(tk/(S.n-1),1)*tw2,yy+rh*0.8);c.stroke();
+    });
+  }
+  /* ── 좌열 ④ 이벤트 로그 — 신호 시각 재생 ── */
+  { const ly0=M+64+10+64+10+132+10, lh=H-M-ly0;
+    if(lh>56){
+      holoPanel(c,ax,ly0,aw,lh,'이벤트 로그 — 신호 시각');
+      const evs=S.evts.filter(e2=>e2.i<=tk).slice(-Math.floor((lh-28)/16));
+      c.font='10px Pretendard,sans-serif';
+      evs.forEach((e2,k)=>{
+        const last=k===evs.length-1;
+        c.fillStyle=last?HOLO.txt:HOLO.mut;
+        if(/경고등 점등/.test(e2.txt))c.fillStyle=last?HOLO.warn:'rgba(234,169,62,.6)';
+        const txt=mmss(e2.i*10)+'  '+e2.txt;
+        c.fillText(txt.length>34?txt.slice(0,33)+'…':txt,ax+10,ly0+30+k*16);
+      });
+      if(!evs.length){c.fillStyle=HOLO.mut;c.fillText('IG-ON 대기',ax+10,ly0+30);}
+    }
+  }
+  /* ── 우열 ① 루트 미니맵 (시드 맨해튼 루트 — 진행 마커) ── */
+  holoPanel(c,rx0,M,rw,178,'트립 루트 — '+CTXNM[t.ctx]);
+  { const mx0=rx0+10,my0=M+24,mw=rw-20,mh=178-36;
+    c.save();c.beginPath();c.rect(mx0,my0,mw,mh);c.clip();
+    c.strokeStyle='rgba(70,150,210,.16)';c.lineWidth=1;
+    for(let gx=mx0;gx<mx0+mw;gx+=17){c.beginPath();c.moveTo(gx,my0);c.lineTo(gx,my0+mh);c.stroke();}
+    for(let gy=my0;gy<my0+mh;gy+=17){c.beginPath();c.moveTo(mx0,gy);c.lineTo(mx0+mw,gy);c.stroke();}
+    const R=tripRoute(S,v,t);
+    const MP=q=>[mx0+q[0]*mw,my0+q[1]*mh];
+    c.strokeStyle='rgba(120,180,220,.35)';c.lineWidth=2;
+    c.beginPath();R.pts.forEach((q,i)=>{const [qx,qy]=MP(q);i?c.lineTo(qx,qy):c.moveTo(qx,qy);});c.stroke();
+    const u=Math.min(tk/(S.n-1),1);
+    c.strokeStyle=HOLO.cy;c.lineWidth=2.4;c.shadowColor=HOLO.cy;c.shadowBlur=5;
+    c.beginPath();
+    { let dmax=u*R.tot;
+      const [sx2,sy2]=MP(R.pts[0]);c.moveTo(sx2,sy2);
+      for(let i=1;i<R.pts.length;i++){
+        const segL=R.seg[i]-R.seg[i-1];
+        if(R.seg[i]<=dmax){const [qx,qy]=MP(R.pts[i]);c.lineTo(qx,qy);}
+        else{const f=segL>0?(dmax-R.seg[i-1])/segL:0;
+          if(f>0){const a2=R.pts[i-1],b2=R.pts[i];
+            const [qx,qy]=MP([a2[0]+(b2[0]-a2[0])*f,a2[1]+(b2[1]-a2[1])*f]);c.lineTo(qx,qy);}
+          break;}
+      }}
+    c.stroke();c.shadowBlur=0;
+    const [ex2,ey2]=MP(R.pts[R.pts.length-1]);
+    c.strokeStyle=HOLO.mut;c.strokeRect(ex2-3,ey2-3,6,6);          // 도착
+    const [px2,py2]=MP(routeAt(R,u));
+    c.fillStyle='rgba(69,215,255,.25)';c.beginPath();c.arc(px2,py2,8,0,7);c.fill();
+    c.fillStyle=HOLO.cy;c.beginPath();c.arc(px2,py2,3.4,0,7);c.fill();
+    c.restore();
+    if(surf!=='NORMAL'){c.fillStyle=HOLO.warn;c.font='700 10px Pretendard,sans-serif';
+      c.textAlign='right';c.fillText(surf+' 구간',rx0+rw-9,M+15);c.textAlign='left';}
+  }
+  /* ── 우열 ② 차대 상태도 (탑뷰 — 부품 하이라이트) ── */
+  holoPanel(c,rx0,M+188,rw,196,'차대 상태도 — 탑뷰');
+  { const ccx=rx0+rw/2, top=M+188+30, bh2=150, bw2=bh2*0.44;
+    c.strokeStyle=HOLO.cy;c.lineWidth=1.3;
+    c.beginPath();c.roundRect(ccx-bw2/2,top,bw2,bh2,bw2*0.34);c.stroke();
+    c.strokeStyle='rgba(120,215,255,.5)';c.lineWidth=1;
+    c.beginPath();c.moveTo(ccx-bw2/2+5,top+bh2*0.26);c.quadraticCurveTo(ccx,top+bh2*0.20,ccx+bw2/2-5,top+bh2*0.26);c.stroke();
+    c.beginPath();c.moveTo(ccx-bw2/2+5,top+bh2*0.78);c.quadraticCurveTo(ccx,top+bh2*0.84,ccx+bw2/2-5,top+bh2*0.78);c.stroke();
+    for(const [wy2,side] of [[top+bh2*0.16,-1],[top+bh2*0.16,1],[top+bh2*0.84,-1],[top+bh2*0.84,1]]){
+      c.fillStyle=surf!=='NORMAL'?'rgba(234,169,62,.75)':'rgba(69,215,255,.4)';
+      c.fillRect(ccx+side*bw2/2-(side>0?0:6),wy2-9,6,18);}
+    const bx2=ccx-9,by2=top+12;
+    c.fillStyle='rgba(10,30,55,.9)';c.fillRect(bx2,by2,18,12);
+    c.fillStyle=socHex;c.fillRect(bx2+1.5,by2+1.5,15*clamp(soc,0,100)/100,9);
+    c.strokeStyle=lamp&&lamp.v.includes('12V')?HOLO.crit:HOLO.border;c.strokeRect(bx2,by2,18,12);
+    c.fillStyle=HOLO.mut;c.font='700 9px Pretendard,sans-serif';c.fillText('BATT',bx2+22,by2+10);
+    const tcx=ccx-5,tcy=top+bh2*0.48;
+    c.strokeStyle=lamp&&lamp.v.includes('커넥티드')?HOLO.crit:HOLO.border;
+    c.strokeRect(tcx,tcy,10,10);
+    c.fillStyle=HOLO.mut;c.fillText('TCU',tcx+14,tcy+9);
+    if(v.md.ev){
+      const pex=ccx-11,pey=top+bh2*0.66;
+      c.strokeStyle=lamp&&lamp.v.includes('EV')?HOLO.crit:HOLO.border;
+      c.strokeRect(pex,pey,22,9);
+      c.fillStyle=HOLO.mut;c.fillText('PE',pex+26,pey+8);}
+    if(hda){
+      c.fillStyle='rgba(69,215,255,.16)';
+      c.beginPath();c.moveTo(ccx,top+2);c.lineTo(ccx-bw2*0.8,top-14);c.lineTo(ccx+bw2*0.8,top-14);c.closePath();c.fill();}
+    if(lamp){
+      const pt2=lamp.v.includes('12V')?[bx2+9,by2+6]:lamp.v.includes('커넥티드')?[tcx+5,tcy+5]:lamp.v.includes('EV')?[ccx,top+bh2*0.70]:[ccx,top+bh2*0.40];
+      c.strokeStyle=`rgba(255,90,95,${0.55+0.35*Math.sin(DV.holoT*6)})`;c.lineWidth=1.5;
+      c.beginPath();c.arc(pt2[0],pt2[1],9+2*Math.sin(DV.holoT*6),0,7);c.stroke();}
+  }
+  /* ── 우열 ③ 지표 타일 6종 ── */
+  const tiles=[
+    ['차속',Math.round(DV.speed)+' km/h',HOLO.txt,DV.speed>1],
+    ['12V SoC',f1(soc)+'%',socHex,soc<65],
+    ['HDA',hda?'활성':'대기',hda?HOLO.cy:HOLO.mut,hda],
+    ['노면',surf==='NORMAL'?'일반':surf,surf!=='NORMAL'?HOLO.warn:HOLO.mut,surf!=='NORMAL'],
+    ['경고등',lamp?lamp.v:'정상',lamp?HOLO.warn:HOLO.good,!!lamp],
+    ['구간',f1(t.km*Math.min(tk/(S.n-1),1))+' / '+t.km+' km',HOLO.txt,false],
+  ];
+  { const ty0=M+188+196+10, th2=Math.min(tiles.length*24+26,H-M-ty0);
+    if(th2>70){
+      holoPanel(c,rx0,ty0,rw,th2,'시점 상태 — 신호 판독');
+      tiles.forEach((tl,k)=>{
+        const yy=ty0+22+k*24;
+        if(yy+20>ty0+th2)return;
+        c.fillStyle=tl[3]?tl[2]:'rgba(110,150,190,.5)';
+        c.beginPath();c.arc(rx0+16,yy+8,3,0,7);c.fill();
+        c.fillStyle=HOLO.mut;c.font='10.5px Pretendard,sans-serif';c.fillText(tl[0],rx0+28,yy+12);
+        c.fillStyle=tl[2];c.font='700 12px Pretendard,sans-serif';c.textAlign='right';
+        c.fillText(tl[1].length>18?tl[1].slice(0,17)+'…':tl[1],rx0+rw-10,yy+12);c.textAlign='left';
+      });
+    }
+  }
+  /* 경고 비네트 */
+  if(lamp){
+    const a2=0.08+0.06*Math.sin(DV.holoT*5);
+    const g4=c.createRadialGradient(W/2,H*0.55,H*0.3,W/2,H*0.55,H*0.9);
+    g4.addColorStop(0,'rgba(234,169,62,0)');g4.addColorStop(1,`rgba(234,169,62,${a2})`);
+    c.fillStyle=g4;c.fillRect(0,0,W,H);
+  }
+}
+/* ── HUD — 속도계·텔테일·12V·정보 ── */
+function drawHud(){
+  const S=DV.S,tk=DV.tick;
+  const ang=-210+clamp(DV.speed,0,160)/160*240;
+  const nd=document.getElementById('dvNeedle');
+  if(nd)nd.setAttribute('transform',`rotate(${ang+90} 95 86)`);
+  const dg=document.getElementById('dvDig');
+  if(dg)dg.textContent=Math.round(DV.speed);
+  const soc=lerpAt(S.soc,S.n,tk);
+  const bi=$('battBar').firstElementChild;
+  bi.style.width=clamp(soc,0,100)+'%';bi.className=soc<60?'low':'';
+  $('battPct').textContent=f1(soc)+'%';
+  const lamp=lampAtF(S,tk),hda=hdaAtF(S,tk),surf=surfAt(S,tk);
+  $('ttBatt').className='tt'+((lamp&&lamp.v.includes('12V'))||soc<58?' amber':'');
+  $('ttHda').className='tt'+(hda?' on':'');
+  $('ttTer').className='tt'+(surf!=='NORMAL'?' amber':'');
+  $('ttTer').textContent=surf!=='NORMAL'?'TERRAIN · '+surf:'TERRAIN';
+  $('ttLamp').className='tt'+(lamp?' amber':'');
+  $('ttLamp').textContent=lamp?'⚠ '+lamp.v:'⚠ —';
+  // 경고 배너 — 상태 변화 시 2.5초
+  const lk=lamp?lamp.v:null;
+  if(lk!==DV.lastLamp){
+    if(lk){$('dvEvt').textContent='⚠ 경고등 점등 — '+lk;$('dvEvt').style.display='block';DV.evtUntil=performance.now()+2500;}
+    else if(DV.lastLamp){$('dvEvt').textContent='경고등 소등 — '+DV.lastLamp;$('dvEvt').style.display='block';DV.evtUntil=performance.now()+1800;}
+    DV.lastLamp=lk;
+  }
+  if(DV.evtUntil&&performance.now()>DV.evtUntil){$('dvEvt').style.display='none';DV.evtUntil=0;}
+  const simS=tk*S.dt,tot=(S.n-1)*S.dt;
+  const km=DV.t.km*tk/(S.n-1);
+  const odo=DV.v.odo[clamp(DV.t.d-1,0,NOWD)]+km;
+  $('dvInfo').innerHTML=`경과 <b>${mmss(simS)}</b>/${mmss(tot)} · 구간 <b>${f1(km)}</b>/${DV.t.km}km`+
+    ` · 기어 <b>${DV.speed>1?'D':'P'}</b> · ODO <b>${Math.round(odo).toLocaleString()}</b>km`;
+}
+/* ── 스크러버 — 차속 프로파일 + HDA/경고 구간 + 커서 ── */
+function drawScrub(){
+  const cv=$('dvScrub'),c=cv.getContext('2d');
+  const W=cv.width,H=cv.height,S=DV.S,PL=4,PT=13,PB=6;
+  c.clearRect(0,0,W,H);
+  const vmax=Math.max(20,S.vmax),X=i=>PL+i/(S.n-1)*(W-2*PL),Y=v2=>H-PB-v2/vmax*(H-PT-PB);
+  c.fillStyle='rgba(88,209,201,.25)';
+  for(const h2 of S.hdaSeg)c.fillRect(X(h2.a),H-PB-3,X(h2.b)-X(h2.a),3);
+  c.fillStyle='rgba(234,169,62,.4)';
+  for(const l of S.lamps)c.fillRect(X(l.a),PT,X(l.b)-X(l.a),2.5);
+  c.strokeStyle='#8f96a2';c.lineWidth=1.2;c.beginPath();
+  for(let i=0;i<S.n;i++){const px2=X(i),py=Y(S.spd[i]);i?c.lineTo(px2,py):c.moveTo(px2,py);}
+  c.stroke();
+  c.strokeStyle='var(--warn)';c.strokeStyle='#eaa93e';c.lineWidth=1.4;
+  c.beginPath();c.moveTo(X(DV.tick),PT-4);c.lineTo(X(DV.tick),H-2);c.stroke();
+}
+$('dvScrub').addEventListener('click',e=>{
+  if(!DV)return;
+  const r=e.currentTarget.getBoundingClientRect();
+  DV.tick=clamp((e.clientX-r.left-4)/(r.width-8),0,1)*(DV.S.n-1);
+  DV.ended=false;DV.playing=true;$('dvMsg').style.display='none';$('dvPlay').textContent='∥ 일시정지';
+});
+$('dvPlay').addEventListener('click',()=>{
+  if(!DV)return;
+  if(DV.ended){DV.tick=0;DV.pos=0;DV.ended=false;DV.playing=true;$('dvMsg').style.display='none';$('dvPlay').textContent='∥ 일시정지';return;}
+  DV.playing=!DV.playing;$('dvPlay').textContent=DV.playing?'∥ 일시정지':'▶ 재생';
+});
+$('dvRate').addEventListener('click',()=>{
+  if(!DV)return;
+  DV.rate=DV.rate===1?2:DV.rate===2?4:1;
+  $('dvRate').textContent='배속 ×'+DV.rate*10;
+});
+$('dvClose').addEventListener('click',closeDrive);
+$('btnDrive').addEventListener('click',()=>openDrive(selTrip));
+window.addEventListener('keydown',e=>{if(e.key==='Escape'&&DV)closeDrive();});
+</script>
+</body>
+</html>

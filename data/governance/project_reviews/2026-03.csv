@@ -1,0 +1,2 @@
+ym,project_id,project_name,goal_node,metric,expect_value,actual_value,verdict
+2026-03,PRJ-SOL-LAUNCH,Solara EV 런칭 준비,KPI-SHARE,런칭 준비율 %,100.0,24.2,진행중

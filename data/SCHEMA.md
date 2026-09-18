@@ -39,6 +39,13 @@ data/
 ├── csi_external / csi_internal / csi_actions/   # 고객만족도 3종 (§5)
 ├── production / orders / logistics_intransit / price_incentive /
 │   marketing_spend / market_industry / service_quality/   # 운영 데이터 (§4)
+├── bp_trim_mix/<MY>.csv          # ★라이프사이클: 트림믹스 결정 + FOB (§10)
+├── marketing_media / order_plan / voc_category /
+│   quality_actions / parts_pnl/  # ★라이프사이클: 월 파티션 (§10)
+├── governance/                # ★V10 거버넌스: ceo_tree(CEO KPI)·ai_agents·projects (마스터)
+│   ├── workflow_gates/<YM>.csv   #   게이트 상태 원장 — HITL/AI 위임 (§11)
+│   └── project_reviews/<YM>.csv  #   프로젝트 기대 vs 실측 리뷰 (§11)
+├── facility_energy/<YM>.csv   # ★V10: 캠퍼스 동관/서관×층 전력 원장 — HVAC 레버 (§11)
 └── _generator/generate.py     # 생성기 (시드 20260820 고정 — 재실행해도 동일)
 ```
 
@@ -237,3 +244,174 @@ data/
 3. **BP도 같은 믹스 모델로 상향식 생성** (agg_kpi_bp) — 필터가 무엇이든 계획 대비가 성립하고, 실적으로 믹스 모델을 재캘리브레이션하면 BP 정확도가 유지된다.
 4. **외부 지표는 내부 지수로 매개** — 외부 CSI처럼 직접 만들 수 없는 데이터는, 내부 원장과 연계된 구성요소 지수(csi_internal)로 재구성하고 개선 활동(csi_actions)으로 관리한다.
 5. **새 필터 차원 추가 절차**: vehicle_master 속성 추가 → 생성기(믹스 모델) 확장 → 원장·큐브·BP·프론트 전체 downstream 자동 재생성.
+
+---
+
+## 10. 라이프사이클 데이터 (V9) — 연간 업무 사이클의 실체
+
+판매법인의 1년 사이클(상품 준비 → BP·트림믹스·FOB → 마케팅 → 월 주문 → 판매 → VoC·품질 → 서비스·Parts)을
+각 단계의 데이터 실체로 정의한다. v9 라이프사이클 트윈이 이 데이터로 "지금 어떤 업무가 실행 중인가"를 표현한다.
+
+### master/biz_calendar.csv — 연간 업무 캘린더 (파티션 없음)
+그레인: 업무 활동. `cadence`: annual(월 창 m_from~m_to) / quarterly / monthly / continuous / event.
+
+| 컬럼 | 설명 | 샘플 |
+|---|---|---|
+| activity_id / phase | 활동 ID / 단계(product·bp·marketing·order·sales·quality·service) | `BP-2` / `bp` |
+| activity_name / cadence | 이름 / 주기 | `차년도 트림믹스 결정` / `annual` |
+| month_from / month_to | 연간 활동의 실행 월 창 (1~12, 반복형은 0) | `10` / `10` |
+| owner / output_dataset | 담당 조직 / 산출 데이터셋 | `판매법인 상품` / `bp_trim_mix` |
+
+### master/product_plan.csv — 상품 준비 (신차·신규 트림·Feature)
+그레인: MY×아이템. 게이트: G1 기획 → G2 개발 → G3 인증 → G4 런칭.
+
+| 컬럼 | 설명 | 샘플 |
+|---|---|---|
+| model_year / model_id / item_type | MY / 차종 / new_model·new_trim·feature·my_change | `2027` / `SOL` / `new_model` |
+| item_name / target_launch_ym / gate / ready_pct | 아이템·런칭 목표·게이트·준비율 | `Solara EV (준중형 EV 세단)` / `2027-03` / `G2` / `45` |
+
+### bp_trim_mix/<MY>.csv — 트림믹스 결정 + FOB ★BP → 생산법인 전달
+그레인: 계획MY×차종×트림. 연 사이클: 8~10월 BP 수립 → 10월 트림믹스 결정 → 11월 생산법인 전달·FOB 확정.
+NOW(2026-08) 기준 2025·2026은 `FOB 확정`, 2027은 `수립 중 (BP-1)`.
+
+| 컬럼 | 설명 | 샘플 |
+|---|---|---|
+| plan_my / model_id / trim_id | 키 | `2027` / `TRN` / `TRN-SU` |
+| mix_prev_pct / mix_plan_pct | 전년 믹스 → 계획 믹스 (EV 상위 트림 강화) | `21.0` → `22.5` |
+| plan_ws_qty | 계획 Wholesale (연간, 대) | `45133` |
+| fob_usd / fob_prev_usd | FOB(≈MSRP×0.62, 연 +2.5%) / 전년 FOB | `39580` / `38614` |
+| plant_id / status / decided_ym | 생산법인 / 상태 / 확정월 | `US-GA` / `수립 중 (BP-1)` / |
+
+### marketing_media/ — 매체 제작·퍼포먼스 (월 파티션)
+그레인: 월×분기캠페인×매체. 차종별 주력 Feature 대상 매체 제작(크리에이티브) 후 집행·퍼포먼스 관리.
+
+| 컬럼 | 설명 | 샘플 |
+|---|---|---|
+| campaign_id / model_id / feature_focus | 분기 캠페인 / 차종 / 주력 Feature | `LUM-26Q3` / `LUM` / `OTA 2.0 커넥티드` |
+| medium / asset_name | TV·DIG·SOC·SRCH / 제작물 | `DIG` / `OTA 2.0 커넥티드 디지털 크리에이티브` |
+| spend_musd / impressions_m / clicks_k / ctr_pct / cpm_usd | 집행비·퍼포먼스 | `1.7` / `179.6` / `1616` / `0.9` / `9.5` |
+| status | 제작·런칭 → 집행중 → 집행중(최적화) | `집행중` |
+
+### order_plan/ — 월 생산 주문 실행 원장 ★DoS Weight 배분
+그레인: 주문월×차종×지역×트림×색상 (720행/월). **주문 = 차종 총주문 × (과거 3개월 Retail MA × DoS Weight) 정규화 배분**,
+`Weight = clamp(목표DS 60 / 셀 DS, 0.6~1.6)`. 재고 믹스는 2~4개월 전 주문분이라 색상 수요 이동(§7 A2) 시
+DS 괴리가 생기고 Weight가 주문을 보정한다 — 차종 합계는 orders/와 일치. **v9 프론트가 같은 수식을 JS로 실행**한다.
+
+| 컬럼 | 설명 | 샘플 (A2 이후 west LUM) |
+|---|---|---|
+| ym_order / model_id / zone_id / trim_id / color | 키 | `2026-08` / `LUM` / `west` / `LUM-AI` / `스노우 화이트` |
+| retail_ma3 / stock_qty / ds_days | 셀 판매 속도·재고·DS | `177.9` / `448` / `76.6` |
+| dos_weight / order_qty / prod_ym | Weight / 주문량 / 생산 예정월 | `0.78` / `139` / `2026-10` |
+
+### voc_category/ — VoC 카테고리 모니터링 ★품질/안전 파이프라인 입력
+그레인: 월×차종×카테고리 9종(파워트레인·전장/배터리·커넥티드/SW·바디·샤시/조향·안전/ADAS·인포테인먼트·공조·기타).
+스파이크 주입: LUM 커넥티드(→OTA), AUR 전장·안전(→FSC), TRN 파워트레인·MRD 공조(→TSB), **VST 샤시/조향(2026-07~ 신규 탐지, 조치 미배정)**.
+
+| 컬럼 | 설명 | 샘플 |
+|---|---|---|
+| model_id / category / voc_cnt / voc_per_1k_uio | 차종·카테고리·건수·1000대당 | `VST` / `샤시/조향` / `81` / `1.1` |
+| severity / safety_flag | low·med·high / 안전 이슈 플래그 | `high` / `0` |
+
+### quality_actions/ — 품질 조치 원장 (TSB·OTA·FSC·조사)
+그레인: 월×조치. VoC 스파이크 탐지 → 조치 배정 → 적용 누계에 따라 클레임 소멸(csi_actions와 동일 사건 공유).
+
+| 컬럼 | 설명 | 샘플 |
+|---|---|---|
+| action_id / action_type | 조치 / TSB·OTA·FSC·조사 | `OTA-2606-LUM` / `OTA` |
+| model_id / category / title / detected_ym | 대상·카테고리·제목·탐지월 | `LUM` / `커넥티드/SW` / / `2026-05` |
+| target_vins / applied_vins_cum | 대상 / 적용 누계 | `10000` / `9500` |
+| claim_per_1k_before / claim_per_1k_now / status | 클레임률 전→후 / 조치중·완결·원인 조사중 | `8.5` → `0.4` / `완결` |
+
+### parts_pnl/ — Parts 손익 + Dealer Net/Factory 균형
+그레인: 월×부품 카테고리 6종. 고객부담(CP) 정비 Parts는 판매법인 이익원(마진 26%), 워런티·캠페인 Parts 가격은
+**Dealer Net과 Factory 정산 기준 사이 균형** 필요 — 갭(%)이 크면(딜러 유리) 워런티 마진 압박.
+2026-02 가격 개정(`PARTS_REPRICE`)으로 갭 60% 축소.
+
+| 컬럼 | 설명 | 샘플 |
+|---|---|---|
+| part_category | 엔진/PT·전장/배터리·바디·샤시·소모품·액세서리 | `전장/배터리` |
+| cp_sales_kusd / warranty_sales_kusd / campaign_sales_kusd | 채널별 Parts 매출 k$ | `1276` / `1188` / `0` |
+| dealer_net_idx / factory_price_idx / gap_pct | DN 지수 / Factory 기준 100 / 갭 | `107.2` / `100` / `7.2` |
+| sc_margin_pct | 판매법인 블렌디드 마진 (갭↑ → 워런티 마진↓) | `16.7` |
+
+## 11. 거버넌스 데이터 (V10) — 목표 트리 · 워크플로우 게이트 · 프로젝트
+
+> V10 디지털 트윈 월드의 원장. "회사가 무엇을 목표로, 누가(사람/AI) 무엇을 승인하며,
+> 어떤 프로젝트가 어떤 결과를 냈는가"를 데이터로 남긴다.
+> 설계 근거: `docs/twin-world-consulting-review.md` §3, HITL 원칙은 `docs/oem-us-sales-process-research.md` §3.4.
+
+### governance/ceo_tree.csv — CEO KPI 트리 마스터
+CEO 목표(1년 관리) = **3영역 × 14 KPI × 다운스트림 노드**의 단일 트리.
+영역 가중치 = 산하 KPI 가중치 합: 재무 37%(ASP 5 · 경상이익률 5 · 합산손익 12 · 합산손익률 15),
+사업 35%(도매판매량 10 · 볼륨 SUV 육성 10 · 시장점유율 10 · 친환경 소매 5),
+지속경영 25%(그린워싱 5 · Full SI 2.0 5 · 고객만족도 서비스/판매 각 3.5 · 보안 3 · 브랜드트래커 5).
+`bind`는 프론트 계산 키(빈 값 = **미연결** → 데이터 수집 프로젝트 신설 대상), `lever`는 전략
+레버 키(`hvac` = 전력사용량). 다운스트림은 앱폴더(아이폰 폴더식)로 한 단계씩 탐색되며,
+예시 딥 체인: `경상이익률(KPI-RECUR) → 오피스 관리비(ND-OPEX) → 전력사용량(ND-ENERGY)`.
+값 롤업은 온톨로지 데이터(leaf)에서 KPI → 영역 → CEO 종합으로 상향.
+
+| 컬럼 | 샘플 |
+|---|---|
+| node_id / parent_id / level / kind | `ND-ENERGY` / `ND-OPEX` / `node` / `metric` |
+| node_name / short_name / weight_pct | `전력사용량` / `전력` / `0` (KPI만 가중치) |
+| bind / unit / direction / lever | `energy` / `$` / `-` / `hvac` |
+
+### facility_energy/ (월 파티션) + governance/office_zones.csv — 시설 원장 (오피스 관리비의 실체)
+HQ 캠퍼스 **동관·서관 × 3층 × 구역(24개)** 그레인. `office_zones.csv`는 구역 마스터
+(타입 사무/회의/공용/항온 + 면적 + **임차 계약 rent_usd_month** — 임차/시설 지표의 정본),
+`facility_energy/`는 월 전력 원장 — `kwh_peak_hvac`(항온존=0)가 HVAC 전략 레버의 대상.
+온톨로지 객체 `facility`·`energyMeter`(구역 그레인, v0.11.0)와 바인딩. 레버 시뮬레이션은
+**전략 월드 — 오피스 관리비**(`v10-opex-sim.html`)가 상수 미러(`rate_peak 0.29 / rate_off
+0.115 / −5%/°C / 예냉 이동 12% / ZTYPE 배율`)로 실행 — 냉방기 기준 온도 전략 **월 ≈ $1만 절감**,
+임차 재계약·공용 반납·조명/ESS 레버 포함 시 그 이상 → 관리비 → 경상이익률 상향 전파.
+소모품/기타는 **미연결**(예산 모델 추정 — 데이터 수집 프로젝트 대상).
+
+| facility_energy 컬럼 | 샘플 |
+|---|---|
+| ym / building / floor / zone_id / zone_name / zone_type | `2026-07` / `동관` / `1` / `E1-SRV` / `서버실` / `항온` |
+| area_m2 / temp_set_c | `400` / `20.0` |
+| kwh_peak / kwh_off / kwh_peak_hvac / cost_usd | `20465` / `14819` / `0` / `7639` |
+
+### governance/workflow_gates/ (월 파티션) — 게이트 상태 원장
+활동(biz_calendar)이 활성인 달의 게이트 체인 상태. **과거 월 = 완결된 감사 이력
+(승인/실행완료), 현재 월(NOW) = 라이브 큐** — 선행 AI/자동 게이트 완료 → 다음 HITL 게이트
+검토대기 → 이후 예정. 규칙 기반·난수 없음(감사 가능성). QLT-2(이벤트)는 quality_actions
+상태로 판정(조사중→G1 검토대기, 조치중→G2 실행완료, 완결→G3 승인).
+
+| 컬럼 | 샘플 |
+|---|---|
+| ym, activity_id, phase | `2026-08`, `ORD-1`, `order` |
+| gate_seq / gate_id / gate_name | `2` / `G2` / `주문 승인` |
+| gate_type | `hitl`(사람 승인) · `ai`(에이전트 위임) · `auto`(시스템) |
+| owner / status | `오더 매니저` / `검토대기` (승인·실행완료·실행중·검토대기·예정) |
+
+### governance/ai_agents.csv — AI 에이전트 레지스트리
+위임 업무의 실행 주체. `scope_activity`가 담당 활동, `accuracy_pct`는 초안 채택률.
+(AGT-ORD 주문 배분 97.2 · AGT-VOC VoC 분류 94.8 · AGT-MED 매체 예산 91.5 · AGT-VIN VIN 추출 99.6 · AGT-BP BP 초안 89.0)
+
+### governance/projects.csv + project_reviews/ (월 파티션) — 프로젝트 원장·리뷰
+목표 노드 아래 Top-down으로 구성된 프로젝트. `linked_objects`는 온톨로지 객체 키
+(`type:id`, `|` 구분) — 프로젝트 추가 시 연계 객체와의 관계를 명시한다. 리뷰 원장은
+월별 기대(expect) vs 실측(actual, **기존 원장에서 파생**: OTA 클레임·order_plan Weight·
+parts 갭 등) → 판정(달성/진행중). 예: PRJ-OTA-LUM은 csi_actions와 동일 사건.
+
+| projects.csv 컬럼 | 샘플 |
+|---|---|
+| project_id / project_name / goal_node / template | `PRJ-GRAY-ORD` / `그레이 색상 수요 대응 증산` / `K-DS` / `order` |
+| model_id / start_ym / end_ym / status | `LUM` / `2026-06` / `` / `진행중` |
+| metric / expect_value / linked_objects | `NE 그레이 Weight` / `1.2` / `model:LUM\|salesZone:northeast` |
+
+| project_reviews 컬럼 | 샘플 |
+|---|---|
+| ym / project_id / metric | `2026-08` / `PRJ-GRAY-ORD` / `NE 그레이 Weight` |
+| expect_value / actual_value / verdict | `1.2` / `1.34` / `달성` |
+
+### feature_usage/ (월 파티션) — 차량 신호 월 스냅샷 (학습 피처 원장)
+`ym, model_id, hda_usage_pct, trailer_mode_pct, fota_install_pct, connected_optin_pct,
+dtc_per_1k, trips_per_vehicle` — 월×차종. IT 전략 월드(차량 데이터)와 온톨로지
+`featureUsageEvent`(bound)의 원장. **DTC/1k는 내부지수(csi_internal)가 쓰는
+claim_rate와 동일 소스에서 파생**되어 차량 신호 ↔ KPI의 인과가 데이터 안에 실재한다
+(LUM 커넥티드 결함·AUR FSC 스토리) — KPI 드라이버 발굴(상관 학습)의 근거.
+학습 모델은 온톨로지 `mlModel`(derived) 레지스트리로 선언: v0 = 시즌+추세(포커스
+그래프 FORECAST), v1 = 드라이버 회귀, v2 = 레버 시나리오 생성. 마트가 온톨로지에
+bound로 선언되어 있어야 학습 가능하다는 것이 확장 원칙.

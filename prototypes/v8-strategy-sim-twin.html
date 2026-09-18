@@ -309,7 +309,7 @@ html{scrollbar-color:#3a3a36 transparent}
 </head>
 <body>
 <header>
-  <h1>전략 시뮬레이션 트윈 v8 <small>미국판매법인 SC-US · 생산/판매 2층 · 온톨로지 연동</small></h1>
+  <h1>전략 시뮬레이션 트윈 v8 <small><span id="entName">미국판매법인 SC-US</span> · 생산/판매 2층 · 온톨로지 연동</small></h1>
   <button id="btnBrief" title="오늘의 3가지 · 결정 스코어보드 — 첫 화면">오늘의 브리핑</button>
   <button id="btnAna" title="사양·지역 믹스 드릴다운">상세 분석</button>
   <button id="btnOnto" title="온톨로지 관계 뷰 — 객체(HQ·지역사무소·딜러·공장·고객·차량·서비스) 선택 시 해당 객체, 미선택 시 전체 관계 뷰">온톨로지</button>
@@ -439,9 +439,18 @@ html{scrollbar-color:#3a3a36 transparent}
   <div id="drillBody"></div>
 </div>
 
+<script src="entity-config.js"></script><!-- 법인 프로필 — development/entity-profile.md 빌드 생성물 (없어도 기본값으로 동작) -->
 <script src="v7-data.js"></script>
 <script src="v7-ontology.js"></script>
 <script src="v7-ontology-instances.js"></script>
+<script>
+// 법인 프로필 적용 — 제목줄 법인명을 V10 트윈 월드와 일치시킨다
+if (window.ENTITY_CONFIG && window.ENTITY_CONFIG.entity && window.ENTITY_CONFIG.entity.name) {
+  const e = window.ENTITY_CONFIG.entity;
+  document.getElementById('entName').textContent = e.name + (e.code ? ' ' + e.code : '');
+  document.title = `V8 · 전략 시뮬레이션 트윈 — ${e.name}${e.code ? '(' + e.code + ')' : ''} · 생산/판매 2층 + 온톨로지`;
+}
+</script>
 <script>
 'use strict';
 /* ═══════════════ PART A · 데이터 접근 + 시뮬레이션 엔진 (DOM 무관) ═══════════════ */
@@ -2750,6 +2759,8 @@ recompute();
 seek(NOW);
 if (!location.hash.includes('noBrief')) openBrief();   // 첫 화면 = 오늘의 브리핑 (CEO 1-DAU)
 // 온톨로지 액션의 [디지털 트윈 확인] 경유 진입(#noBrief)은 브리핑 없이 트윈 씬으로 직행
+// V10 임베드(iframe 소환) — 제목줄 1개 원칙: 자체 타이틀은 숨기고 기능 버튼(브리핑·분석·프리셋)만 남긴다
+if (window.parent !== window) document.querySelector('header h1').style.display = 'none';
 </script>
 <!-- ═══ v8: 온톨로지 관계 뷰 오버레이 — [온톨로지] 버튼: 선택 객체의 관계 뷰, 미선택 시 전체 관계 뷰 ═══ -->
 <style>

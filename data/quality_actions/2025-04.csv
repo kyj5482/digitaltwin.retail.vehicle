@@ -1,0 +1,2 @@
+ym,action_id,action_type,model_id,category,title,detected_ym,target_vins,applied_vins_cum,claim_per_1k_before,claim_per_1k_now,status
+2025-04,TSB-2504-TRN,TSB,TRN,파워트레인,오일 시일 누유 점검·교환 TSB,2025-04,5200,900,3.8,3.1,조치중

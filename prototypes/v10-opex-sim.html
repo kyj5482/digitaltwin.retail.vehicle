@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ============================================================================
+V10.O 전략 월드 — 오피스 관리비
+디지털 트윈 월드(V10)의 오피스 관리비 노드에서 [시뮬레이션]으로 소환되는 도메인 전용
+전략 월드. V8 전략 월드와 같은 문법: 좌측 KPI 리스트(전력사용량·임차/시설·소모품/기타)
+→ 클릭하면 해당 데이터로 씬 전환(동관/서관 × 3층 × 구역), 우측 전략 레버, 하단 Play
+타임라인(실적 32개월 + 미래 12개월 SIMULATED)과 향후 시뮬레이션 그래프.
+[트윈 월드에 적용]은 postMessage로 V10 레버에 환류, 투자 레버는 프로젝트 신설로 환류.
+데이터: v7-data.js governance.facility(구역 그레인)·zones(임차 마스터)·energy 상수 미러
+============================================================================= -->
+<title>V10.O 전략 월드 — 오피스 관리비 (3층×구역 · Play · 미래 시뮬)</title>
+<style>
+:root{
+  --page:#161614;--surface:#1e1e1c;--surface2:#262623;--line:#33332f;
+  --ink:#f0efec;--muted:#a3a199;--edge:#6e6e67;--edge-hi:#79b8ff;
+  --good:#4cc38a;--warn:#eaa93e;--crit:#e5484d;--sim:#b58cff;--na:#57554e;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--page);color:var(--ink);overflow:hidden;display:flex;flex-direction:column;
+  font:13px/1.45 Pretendard,"Apple SD Gothic Neo","Segoe UI",system-ui,sans-serif;
+  font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+header{height:46px;flex:0 0 46px;display:flex;align-items:center;gap:12px;padding:0 14px;
+  background:var(--surface);border-bottom:1px solid var(--line)}
+header h1{font-size:14px;font-weight:700}
+header .sub{font-size:11.5px;color:var(--muted)}
+header .chip{margin-left:auto;font-size:10.5px;color:var(--sim);border:1px solid var(--sim);border-radius:9px;padding:2px 9px}
+#main{flex:1;display:grid;grid-template-columns:218px 1fr 322px;grid-template-rows:100%;min-height:0}
+#rail{border-right:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:8px}
+#side{border-left:1px solid var(--line);background:var(--surface);overflow-y:auto;padding:10px}
+.railTtl{font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin:6px 4px 8px}
+.kpiTile{width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);
+  border-left:3px solid var(--line);border-radius:7px;padding:9px 10px;margin-bottom:6px;transition:border-color .15s}
+.kpiTile:hover{border-color:var(--edge)}
+.kpiTile.sel{border-color:var(--edge-hi)}
+.kpiTile .nm{font-size:12px;font-weight:600;display:flex;gap:6px;align-items:center}
+.kpiTile .nm .tag{margin-left:auto;font-size:9px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:0 6px}
+.kpiTile .nm .tag.na{color:var(--na);border-color:var(--na)}
+.kpiTile .v1{font-size:15px;font-weight:700;margin-top:3px}
+.kpiTile .v2{font-size:10.5px;color:var(--muted);margin-top:1px}
+.kpiTile .v2 .sv{color:var(--good)}
+#center{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+#sceneWrap{flex:1;position:relative;min-height:0;overflow:hidden}
+#scene{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+#scene:active{cursor:grabbing}
+#modeBar,#dayBar{position:absolute;right:10px;z-index:3;display:flex;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface)}
+#modeBar{top:8px}
+#dayBar{top:42px;display:none}
+#modeBar button,#dayBar button{padding:4px 13px;font-size:11.5px;color:var(--muted);border-right:1px solid var(--line)}
+#dayBar button{padding:3px 9px;font-size:11px}
+#modeBar button:last-child,#dayBar button:last-child{border-right:none}
+#modeBar button.on,#dayBar button.on{background:color-mix(in srgb,var(--edge-hi) 22%,transparent);color:var(--ink)}
+#dayBar button.we{color:var(--crit)}
+#dayBar button.we.on{color:var(--ink)}
+#zoomHint{position:absolute;bottom:8px;right:10px;z-index:3;font-size:10px;color:var(--muted);opacity:.75}
+#simBand{flex:0 0 200px;border-top:1px solid var(--line);position:relative;background:var(--surface)}
+#simBand .ttl{position:absolute;top:8px;left:12px;font-size:11px;color:var(--muted);z-index:2}
+#simChart{width:100%;height:100%;display:block}
+.secTtl{font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin:6px 2px 8px}
+.note{font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--line);
+  border-radius:6px;padding:7px 9px;margin-bottom:10px;line-height:1.55}
+.note b{color:var(--ink)}
+.lv{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:7px}
+.lv .hd{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;margin-bottom:6px}
+.lv .hd .tag{margin-left:auto;font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:1px 7px}
+.lv .hd .tag.op{color:var(--good);border-color:var(--good)}
+.lv .hd .tag.inv{color:var(--warn);border-color:var(--warn)}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;padding:3px 4px;font-size:11px;color:var(--muted);border-right:1px solid var(--line)}
+.seg button:last-child{border-right:none}
+.seg button.on{background:color-mix(in srgb,var(--edge-hi) 22%,transparent);color:var(--ink)}
+.sum{background:var(--surface2);border:1px solid var(--edge-hi);border-radius:8px;padding:10px 12px;margin:10px 0}
+.sum .row{display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px}
+.sum .row b{font-size:13px}
+.sum .row b.save{color:var(--good)}
+.sum .chain{font-size:10.5px;color:var(--muted);line-height:1.6;margin-top:6px;border-top:1px solid var(--line);padding-top:6px}
+.act{width:100%;border:1px solid var(--good);color:var(--good);border-radius:7px;padding:7px;font-size:12px;margin-bottom:6px}
+.act:hover{background:color-mix(in srgb,var(--good) 14%,transparent)}
+.act.inv{border-color:var(--warn);color:var(--warn)}
+.act.inv:hover{background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.act:disabled{opacity:.4;cursor:default}
+footer{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:12px;padding:0 16px;
+  background:var(--surface);border-top:1px solid var(--line)}
+footer .btn{border:1px solid var(--line);border-radius:6px;padding:4px 12px;font-size:12px}
+footer .btn:hover{border-color:var(--edge)}
+footer .btn.on{border-color:var(--edge-hi);color:var(--edge-hi)}
+#tlWrap{flex:1;position:relative;height:26px;display:flex;align-items:center}
+#tl{width:100%;accent-color:var(--edge-hi)}
+#nowTick{position:absolute;top:2px;bottom:2px;width:2px;background:var(--crit);opacity:.6;pointer-events:none}
+#ymLbl{font-size:14px;font-weight:700;min-width:84px}
+#modeLbl{font-size:11px;min-width:96px;color:var(--muted)}
+#modeLbl.sim{color:var(--sim);font-weight:700}
+.plTtl{font-size:12px;font-weight:700;fill:var(--ink)}
+.plSum{font-size:10px;fill:var(--muted)}
+.zNm{font-size:10px;fill:var(--ink)}
+.zSub{font-size:9px;fill:var(--muted)}
+.zVal{font-size:10.5px;fill:var(--ink)}
+.zDelta{font-size:9px;fill:var(--good)}
+.simWm{font-size:30px;font-weight:800;fill:var(--sim);opacity:.10;letter-spacing:.2em}
+.gAxis{font-size:10px;fill:var(--muted)}
+.gCur{font-size:10.5px;font-weight:700;fill:var(--warn)}
+.tip{position:fixed;z-index:90;background:var(--surface2);border:1px solid var(--edge);border-radius:7px;
+  padding:7px 10px;font-size:11.5px;pointer-events:none;display:none;max-width:300px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.tip b{display:block;margin-bottom:2px}
+::-webkit-scrollbar{width:9px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ 전략 월드 — 오피스 관리비</h1>
+  <span class="sub" id="hdSub"></span>
+  <span class="chip">NOW 이후 = SIMULATED (생성 모델과 동일 곡선)</span>
+</header>
+<div id="main">
+  <aside id="rail">
+    <div class="railTtl">오피스 관리비 KPI — 클릭: 씬 전환</div>
+    <div id="kpiList"></div>
+    <div class="note" id="railNote"></div>
+  </aside>
+  <div id="center">
+    <div id="sceneWrap"><svg id="scene" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="modeBar"></div>
+      <div id="dayBar"></div>
+      <span id="zoomHint">휠 = 확대 · 확대 후 드래그 = 이동 · 더블클릭 = 초기화</span></div>
+    <div id="simBand"><span class="ttl" id="simTtl"></span><svg id="simChart"></svg></div>
+  </div>
+  <aside id="side">
+    <div class="secTtl" id="lvTtl">전략 레버 — 변경 가능한 리스트</div>
+    <div id="levers"></div>
+    <div class="secTtl">다음 달 예측 요약</div>
+    <div class="sum" id="sum"></div>
+    <button class="act" id="btnApply">⚡ 트윈 월드에 적용 — 온도·예냉 (운영)</button>
+    <button class="act inv" id="btnProject">절감·투자 프로젝트로 등록</button>
+    <div class="note" id="embedNote" style="display:none">단독 실행 중 — V10 디지털 트윈 월드에서 소환하면
+      적용·프로젝트 등록이 트윈 월드로 환류된다.</div>
+  </aside>
+</div>
+<footer>
+  <button class="btn" id="btnPlay">▶ Play</button>
+  <button class="btn" id="btnSpd">×1</button>
+  <span id="ymLbl"></span>
+  <span id="modeLbl">실적</span>
+  <div id="tlWrap"><input type="range" id="tl" min="0" max="43" value="31" step="1"><div id="nowTick"></div></div>
+</footer>
+<div class="tip" id="tip"></div>
+<script src="v7-data.js"></script>
+<script>
+'use strict';
+/* ═══ PART A. 데이터 · 상태 ═══ */
+const D = window.TWIN_DATA, GOV = D.governance, EN = GOV.energy;
+const MONTHS = D.meta.months, NOW = D.meta.now, SEAS = D.meta.seas, NPF = D.npf;
+const SIM_N = 12, MAXI = NOW + SIM_N;               // 실적 32개월 + 미래 12개월
+const fmt = n => Math.round(n).toLocaleString('en-US');
+const f1 = n => (Math.round(n*10)/10).toFixed(1);
+const fmtK = n => '$' + fmt(n/1000) + 'k';
+const fmtM = n => '$' + (n/1e6).toFixed(2) + 'M';
+const $ = id => document.getElementById(id);
+const el = (tag,attrs,parent)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]); if(parent) parent.appendChild(e); return e;};
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const FC = Object.fromEntries(GOV.facility.cols.map((c,k)=>[c,k]));
+const g = (r,c)=>r[FC[c]];
+const facByYm = new Map();
+for(const r of GOV.facility.rows){ const ym=r[0]; if(!facByYm.has(ym)) facByYm.set(ym,[]); facByYm.get(ym).push(r); }
+const ZONES = GOV.zones;                             // 임차 마스터 (bld·fl·id·name·typ·area·rent)
+const EMBED = window.parent !== window;
+const ymOf = i => `${2024+Math.floor(i/12)}-${String(i%12+1).padStart(2,'0')}`;
+
+// 해시로 트윈 월드 상태 승계 (#i=31&peak=2&pre=2)
+const H = Object.fromEntries(location.hash.slice(1).split('&').filter(Boolean).map(s=>s.split('=')));
+let cursor = Math.min(MAXI, +H.i >= 0 ? +H.i : NOW);
+let sel = 'energy';                                  // 선택 KPI (씬 전환)
+
+// 전략 레버 — KPI별 변경 가능한 리스트
+const LV = { scope:'all', peak:+H.peak||0, pre:+H.pre||0, base:0, ess:0,   // 전력
+             renego:0, giveback:0,                                          // 임차/시설
+             supcut:0 };                                                    // 소모품/기타
+const ESS_LOSS = 0.12;
+
+/* ═══ PART B. 값 모델 — 실적(원장) + 미래(생성 모델 미러 · 레버) ═══ */
+// 전력: 구역 모델 (ZTYPE 배율·HVAC 곡선 — generate.py와 동일, 노이즈 제외)
+function eZone(z, m, lv){
+  const zc = EN.ztype[z.typ];
+  const hv = EN.hvac_kwh_m2*EN.hvac_f[m]*z.area*zc.hvac;
+  const bs = EN.base_kwh_m2*z.area*zc.base;
+  let peak=(hv+bs)*EN.peak_share, off=(hv+bs)-peak;
+  if(lv && z.typ!=='항온' && (lv.scope==='all'||lv.scope===z.bld)){
+    const sf = EN.cool_months.includes(m+1)?1:EN.offseason_factor;
+    const hvp = hv*EN.peak_share;
+    const d = hvp*EN.degc_sens*lv.peak*sf, sh = hvp*EN.precool_shift*(lv.pre/2)*sf;
+    const bc = bs*lv.base, ess = peak*lv.ess;
+    peak -= d + sh + bc*EN.peak_share + ess;
+    off  += sh*(1+EN.precool_penalty) - bc*(1-EN.peak_share) + ess*(1+ESS_LOSS);
+  }
+  return {peak, off, cost: peak*EN.rate_peak + off*EN.rate_off};
+}
+function eZoneAt(z, i, lv){                          // 실적월=원장, 미래월=모델+레버
+  if(i<=NOW){
+    const r=(facByYm.get(MONTHS[i])||[]).find(r=>g(r,'zone_id')===z.id);
+    return r?{peak:g(r,'kwh_peak'),off:g(r,'kwh_off'),cost:g(r,'cost_usd'),temp:g(r,'temp_set_c')}:eZone(z,i%12,null);
+  }
+  const zc=EN.ztype[z.typ];
+  const cool=EN.cool_months.includes(i%12+1);
+  const temp=(cool||z.typ==='항온')?zc.temp:zc.temp+1.0;
+  return {...eZone(z,i%12,lv), temp};
+}
+// 임차/시설: 계약 고정 — 미래월에만 레버(재계약·공용 반납) 반영
+function lZone(z, i, lv){
+  let rent=z.rent, ret=false;
+  if(lv && i>NOW){
+    rent *= 1-lv.renego;
+    if(lv.giveback && z.typ==='공용'){ rent*=0.5; ret=true; }
+  }
+  return {cost:rent, ret};
+}
+// 소모품/기타: 미연결 — 예산 모델 추정 (면적×단가×타입 배율×계절)
+function sZone(z, i, lv){
+  const c = z.area*EN.sup_rate*EN.ztype[z.typ].sup*SEAS[i%12]*(lv&&i>NOW?1-lv.supcut:1);
+  return {cost:c};
+}
+const ZFN = {energy:eZoneAt, lease:lZone, supplies:sZone};
+function kpiVal(kpi, i, lv){
+  return ZONES.reduce((s,z)=>s+ZFN[kpi](z,i,lv).cost,0);
+}
+const opexVal = (i,lv)=>kpiVal('energy',i,lv)+kpiVal('lease',i,lv)+kpiVal('supplies',i,lv);
+function recurContrib(save){
+  const md=Object.fromEntries(D.models.map(m=>[m.id,m]));
+  const rev=Object.entries(D.actual[NOW].models).reduce((s,[mid,m])=>s+m.ws*md[mid].msrp*NPF*0.9,0);
+  return save/rev*100;
+}
+const KPI_DEFS=[
+  {key:'energy',   name:'전력사용량',  src:'facility_energy (원장)', na:false},
+  {key:'lease',    name:'임차 / 시설', src:'office_zones (계약 마스터)', na:false},
+  {key:'supplies', name:'소모품 / 기타', src:'미연결 — 예산 모델 추정', na:true},
+];
+
+/* ═══ PART C. 씬 — 동관/서관 × 3층 × 구역 플로어플랜 ═══ */
+const scene=$('scene'), tip=$('tip');
+function tipShow(e,html){ tip.innerHTML=html; tip.style.display='block';
+  const r=tip.getBoundingClientRect();
+  tip.style.left=Math.min(e.clientX+14,innerWidth-r.width-10)+'px';
+  tip.style.top=Math.min(e.clientY+12,innerHeight-r.height-10)+'px'; }
+function tipHide(){ tip.style.display='none'; }
+
+let viewMode='zone';                                 // 씬 전환 모드: zone / heat / flow
+function renderZones(){
+  const i=cursor, simMode=i>NOW;
+  const kd=KPI_DEFS.find(k=>k.key===sel);
+  if(simMode) el('text',{x:500,y:330,class:'simWm','text-anchor':'middle'},scene).textContent='SIMULATED';
+  el('text',{x:28,y:28,class:'plTtl'},scene).textContent=
+    `${kd.name} — ${ymOf(i)} ${simMode?'예측 (레버 반영)':'실적'} · ${fmtK(kpiVal(sel,i,LV))}`;
+  el('text',{x:28,y:46,class:'plSum'},scene).textContent=
+    sel==='energy'?`구역 ${ZONES.length}개 · 항온존(서버실)은 레버 제외 · 적용 범위 ${LV.scope==='all'?'전체':LV.scope}`
+    :(sel==='lease'?`임차 단가 동관 $${EN.rent_rate['동관']}/m²·서관 $${EN.rent_rate['서관']}/m² · 레버는 미래월에 반영`
+    :`미연결 지표 — 면적×$${EN.sup_rate}/m²×타입 배율×계절로 추정 (데이터 수집 프로젝트 대상)`);
+  const allVals=ZONES.map(z=>ZFN[sel](z,i,LV).cost);
+  const maxV=Math.max(...allVals);
+  const XS={'동관':40,'서관':520}, PW=440;
+  for(const bld of ['동관','서관']){
+    for(let fl=3; fl>=1; fl--){
+      const zs=ZONES.filter(z=>z.bld===bld&&z.fl===fl);
+      if(!zs.length) continue;
+      const px=XS[bld], py=70+(3-fl)*184, PH=162;
+      const tot=zs.reduce((s,z)=>s+ZFN[sel](z,i,LV).cost,0);
+      el('text',{x:px,y:py-8,class:'plTtl'},scene).textContent=`${bld} ${fl}F`;
+      el('text',{x:px+PW,y:py-8,class:'plSum','text-anchor':'end'},scene).textContent=fmtK(tot);
+      el('rect',{x:px-4,y:py-2,width:PW+8,height:PH+4,rx:8,fill:'none',stroke:'var(--line)','stroke-width':1},scene);
+      const areaSum=zs.reduce((s,z)=>s+z.area,0);
+      const avail=PH-(zs.length-1)*3;
+      let hs=zs.map(z=>Math.max(24, z.area/areaSum*avail));
+      const hsum=hs.reduce((a,b)=>a+b,0);
+      if(hsum>avail) hs=hs.map(h=>h*avail/hsum);      // 최소 높이 보정 후 정규화
+      let zy=py;
+      zs.forEach((z,zi)=>{
+        const zh=hs[zi];
+        const v=ZFN[sel](z,i,LV), b=ZFN[sel](z,i,null);
+        const heat=(v.cost/maxV*0.42+0.04).toFixed(2);
+        const dim=(sel==='lease'&&v.ret);
+        const rc=el('rect',{x:px,y:zy,width:PW,height:zh,rx:4,
+          fill:sel==='lease'?`rgba(121,184,255,${heat})`:(sel==='supplies'?`rgba(234,169,62,${heat})`:`rgba(229,72,77,${heat})`),
+          stroke:'var(--line)','stroke-width':1,opacity:dim?.45:1},scene);
+        const cy=zy+zh/2+3;
+        el('text',{x:px+8,y:cy,class:'zNm'},scene).textContent=`${z.name}${z.typ==='항온'?' ❄':''}`;
+        el('text',{x:px+150,y:cy,class:'zSub'},scene).textContent=`${z.typ} · ${fmt(z.area)}m²`;
+        if(sel==='energy'){
+          const t=v.temp!=null?v.temp:EN.ztype[z.typ].temp;
+          const lvOn=(simMode&&LV.peak>0&&z.typ!=='항온'&&(LV.scope==='all'||LV.scope===z.bld));
+          el('text',{x:px+262,y:cy,class:'zSub'},scene).textContent=lvOn?`${f1(t)}°→피크 ${f1(t+LV.peak)}°`:f1(t)+'°';
+        } else if(sel==='lease'&&dim){
+          el('text',{x:px+262,y:cy,class:'zDelta'},scene).textContent='반납 50%';
+        }
+        el('text',{x:px+PW-58,y:cy,class:'zVal','text-anchor':'end'},scene).textContent=fmtK(v.cost);
+        if(simMode&&b.cost-v.cost>500)
+          el('text',{x:px+PW-6,y:cy,class:'zDelta','text-anchor':'end'},scene).textContent='−'+fmtK(b.cost-v.cost);
+        rc.addEventListener('mousemove',e=>tipShow(e,
+          `<b>${bld} ${fl}F ${esc(z.name)} (${z.typ})</b>면적 ${fmt(z.area)}m² · ${ymOf(i)} ${simMode?'예측':'실적'}<br>`+
+          (sel==='energy'?`피크 ${fmt(v.peak)} kWh · 비피크 ${fmt(v.off)} kWh<br>`:'')+
+          `${KPI_DEFS.find(k=>k.key===sel).name} <b>${fmtK(v.cost)}</b>${simMode&&b.cost-v.cost>1?` (기준 ${fmtK(b.cost)})`:''}`));
+        rc.addEventListener('mouseleave',tipHide);
+        zy+=zh+3;
+      });
+    }
+  }
+}
+
+/* ── 씬 모드 2: 온도 히트맵 — 3차원(구역 × 요일 × 시간)을 "주간 전개 + 요일 슬라이스"로 ──
+   진짜 3D 대신: 기본 = 각 구역 행을 요일 7줄로 세분(주간 전개, 주말 셋백이 띠로 보임),
+   요일 칩 = 해당 요일만 잘라 24행 뷰로 확대. 세부 탐색은 씬 줌(휠)과 결합. */
+const DAYS=['월','화','수','목','금','토','일'];
+let heatDay='week';                                  // 'week' = 주간 전개 · 0~6 = 요일 슬라이스
+// 주말 운영 예외: 쇼룸(전시·딜러 라운지)은 토·일 10~18시, 콜센터는 토 9~14시 운영
+function occupiedAt(z, h, d){
+  if(z.id==='W1-SHW') return d>=5 ? (h>=10&&h<=18) : (h>=8&&h<=19);
+  if(z.id==='W3-CC' && d===5) return h>=9&&h<=14;
+  if(d>=5) return false;                             // 주말 셋백 (그 외 구역)
+  return h>=8&&h<=19;
+}
+function hourTemp(z, i, h, d=2){
+  if(z.typ==='항온') return 20.0;
+  const zc=EN.ztype[z.typ];
+  const cool=EN.cool_months.includes(i%12+1);
+  const setp = cool ? zc.temp : zc.temp+1.0;
+  const occ = occupiedAt(z,h,d);
+  let t = occ ? setp : setp + (cool ? 2.5 : -2.5);               // 비재실 셋백
+  const lvOn = i>NOW && cool && d<5 && (LV.scope==='all'||LV.scope===z.bld);   // 피크 요금 = 평일
+  if(lvOn && occ){
+    if(h>=13 && h<=18 && LV.peak) t = setp + LV.peak;            // 피크 요금 시간 상향
+    else if(h>=10 && h<=12 && LV.pre) t = setp - LV.pre;         // 사전 예냉
+  }
+  return t;
+}
+const tColor = t => `hsl(${Math.max(0,Math.min(215, 215-(t-18)/10*210))} 62% ${34+Math.min(14,Math.max(0,(t-18)))}%)`;
+function renderHeat(){
+  const i=cursor, simMode=i>NOW, week=heatDay==='week';
+  el('text',{x:28,y:28,class:'plTtl'},scene).textContent=
+    `전력사용량 — ${week?'구역 × 요일 × 시간 온도 히트맵 (주간 전개)':`${DAYS[heatDay]}요일 · 시간 × 구역 온도 히트맵`} · ${ymOf(i)} ${simMode?'예측 (레버 반영)':'운영 프로파일'}`;
+  const coolNow=EN.cool_months.includes(i%12+1);
+  el('text',{x:28,y:46,class:'plSum'},scene).textContent=
+    (simMode&&coolNow&&(LV.peak||LV.pre)?`레버(평일): 예냉 10~12시 −${LV.pre}°C · 피크 13~18시 +${LV.peak}°C — 평일 띠만 이동한다`
+    :`재실 = 설정온도 · 비재실/주말 = 셋백 ±2.5°C · 항온존 20° 고정${simMode&&!coolNow?' · 냉방월(5~9월)에 레버 밴드':''}`)
+    + (week?' · 구역마다 위→아래 = 월→일 (주말 셋백 띠, 쇼룸·콜센터는 주말 일부 운영)':'');
+  const zs=[...ZONES].sort((a,b)=>a.bld===b.bld?(b.fl-a.fl):(a.bld<b.bld?-1:1));
+  const X0=196, CW=(1000-X0-16)/24, Y0=76, ZH=(640-Y0-34)/zs.length;
+  for(let h=0;h<24;h++){
+    if(h%3===0) el('text',{x:X0+h*CW+CW/2,y:Y0-8,class:'zSub','text-anchor':'middle'},scene).textContent=h+'시';
+    if(h>=13&&h<=18) el('rect',{x:X0+h*CW,y:Y0-4,width:CW,height:3,fill:'var(--crit)',opacity:.6},scene);
+    if(h>=10&&h<=12) el('rect',{x:X0+h*CW,y:Y0-4,width:CW,height:3,fill:'var(--edge-hi)',opacity:.6},scene);
+  }
+  const gHeat=el('g',{},scene);
+  let prevBld='';
+  zs.forEach((z,zi)=>{
+    const y=Y0+zi*ZH;
+    if(z.bld!==prevBld){ prevBld=z.bld;
+      el('line',{x1:16,y1:y-1,x2:984,y2:y-1,stroke:'var(--edge)','stroke-width':1,opacity:.7},scene); }
+    el('text',{x:X0-8,y:y+ZH/2+3,class:'zSub','text-anchor':'end'},scene).textContent=
+      `${z.bld} ${z.fl}F ${z.name}`;
+    const days = week ? [0,1,2,3,4,5,6] : [heatDay];
+    const rh = (ZH-1)/days.length;
+    days.forEach((d,di)=>{
+      for(let h=0;h<24;h++){
+        const t=hourTemp(z,i,h,d);
+        const rc=el('rect',{x:X0+h*CW+0.5,y:y+di*rh+0.5,width:CW-1,height:Math.max(1,rh-(week?0.4:1)),fill:tColor(t)},gHeat);
+        rc.setAttribute('data-z',zi); rc.setAttribute('data-d',d); rc.setAttribute('data-h',h);
+      }
+    });
+  });
+  // 셀 4천여 개 — 툴팁은 위임 리스너 하나로 처리
+  gHeat.addEventListener('mousemove',e=>{
+    const t=e.target;
+    if(t.tagName!=='rect' || !t.hasAttribute('data-h')) return tipHide();
+    const z=zs[+t.getAttribute('data-z')], d=+t.getAttribute('data-d'), h=+t.getAttribute('data-h');
+    const tv=hourTemp(z,i,h,d);
+    tipShow(e,`<b>${z.bld} ${z.fl}F ${esc(z.name)} · ${DAYS[d]} ${h}시</b>설정 ${f1(tv)}°C`
+      +(d<5&&h>=13&&h<=18?' · 피크 요금대':(d<5&&h>=10&&h<=12?' · 예냉대':(d>=5?' · 주말':''))));
+  });
+  gHeat.addEventListener('mouseleave',tipHide);
+  // 범례
+  for(let k=0;k<=10;k++) el('rect',{x:700+k*16,y:620,width:16,height:9,fill:tColor(18+k)},scene);
+  el('text',{x:694,y:628,class:'zSub','text-anchor':'end'},scene).textContent='18°C';
+  el('text',{x:700+11*16+4,y:628,class:'zSub'},scene).textContent='28°C';
+  el('text',{x:28,y:628,class:'zSub'},scene).textContent=
+    '■ 상단 띠: 빨강=피크 요금대(13~18시) · 파랑=예냉대(10~12시)'+(week?' · 휠 줌으로 요일 줄 확대':'');
+}
+function renderDayBar(){
+  $('dayBar').innerHTML=[['week','주간 전개'],...DAYS.map((d,k)=>[k,d])]
+    .map(([k,l])=>`<button data-d="${k}" class="${String(heatDay)===String(k)?'on':''}${k===5||k===6?' we':''}">${l}</button>`).join('');
+  $('dayBar').querySelectorAll('button').forEach(b=>
+    b.addEventListener('click',()=>{ heatDay=b.dataset.d==='week'?'week':+b.dataset.d; renderScene(); }));
+}
+
+/* ── 씬 모드 3: 캠퍼스 전력 흐름 — 그리드 수전 · 태양광 발전 · EV 충전 ────── */
+function flowData(i){
+  const m=i%12;
+  const bld={'동관':0,'서관':0};
+  ZONES.forEach(z=>{ const v=eZoneAt(z,i,i>NOW?LV:null); bld['동관']+= z.bld==='동관'?v.peak+v.off:0;
+                     bld['서관']+= z.bld==='서관'?v.peak+v.off:0; });
+  const solar=EN.solar_kwp*EN.solar_cf[m]*720;                   // 주차장 태양광 캐노피
+  const ev=EN.ev_chargers*EN.ev_kwh_mo*Math.pow(1+EN.ev_growth,i);
+  const total=bld['동관']+bld['서관']+ev;
+  const grid=Math.max(0,total-solar);
+  return {bld,solar,ev,total,grid,selfPct:solar/total*100};
+}
+let flowParts=[];
+function renderFlow(){
+  flowParts=[];
+  const i=cursor, simMode=i>NOW, F=flowData(i);
+  const RATE=EN.peak_share*EN.rate_peak+(1-EN.peak_share)*EN.rate_off;   // 블렌디드 $/kWh
+  el('text',{x:28,y:28,class:'plTtl'},scene).textContent=
+    `캠퍼스 전력 흐름 — ${ymOf(i)} ${simMode?'예측 (레버 반영)':'실적 기반'} · 자가발전 ${f1(F.selfPct)}%`;
+  el('text',{x:28,y:46,class:'plSum'},scene).textContent=
+    `외부 수전 ${fmt(F.grid)} kWh + 태양광 ${fmt(F.solar)} kWh → 동관·서관·EV 충전기 — 선 굵기 = 전력량`;
+  if(simMode) el('text',{x:500,y:340,class:'simWm','text-anchor':'middle'},scene).textContent='SIMULATED';
+  const node=(x,y,w,h,ttl,v1,v2,color)=>{
+    el('rect',{x,y,width:w,height:h,rx:9,fill:'var(--surface2)',stroke:'var(--line)','stroke-width':1.2},scene);
+    el('rect',{x,y,width:3,height:h,rx:1.5,fill:color},scene);
+    el('text',{x:x+12,y:y+22,class:'plTtl'},scene).textContent=ttl;
+    el('text',{x:x+12,y:y+42,class:'zVal'},scene).textContent=v1;
+    if(v2) el('text',{x:x+12,y:y+58,class:'zSub'},scene).textContent=v2;
+    return {x,y,w,h};
+  };
+  const nGrid =node(40,150,205,72,'그리드 수전 (한전망)',`${fmt(F.grid)} kWh`,`≈ ${fmtK(F.grid*RATE)}/월`,'#79b8ff');
+  const nSolar=node(40,400,205,72,'태양광 캐노피 (주차장)',`${fmt(F.solar)} kWh 발전`,`${EN.solar_kwp} kWp · 이용률 ${(EN.solar_cf[i%12]*100).toFixed(0)}%`,'#4cc38a');
+  const nBus  =node(410,270,190,80,'캠퍼스 수배전',`유입 ${fmt(F.grid+F.solar)} kWh`,`자가발전 ${f1(F.selfPct)}%`,'#e8e6e1');
+  const nE    =node(770,110,200,72,'동관 (3층·13구역)',`${fmt(F.bld['동관'])} kWh`,`≈ ${fmtK(F.bld['동관']*RATE)}/월`,'#e5484d');
+  const nW    =node(770,280,200,72,'서관 (3층·11구역)',`${fmt(F.bld['서관'])} kWh`,`≈ ${fmtK(F.bld['서관']*RATE)}/월`,'#eaa93e');
+  const nEV   =node(770,450,200,72,'EV 충전기 (주차장)',`${fmt(F.ev)} kWh`,`${EN.ev_chargers}기 · 임직원·방문 충전`,'#58d1c9');
+  const edge=(a,b,kwh,color)=>{
+    const w=Math.max(1.6, Math.min(11, kwh/45000*6));
+    const x1=a.x+a.w, y1=a.y+a.h/2, x2=b.x, y2=b.y+b.h/2, mx=(x1+x2)/2;
+    const p=el('path',{d:`M${x1} ${y1} H${mx} V${y2} H${x2}`,fill:'none',stroke:color,'stroke-width':w,opacity:.5},scene);
+    const n=Math.max(1,Math.round(kwh/90000));
+    for(let k=0;k<n;k++) flowParts.push({path:p,len:p.getTotalLength(),t:k/n,speed:.0028,color,r:Math.min(3.2,1.6+w*0.15)});
+    el('text',{x:mx,y:(y1+y2)/2-6,class:'zSub','text-anchor':'middle'},scene).textContent=fmt(kwh)+' kWh';
+  };
+  edge(nGrid,nBus,F.grid,'#79b8ff');
+  edge(nSolar,nBus,F.solar,'#4cc38a');
+  edge(nBus,nE,F.bld['동관'],'#e5484d');
+  edge(nBus,nW,F.bld['서관'],'#eaa93e');
+  edge(nBus,nEV,F.ev,'#58d1c9');
+  flowParts.forEach(p=>{p.dot=el('circle',{r:p.r,fill:p.color,opacity:.9},scene);});
+  el('text',{x:28,y:628,class:'zSub'},scene).textContent=
+    '참고 모델: 태양광·EV는 캠퍼스 수전 관점 상수 모델 — 건물 소비 원장(facility_energy)과 별도. 레버는 동관/서관 소비에 반영.';
+}
+function tickFlow(){
+  if(viewMode==='flow' && sel==='energy')
+    for(const p of flowParts){
+      p.t=(p.t+p.speed)%1;
+      const pt=p.path.getPointAtLength(p.t*p.len);
+      p.dot.setAttribute('cx',pt.x); p.dot.setAttribute('cy',pt.y);
+    }
+  requestAnimationFrame(tickFlow);
+}
+
+/* ── 씬 디스패처 + 모드 바 ──────────────────────────────────────────────── */
+function renderScene(){
+  scene.innerHTML=''; flowParts=[];
+  const energySel = sel==='energy';
+  $('modeBar').style.display = energySel ? 'flex' : 'none';
+  if(!energySel) viewMode='zone';
+  $('dayBar').style.display = (energySel && viewMode==='heat') ? 'flex' : 'none';
+  if(energySel && viewMode==='heat'){ renderHeat(); renderDayBar(); }
+  else if(energySel && viewMode==='flow') renderFlow();
+  else renderZones();
+  renderModeBar();
+}
+function renderModeBar(){
+  $('modeBar').innerHTML=[['zone','구역'],['heat','온도 히트맵'],['flow','전력 흐름']]
+    .map(([k,l])=>`<button data-m="${k}" class="${viewMode===k?'on':''}">${l}</button>`).join('');
+  $('modeBar').querySelectorAll('button').forEach(b=>
+    b.addEventListener('click',()=>{ viewMode=b.dataset.m; renderScene(); }));
+}
+
+/* ═══ PART D. 향후 시뮬레이션 그래프 — 실적 + 미래(기준 vs 레버) ═══ */
+// V10 트윈 월드 그래프와 동일 문법: Y축 그리드·라벨 + 호버 툴팁 + 클릭 이동 + 휠 확대/드래그 이동/더블클릭 리셋
+let CGW=1100, CGH=200, chartZoom=null, chartGeom=null;
+function initChart(){
+  const svg=$('simChart');
+  const measure=()=>{ CGW=Math.max(500, svg.clientWidth||1100); CGH=Math.max(140, svg.clientHeight||200); };
+  measure();
+  svg.setAttribute('viewBox',`0 0 ${CGW} ${CGH}`);
+  chartZoom=enableZoomPan(svg,CGW,CGH);
+  let rafR=0;
+  new ResizeObserver(()=>{ if(rafR) return; rafR=requestAnimationFrame(()=>{ rafR=0;
+    const w0=CGW,h0=CGH; measure();
+    if(w0!==CGW||h0!==CGH){ chartZoom.setBase(CGW,CGH); renderChart(); }
+  });}).observe($('simBand'));
+  const idxOf=e=>{ const g=chartGeom; if(!g) return null;
+    const vb=svg.viewBox.baseVal, r=svg.getBoundingClientRect();
+    if(!r.width||!vb.width) return null;
+    const ux=vb.x+(e.clientX-r.left)/r.width*vb.width;
+    const i=Math.max(0,Math.min(MAXI,Math.round((ux-g.PL)/(g.W-g.PL-g.PR)*MAXI)));
+    return Number.isFinite(i)?i:null;
+  };
+  svg.addEventListener('mousemove',e=>{
+    const g=chartGeom, i=idxOf(e); if(i==null) return;
+    svg.querySelector('.cxHv')?.remove();
+    el('line',{class:'cxHv',x1:g.X(i),y1:g.PT,x2:g.X(i),y2:g.H-g.PB,
+      stroke:'var(--edge)','stroke-width':1,'stroke-dasharray':'2 3','vector-effect':'non-scaling-stroke'},svg);
+    const nm=KPI_DEFS.find(k=>k.key===sel).name;
+    const body = i<=NOW
+      ? `실적 <b style="display:inline">${fmtK(g.act[i])}</b>`
+      : `기준 ${fmtK(g.fb[i-NOW-1])} · 레버 <b style="display:inline">${fmtK(g.fl[i-NOW-1])}</b><br>절감 −${fmtK(g.fb[i-NOW-1]-g.fl[i-NOW-1])}`;
+    tipShow(e,`<b>${ymOf(i)} · ${esc(nm)}${i>NOW?' (SIMULATED)':''}</b>${body}<br><span style="opacity:.7">클릭: 해당 월로 이동</span>`);
+  });
+  svg.addEventListener('mouseleave',()=>{ tipHide(); svg.querySelector('.cxHv')?.remove(); });
+  svg.addEventListener('click',e=>{ const i=idxOf(e); if(i!=null) seek(i); });
+}
+function renderChart(){
+  const svg=$('simChart'); svg.innerHTML='';
+  const W=CGW, H=CGH, PL=64, PR=16, PT=14, PB=24;
+  const act=[], fb=[], fl=[];
+  for(let i=0;i<=MAXI;i++){
+    if(i<=NOW){ act.push(kpiVal(sel,i,null)); }
+    else { fb.push(kpiVal(sel,i,null)); fl.push(kpiVal(sel,i,LV)); }
+  }
+  const all=act.concat(fb,fl), mn0=Math.min(...all), mx0=Math.max(...all);
+  const pad=(mx0-mn0)*0.08 || Math.abs(mx0)*0.05 || 1;
+  const mn=mn0-pad, mx=mx0+pad, sp=mx-mn;
+  const X=i=>PL+i/MAXI*(W-PL-PR), Y=v=>H-PB-(v-mn)/sp*(H-PT-PB);
+  chartGeom={PL,PR,PT,PB,W,H,X,Y,act,fb,fl};
+  // Y 그리드 4단 + 라벨 (반올림으로 같은 라벨이 겹치면 생략 — 트윈 월드와 동일)
+  let prevLbl=null;
+  for(let k=0;k<=4;k++){
+    const v=mn+sp*k/4, y=Y(v);
+    el('line',{x1:PL,y1:y,x2:W-PR,y2:y,stroke:'var(--line)','stroke-width':1,opacity:k?0.55:0.9},svg);
+    const lbl=fmtK(v);
+    if(lbl!==prevLbl){ el('text',{x:PL-7,y:y+3.5,class:'gAxis','text-anchor':'end'},svg).textContent=lbl; prevLbl=lbl; }
+  }
+  // X 라벨 — 4개월 간격 + 눈금
+  for(let i=0;i<=MAXI;i+=4){
+    el('line',{x1:X(i),y1:H-PB,x2:X(i),y2:H-PB+4,stroke:'var(--edge)','stroke-width':1},svg);
+    el('text',{x:X(i),y:H-8,class:'gAxis','text-anchor':'middle'},svg).textContent=ymOf(i).slice(2);
+  }
+  // SIMULATED 구간 배경 + NOW 분리선
+  el('rect',{x:X(NOW),y:PT,width:X(MAXI)-X(NOW),height:H-PT-PB,fill:'rgba(121,184,255,.045)'},svg);
+  const pth=(arr,i0)=>arr.map((v,j)=>(j?'L':'M')+X(i0+j).toFixed(1)+' '+Y(v).toFixed(1)).join('');
+  // 절감 영역 (미래: 기준 vs 레버)
+  const area=fb.map((v,j)=>(j?'L':'M')+X(NOW+1+j).toFixed(1)+' '+Y(v).toFixed(1)).join('')
+    + fl.slice().reverse().map((v,j)=>'L'+X(MAXI-j).toFixed(1)+' '+Y(v).toFixed(1)).join('')+'Z';
+  el('path',{d:area,fill:'rgba(76,195,138,.15)'},svg);
+  el('path',{d:pth(act,0),fill:'none',stroke:'var(--ink)','stroke-width':1.6,'vector-effect':'non-scaling-stroke'},svg);
+  el('path',{d:'M'+X(NOW)+' '+Y(act[NOW])+' '+pth(fb,NOW+1).replace(/^M/,'L'),fill:'none',stroke:'var(--edge)','stroke-width':1,'stroke-dasharray':'4 3','vector-effect':'non-scaling-stroke'},svg);
+  el('path',{d:'M'+X(NOW)+' '+Y(act[NOW])+' '+pth(fl,NOW+1).replace(/^M/,'L'),fill:'none',stroke:'var(--good)','stroke-width':1.8,'vector-effect':'non-scaling-stroke'},svg);
+  el('line',{x1:X(NOW),y1:PT,x2:X(NOW),y2:H-PB,stroke:'var(--crit)','stroke-width':1,opacity:.55,'stroke-dasharray':'3 3','vector-effect':'non-scaling-stroke'},svg);
+  // NOW 라벨은 하단 — 상단의 커서 월 라벨(gCur)과 겹치지 않게 (트윈 월드와 동일)
+  el('text',{x:X(NOW)+4,y:H-PB-6,class:'gAxis',fill:'var(--crit)'},svg).textContent='NOW';
+  // Play 커서 — 세로선 + 월 라벨 + 현재값 마커 (트윈 월드 그래프와 동일)
+  el('line',{x1:X(cursor),y1:PT,x2:X(cursor),y2:H-PB,stroke:'var(--warn)','stroke-width':1.2,opacity:.85,'vector-effect':'non-scaling-stroke'},svg);
+  el('text',{x:Math.min(X(cursor)+4,W-PR-52),y:PT+9,class:'gCur'},svg).textContent=ymOf(cursor);
+  const cv = cursor<=NOW ? act[cursor] : fl[cursor-NOW-1];
+  const cc = cursor<=NOW ? 'var(--edge-hi)' : 'var(--good)';
+  el('circle',{cx:X(cursor),cy:Y(cv),r:4,fill:cc,stroke:'var(--page)','stroke-width':1.5},svg);
+  el('text',{x:Math.min(X(cursor)+7,W-PR-60),y:Y(cv)-7,class:'gAxis',fill:cc},svg).textContent=fmtK(cv);
+  el('text',{x:W-PR,y:PT+9,class:'zDelta','text-anchor':'end'},svg).textContent=
+    `미래 12개월 절감 합 ${fmtM(fb.reduce((s,v,j)=>s+v-fl[j],0))}`;
+  $('simTtl').textContent=`${KPI_DEFS.find(k=>k.key===sel).name} — 실적 32개월(실선) + 미래 12개월: 기준(점선) vs 레버(녹색) · SIMULATED · 호버 값 · 클릭 이동 · 휠 확대/더블클릭 리셋`;
+}
+
+/* ═══ PART E. 좌 KPI 리스트 · 레버 · 요약 · 환류 ═══ */
+function renderRail(){
+  const host=$('kpiList'); host.innerHTML='';
+  const i=cursor, simMode=i>NOW;
+  const tot=document.createElement('div');
+  tot.className='kpiTile'; tot.style.borderLeftColor='var(--edge-hi)';
+  const totB=opexVal(i,null), totL=opexVal(i,LV);
+  tot.innerHTML=`<div class="nm">오피스 관리비 합계</div>
+    <div class="v1">${fmtK(totL)}</div>
+    <div class="v2">${ymOf(i)} ${simMode?`예측 · 기준 比 <span class="sv">−${fmtK(totB-totL)}</span>`:'실적'}</div>`;
+  host.appendChild(tot);
+  KPI_DEFS.forEach(k=>{
+    const b=kpiVal(k.key,i,null), l=kpiVal(k.key,i,LV);
+    const c=document.createElement('button');
+    c.className='kpiTile'+(sel===k.key?' sel':'');
+    c.style.borderLeftColor = sel===k.key?'var(--edge-hi)':'var(--line)';
+    c.innerHTML=`<div class="nm">${k.name}${k.na?'<span class="tag na">추정</span>':''}</div>
+      <div class="v1">${fmtK(l)}</div>
+      <div class="v2">${simMode&&b-l>100?`기준 ${fmtK(b)} · <span class="sv">−${fmtK(b-l)}</span>`:k.src}</div>`;
+    c.addEventListener('click',()=>{ sel=k.key; render(); });
+    host.appendChild(c);
+  });
+  $('railNote').innerHTML=`씬 = 동관/서관 × 3층 × 구역. 실적(원장) 구간은 Play로 재생,
+    <b>NOW 이후는 생성 모델 미러로 예측</b> — 레버를 바꾸면 미래가 즉시 재생성된다 (V8과 동일 원칙).`;
+}
+const LEVER_SETS={
+  energy:[
+    {key:'scope', name:'적용 범위', tag:'', opts:[['all','전체'],['동관','동관'],['서관','서관']]},
+    {key:'peak', name:'피크 요금 시간 설정온도 상향', tag:'op', opts:[[0,'off'],[1,'+1°C'],[2,'+2°C'],[3,'+3°C']]},
+    {key:'pre',  name:'피크 전 예냉 (사전 냉방 하향)', tag:'op', opts:[[0,'off'],[2,'−2°C']]},
+    {key:'base', name:'조명 LED·재실 센서 제어', tag:'inv', opts:[[0,'off'],[0.05,'−5%'],[0.10,'−10%']]},
+    {key:'ess',  name:'ESS 피크 시프트 (배터리)', tag:'inv', opts:[[0,'off'],[0.05,'5%'],[0.10,'10%']]},
+  ],
+  lease:[
+    {key:'renego',   name:'임차 재계약 협상', tag:'inv', opts:[[0,'off'],[0.03,'−3%'],[0.05,'−5%']]},
+    {key:'giveback', name:'공용 구역 50% 반납 (통합 운영)', tag:'inv', opts:[[0,'off'],[1,'반납']]},
+  ],
+  supplies:[
+    {key:'supcut', name:'소모품 절감 프로그램', tag:'inv', opts:[[0,'off'],[0.05,'−5%'],[0.10,'−10%']]},
+  ],
+};
+function renderLevers(){
+  const host=$('levers'); host.innerHTML='';
+  $('lvTtl').textContent=`전략 레버 — ${KPI_DEFS.find(k=>k.key===sel).name} (변경 가능한 리스트)`;
+  LEVER_SETS[sel].forEach(d=>{
+    const div=document.createElement('div'); div.className='lv';
+    div.innerHTML=`<div class="hd">${d.name}${d.tag?`<span class="tag ${d.tag}">${d.tag==='op'?'운영 — 즉시 실행':'투자 — 프로젝트'}</span>`:''}</div>
+      <div class="seg">${d.opts.map(([v,l])=>`<button data-k="${d.key}" data-v="${v}" class="${String(LV[d.key])===String(v)?'on':''}">${l}</button>`).join('')}</div>`;
+    host.appendChild(div);
+  });
+  host.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{
+    LV[b.dataset.k]= b.dataset.k==='scope'? b.dataset.v : +b.dataset.v;
+    render();
+  }));
+}
+function renderSum(){
+  const n1=NOW+1;
+  const b=kpiVal(sel,n1,null), l=kpiVal(sel,n1,LV);
+  const totB=opexVal(n1,null), totL=opexVal(n1,LV);
+  let s12=0; for(let t=1;t<=12;t++) s12+=opexVal(NOW+t,null)-opexVal(NOW+t,LV);
+  $('sum').innerHTML=`
+    <div class="row"><span>다음 달 ${ymOf(n1)} ${KPI_DEFS.find(k=>k.key===sel).name}</span><b>${fmtK(l)}</b></div>
+    <div class="row"><span>기준 대비</span><b class="save">−${fmtK(b-l)}</b></div>
+    <div class="row"><span>관리비 합계 (전 레버)</span><b>${fmtK(totL)} <span style="font-size:10.5px;color:var(--good)">−${fmtK(totB-totL)}</span></b></div>
+    <div class="row"><span>12개월 절감 합 (전 레버)</span><b class="save">${fmtM(s12)}</b></div>
+    <div class="chain">업스트림 전파: 오피스 관리비 −${fmtK(totB-totL)}/월 → 경상이익률 <b>+${recurContrib(totB-totL).toFixed(3)}%p</b> → 합산손익 → 재무 달성률 ↑</div>`;
+  $('btnApply').disabled = !EMBED || (LV.peak===0 && LV.pre===0);
+  $('btnProject').disabled = !EMBED || (LV.base===0 && LV.ess===0 && LV.renego===0 && LV.giveback===0 && LV.supcut===0);
+  $('embedNote').style.display = EMBED ? 'none' : 'block';
+}
+$('btnApply').addEventListener('click',()=>{
+  window.parent.postMessage({type:'v10-opex-apply', peak:LV.peak, pre:LV.pre},'*');
+});
+$('btnProject').addEventListener('click',()=>{
+  const parts=[];
+  if(LV.base) parts.push(`조명·재실 −${LV.base*100}%`);
+  if(LV.ess) parts.push(`ESS ${LV.ess*100}%`);
+  if(LV.renego) parts.push(`임차 재계약 −${LV.renego*100}%`);
+  if(LV.giveback) parts.push('공용 구역 반납');
+  if(LV.supcut) parts.push(`소모품 −${LV.supcut*100}%`);
+  window.parent.postMessage({type:'v10-opex-project', name:`관리비 절감 — ${parts.join(' · ')}`},'*');
+});
+
+/* ═══ PART F. Play 타임라인 · 초기화 ═══ */
+function seek(i){
+  cursor=Math.max(0,Math.min(MAXI,i));
+  $('tl').value=cursor;
+  $('ymLbl').textContent=ymOf(cursor);
+  const sim=cursor>NOW;
+  $('modeLbl').textContent=sim?'SIMULATED':'실적';
+  $('modeLbl').className=sim?'sim':'';
+  renderScene(); renderChart(); renderRail();
+}
+function render(){ renderLevers(); seek(cursor); renderSum(); }
+let playing=null, speed=1;
+$('tl').addEventListener('input',e=>seek(+e.target.value));
+function stopPlay(){ clearInterval(playing); playing=null; $('btnPlay').textContent='▶ Play'; $('btnPlay').classList.remove('on'); }
+function stepPlay(){ if(cursor>=MAXI) return stopPlay(); seek(cursor+1); }
+$('btnPlay').addEventListener('click',()=>{
+  if(playing) return stopPlay();
+  if(cursor>=MAXI) cursor=-1;
+  $('btnPlay').textContent='❚❚ 정지'; $('btnPlay').classList.add('on');
+  playing=setInterval(stepPlay,700/speed);
+});
+$('btnSpd').addEventListener('click',()=>{
+  speed=speed===1?2:(speed===2?4:1); $('btnSpd').textContent='×'+speed;
+  if(playing){ clearInterval(playing); playing=setInterval(stepPlay,700/speed); }
+});
+$('nowTick').style.left=`calc(${NOW/MAXI*100}% )`;
+$('hdSub').textContent=`동관/서관 × 3층 × 구역 ${ZONES.length}개 — 실적 ${NOW+1}개월 + 미래 ${SIM_N}개월 시뮬`;
+// V10에 임베드되면 제목줄은 트윈 월드 헤더 하나만 — 자체 헤더 숨김 (브레드크럼으로 표현됨)
+if(EMBED) document.querySelector('header').style.display='none';
+// 씬 확대(휠)·이동(드래그)·초기화(더블클릭)
+function enableZoomPan(svg, W, H){
+  const vb={x:0,y:0,w:W,h:H};
+  // 확대 상태에서는 뷰포트를 콘텐츠 영역 안으로 클램프 — 드래그로 전체가 화면 밖으로 나가지 않게
+  const apply=()=>{
+    if(vb.w<=W) vb.x=Math.max(0,Math.min(W-vb.w,vb.x));
+    if(vb.h<=H) vb.y=Math.max(0,Math.min(H-vb.h,vb.y));
+    svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  };
+  const pt=e=>{const r=svg.getBoundingClientRect();
+    return {x:vb.x+(e.clientX-r.left)/r.width*vb.w, y:vb.y+(e.clientY-r.top)/r.height*vb.h};};
+  svg.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const k=e.deltaY>0?1.12:1/1.12, p=pt(e);
+    const nw=Math.min(W*1.4, Math.max(W*0.15, vb.w*k)), nh=nw*H/W;
+    vb.x=p.x-(p.x-vb.x)*nw/vb.w; vb.y=p.y-(p.y-vb.y)*nh/vb.h; vb.w=nw; vb.h=nh; apply();
+  },{passive:false});
+  let pan=null, moved=false;
+  // 드래그 추적은 항상(드래그 후 클릭 오발동 차단용) — 실제 이동(팬)은 확대 중일 때만
+  svg.addEventListener('pointerdown',e=>{
+    pan={x:e.clientX,y:e.clientY,vx:vb.x,vy:vb.y,go:vb.w<W-0.5}; moved=false;});
+  window.addEventListener('pointermove',e=>{
+    if(!pan) return;
+    if(!(e.buttons&1)){ pan=null; return; }   // pointerup 유실(창 밖·iframe 경계에서 릴리스) → 팬 고착 방지
+    if(Math.abs(e.clientX-pan.x)+Math.abs(e.clientY-pan.y)>4) moved=true;
+    if(!moved || !pan.go) return;
+    const r=svg.getBoundingClientRect();
+    vb.x=pan.vx-(e.clientX-pan.x)*vb.w/r.width;
+    vb.y=pan.vy-(e.clientY-pan.y)*vb.h/r.height;
+    apply();
+  });
+  window.addEventListener('pointerup',()=>{pan=null; setTimeout(()=>moved=false,0);});
+  svg.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();}},true);
+  svg.addEventListener('dblclick',()=>{vb.x=0;vb.y=0;vb.w=W;vb.h=H;apply();});
+  // 기준 크기 갱신 (컨테이너 리사이즈 대응) — 줌은 초기화
+  const setBase=(nw,nh)=>{W=nw;H=nh;vb.x=0;vb.y=0;vb.w=nw;vb.h=nh;apply();};
+  return {view:()=>({...vb}), setBase};
+}
+const sceneView = enableZoomPan(scene, 1000, 640);
+initChart();
+render();
+tickFlow();
+
+window._vo={LV, sel:()=>sel, select:k=>{sel=k; render();},
+  set:(k,v)=>{LV[k]= k==='scope'?v:+v; render();},
+  mode:()=>viewMode, setMode:m=>{viewMode=m; renderScene();},
+  day:()=>heatDay, setDay:d=>{heatDay=d==='week'?'week':+d; renderScene();},
+  seek, cursor:()=>cursor, NOWi:NOW, MAXI, kpiVal, opexVal, zones:ZONES, EMBED,
+  flowData, hourTemp, view:()=>sceneView.view(),
+  apply:()=>$('btnApply').click(), project:()=>$('btnProject').click()};
+</script>
+</body>
+</html>

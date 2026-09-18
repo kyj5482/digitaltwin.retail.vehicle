@@ -1,0 +1,47 @@
+# CI — 데이터 파이프라인(품질 게이트) · 빌드 생성물 드리프트 · 브라우저 회귀
+#
+# 로컬 개발 환경의 /tmp/pwlibs LD_LIBRARY_PATH 주입 없이 재현된다 —
+# CI 는 `playwright install --with-deps` 로 시스템 라이브러리를 정식 설치한다.
+# (run-tests.sh 의 LD_LIBRARY_PATH 는 존재하지 않는 경로면 무해하게 무시됨)
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: Playwright 브라우저 + 시스템 라이브러리
+        run: npx playwright install --with-deps chromium
+
+      - name: 데이터 파이프라인 (RAW→STAGING→ONTOLOGY→SERVE→품질 게이트 80건)
+        run: npm run pipeline
+
+      - name: 빌드 생성물 드리프트 검사
+        # 정본(entity-profile·world-registry.json·semantic-layer.json)에서 재생성한
+        # 산출물이 커밋본과 다르면 실패 — "정본 수정 후 빌드 누락"을 CI 가 잡는다.
+        run: |
+          npm run build
+          git diff --exit-code -- \
+            prototypes/entity-config.js \
+            prototypes/world-registry.js \
+            prototypes/v7-ontology.js \
+            development/generated/entity-config.json \
+          || { echo '::error::빌드 생성물이 정본과 어긋남 — npm run build 후 커밋하세요'; exit 1; }
+
+      - name: 회귀 테스트 (playwright 5스위트 + 온톨로지 일관성)
+        run: npm test
